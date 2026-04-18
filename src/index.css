@@ -1,0 +1,76 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700&family=Nunito:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap');
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Poppins", sans-serif;
+  --font-body: "Nunito", sans-serif;
+  --font-numbers: "Space Grotesk", sans-serif;
+
+  --color-primary: #1A2E4A;
+  --color-accent: #C8922A;
+  --color-success: #2D6A4F;
+  --color-alert: #C1121F;
+  --color-bg-cream: #F8F4EE;
+  
+  --radius-ff: 16px;
+  --radius-ff-sm: 8px;
+  --radius-ff-lg: 24px;
+
+  --shadow-premium: 0 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-premium-hover: 0 8px 20px rgba(0, 0, 0, 0.08);
+  --shadow-premium-lg: 0 12px 24px rgba(0, 0, 0, 0.1);
+}
+
+@layer base {
+  body {
+    @apply bg-bg-cream text-primary font-body antialiased;
+  }
+  
+  h1 { @apply text-2xl md:text-3xl font-display font-bold tracking-tight; }
+  h2 { @apply text-xl md:text-2xl font-display font-bold tracking-tight; }
+  h3 { @apply text-lg md:text-xl font-display font-bold tracking-tight; }
+  h4 { @apply text-base md:text-lg font-display font-bold tracking-tight; }
+  
+  .font-numbers { font-family: var(--font-numbers); }
+}
+
+@layer components {
+  .ff-card {
+    @apply bg-white rounded-ff shadow-premium border border-black/5 p-4 transition-all duration-300;
+  }
+  
+  .ff-card-hover {
+    @apply hover:shadow-premium-hover hover:-translate-y-0.5;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+
+  .animate-shake {
+    animation: shake 0.2s ease-in-out 0s 2;
+  }
+
+  @keyframes gradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  .animate-gradient {
+    animation: gradient 3s ease infinite;
+  }
+
+  /* Accessibility & Touch Targets */
+  .touch-target {
+    @apply min-h-[48px] min-w-[48px] flex items-center justify-center;
+  }
+
+  .sr-only {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+    clip: rect(0, 0, 0, 0);
+  }
+}

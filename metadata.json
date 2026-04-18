@@ -1,0 +1,5 @@
+{
+  "name": "FAMILYFIRST",
+  "description": "A comprehensive family management and engagement platform with role-based access for parents, children, teachers, and elders.",
+  "requestFramePermissions": ["camera"]
+}

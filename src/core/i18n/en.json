@@ -1,0 +1,31 @@
+{
+  "common": {
+    "appName": "FamilyFirst",
+    "save": "Save",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "offline": "You are currently offline"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "verify": "Verify",
+    "sendOtp": "Send OTP"
+  },
+  "roles": {
+    "parent": "Parent",
+    "child": "Child",
+    "teacher": "Teacher",
+    "elder": "Elder",
+    "admin": "Admin"
+  },
+  "dashboard": {
+    "greeting": "Good Morning",
+    "streak": "Streak",
+    "days": "Days",
+    "tasks": "Tasks",
+    "rewards": "Rewards"
+  }
+}
