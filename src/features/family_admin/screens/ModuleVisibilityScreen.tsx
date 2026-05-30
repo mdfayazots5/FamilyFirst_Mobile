@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
@@ -18,12 +18,25 @@ import {
   Network
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../core/auth/AuthContext';
+import { FamilyAdminL2Repository } from '../repositories/FamilyAdminL2Repository';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFBadge from '../../../shared/components/FFBadge';
 
+// Maps UI module id (lowercase) → backend ModuleName (PascalCase)
+const MODULE_BACKEND_NAME: Record<string, string> = {
+  attendance: 'Attendance', tasks: 'Tasks', rewards: 'Rewards',
+  feedback: 'Feedback', calendar: 'Calendar', reports: 'Reports',
+  safety: 'Safety', admin: 'FamilyAdmin',
+};
+const ROLE_TO_INT: Record<string, number> = { PARENT: 3, CHILD: 4, TEACHER: 5, ELDER: 6 };
+const ROLE_FROM_INT: Record<number, string> = { 3: 'PARENT', 4: 'CHILD', 5: 'TEACHER', 6: 'ELDER' };
+
 const ModuleVisibilityScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const roles = ['PARENT', 'CHILD', 'TEACHER', 'ELDER'];
@@ -62,11 +75,39 @@ const ModuleVisibilityScreen: React.FC = () => {
     }));
   };
 
-  const handleSave = () => {
+  useEffect(() => {
+    if (!user?.familyId) return;
+    FamilyAdminL2Repository.getModuleVisibility(user.familyId).then(items => {
+      const loaded: Record<string, Record<string, boolean>> = {};
+      items.forEach(item => {
+        const roleStr = ROLE_FROM_INT[item.role];
+        if (!roleStr) return;
+        if (!loaded[roleStr]) loaded[roleStr] = {};
+        const modId = Object.entries(MODULE_BACKEND_NAME).find(([, v]) => v === item.moduleName)?.[0];
+        if (modId) loaded[roleStr][modId] = item.isVisible;
+      });
+      setVisibility(prev => {
+        const merged = { ...prev };
+        roles.forEach(role => { merged[role] = { ...prev[role], ...(loaded[role] ?? {}) }; });
+        return merged;
+      });
+    }).catch(() => { /* keep defaults */ }).finally(() => setIsLoading(false));
+  }, [user?.familyId]);
+
+  const handleSave = async () => {
+    if (!user?.familyId) return;
     setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-    }, 1500);
+    try {
+      const items = roles.flatMap(role =>
+        modules.map(mod => ({
+          role: ROLE_TO_INT[role],
+          moduleName: MODULE_BACKEND_NAME[mod.id],
+          isVisible: visibility[role]?.[mod.id] ?? false,
+        }))
+      );
+      await FamilyAdminL2Repository.updateModuleVisibility(user.familyId, { items });
+    } catch { /* silent */ }
+    finally { setIsSaving(false); }
   };
 
   return (

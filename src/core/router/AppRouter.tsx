@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useAuth, UserRole } from '../auth/AuthContext';
 import { AppConfig } from '../config/appConfig';
 import SplashScreen from '../../features/auth/SplashScreen';
@@ -55,6 +55,8 @@ import ProfileScreen from '../../features/profile/screens/ProfileScreen';
 import ScoresReportsScreen from '../../features/reports/screens/ScoresReportsScreen';
 import WeeklyDigestScreen from '../../features/reports/screens/WeeklyDigestScreen';
 import AttendanceSummaryScreen from '../../features/reports/screens/AttendanceSummaryScreen';
+import MonthlyReportScreen from '../../features/reports/screens/MonthlyReportScreen';
+import ReportArchiveScreen from '../../features/reports/screens/ReportArchiveScreen';
 import ChildSettingsScreen from '../../features/child/screens/ChildSettingsScreen';
 import ParentSettingsScreen from '../../features/parent/screens/ParentSettingsScreen';
 import TeacherSettingsScreen from '../../features/teacher/screens/TeacherSettingsScreen';
@@ -64,6 +66,39 @@ import SupportTicketsScreen from '../../features/admin/screens/SupportTicketsScr
 import ContentManagerScreen from '../../features/admin/screens/ContentManagerScreen';
 import ModuleVisibilityScreen from '../../features/family_admin/screens/ModuleVisibilityScreen';
 import NotificationRulesScreen from '../../features/family_admin/screens/NotificationRulesScreen';
+import StorageConfigScreen from '../../features/family_admin/screens/StorageConfigScreen';
+import SafetyAlertThresholdsScreen from '../../features/family_admin/screens/SafetyAlertThresholdsScreen';
+import EmergencyAccessRulesScreen from '../../features/family_admin/screens/EmergencyAccessRulesScreen';
+import FinancePrivacyScreen from '../../features/family_admin/screens/FinancePrivacyScreen';
+import VaultHomeScreen from '../../features/vault/screens/VaultHomeScreen';
+import CategoryViewScreen from '../../features/vault/screens/CategoryViewScreen';
+import DocumentUploadScreen from '../../features/vault/screens/DocumentUploadScreen';
+import DocumentDetailScreen from '../../features/vault/screens/DocumentDetailScreen';
+import DocumentSearchScreen from '../../features/vault/screens/DocumentSearchScreen';
+import ExpiryDashboardScreen from '../../features/vault/screens/ExpiryDashboardScreen';
+import EmergencyFolderScreen from '../../features/vault/screens/EmergencyFolderScreen';
+import ShareDocumentViewScreen from '../../features/vault/screens/ShareDocumentViewScreen';
+import HealthHomeScreen from '../../features/medical/screens/HealthHomeScreen';
+import MemberHealthProfileScreen from '../../features/medical/screens/MemberHealthProfileScreen';
+import EditHealthProfileScreen from '../../features/medical/screens/EditHealthProfileScreen';
+import EmergencyCardScreen from '../../features/medical/screens/EmergencyCardScreen';
+import VaccinationTrackerScreen from '../../features/medical/screens/VaccinationTrackerScreen';
+import SafetyHomeScreen from '../../features/safety/screens/SafetyHomeScreen';
+import FamilyMapScreen from '../../features/safety/screens/FamilyMapScreen';
+import SafeZoneManagerScreen from '../../features/safety/screens/SafeZoneManagerScreen';
+import AddEditSafeZoneScreen from '../../features/safety/screens/AddEditSafeZoneScreen';
+import LocationAlertHistoryScreen from '../../features/safety/screens/LocationAlertHistoryScreen';
+import SosAlertScreen from '../../features/safety/screens/SosAlertScreen';
+import EmergencyButtonScreen from '../../features/safety/screens/EmergencyButtonScreen';
+import LocationSettingsScreen from '../../features/safety/screens/LocationSettingsScreen';
+import FinanceDashboardScreen from '../../features/finance/screens/FinanceDashboardScreen';
+import BudgetManagerScreen from '../../features/finance/screens/BudgetManagerScreen';
+import FinanceSettingsScreen from '../../features/finance/screens/FinanceSettingsScreen';
+
+const EmergencyCardPublicRoute: React.FC = () => {
+  const { token } = useParams<{ token: string }>();
+  return <EmergencyCardScreen shareToken={token} />;
+};
 
 // Stub components for Phase 01/02
 const HomeStub = ({ role }: { role: string }) => (
@@ -189,15 +224,78 @@ const AppRouter: React.FC = () => {
         {/* Family Admin Routes */}
         <Route path="family-admin/modules" element={<ModuleVisibilityScreen />} />
         <Route path="family-admin/notifications" element={<NotificationRulesScreen />} />
+        <Route path="family-admin/storage" element={<StorageConfigScreen />} />
+        <Route path="family-admin/alert-thresholds" element={<SafetyAlertThresholdsScreen />} />
+        <Route path="family-admin/emergency-access" element={<EmergencyAccessRulesScreen />} />
+        <Route path="family-admin/finance-privacy" element={<FinancePrivacyScreen />} />
 
         {/* Notification Routes */}
         <Route path="notifications" element={<NotificationHistoryScreen />} />
         <Route path="notifications/preferences" element={<NotificationPreferencesScreen />} />
         
+        {/* Document Vault Routes */}
+        {AppConfig.features.documentVault && (
+          <>
+            <Route path="vault" element={<VaultHomeScreen />} />
+            <Route path="vault/search" element={<DocumentSearchScreen />} />
+            <Route path="vault/upload" element={<DocumentUploadScreen />} />
+            <Route path="vault/expiry" element={<ExpiryDashboardScreen />} />
+            <Route path="vault/emergency" element={<EmergencyFolderScreen />} />
+            <Route path="vault/category/:categoryId" element={<CategoryViewScreen />} />
+            <Route path="vault/:documentId" element={<DocumentDetailScreen />} />
+          </>
+        )}
+
+        {/* Public share link — no auth required, renders specific shared document */}
+        <Route path="vault/share/:token" element={<ShareDocumentViewScreen />} />
+
+        {/* Medical & Health Records Routes */}
+        {AppConfig.features.medicalRecords && (
+          <>
+            <Route path="medical" element={<HealthHomeScreen />} />
+            <Route path="medical/:memberId" element={<MemberHealthProfileScreen />} />
+            <Route path="medical/:memberId/edit" element={<EditHealthProfileScreen />} />
+            <Route path="medical/:memberId/emergency-card" element={<EmergencyCardScreen />} />
+            <Route path="medical/:memberId/vaccinations" element={<VaccinationTrackerScreen />} />
+          </>
+        )}
+
+        {/* Public emergency card link — no auth required */}
+        <Route path="medical/emergency-card/:token" element={<EmergencyCardPublicRoute />} />
+
+        {/* Safety & Location Routes */}
+        {AppConfig.features.safetyLocation && (
+          <>
+            <Route path="safety" element={<SafetyHomeScreen />} />
+            <Route path="safety/map" element={<FamilyMapScreen />} />
+            <Route path="safety/zones" element={<SafeZoneManagerScreen />} />
+            <Route path="safety/zones/add" element={<AddEditSafeZoneScreen />} />
+            <Route path="safety/zones/edit/:zoneId" element={<AddEditSafeZoneScreen />} />
+            <Route path="safety/alerts" element={<LocationAlertHistoryScreen />} />
+            <Route path="safety/sos-alert" element={<SosAlertScreen />} />
+            <Route path="safety/settings" element={<LocationSettingsScreen />} />
+            <Route path="safety/emergency" element={<EmergencyButtonScreen />} />
+          </>
+        )}
+
         {/* Report Routes */}
         <Route path="reports" element={<ScoresReportsScreen />} />
         <Route path="reports/weekly" element={<WeeklyDigestScreen />} />
         <Route path="reports/attendance" element={<AttendanceSummaryScreen />} />
+        <Route path="reports/monthly" element={<MonthlyReportScreen />} />
+        <Route path="reports/archive" element={<ReportArchiveScreen />} />
+
+        {/* Finance & SMS Ledger Routes */}
+        {AppConfig.features.financeTracker && (
+          <>
+            <Route path="finance" element={<FinanceDashboardScreen />} />
+            <Route path="finance/transactions" element={<FinanceDashboardScreen />} />
+            <Route path="finance/categories" element={<FinanceDashboardScreen />} />
+            <Route path="finance/budget" element={<BudgetManagerScreen />} />
+            <Route path="finance/commitments" element={<FinanceDashboardScreen />} />
+            <Route path="finance/settings" element={<FinanceSettingsScreen />} />
+          </>
+        )}
         
         {/* Settings & Profile Routes */}
         <Route path="parent/settings" element={<ParentSettingsScreen />} />

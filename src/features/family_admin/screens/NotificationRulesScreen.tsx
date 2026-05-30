@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
@@ -20,6 +20,8 @@ import {
   Target
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../core/auth/AuthContext';
+import { FamilyAdminL2Repository } from '../repositories/FamilyAdminL2Repository';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFBadge from '../../../shared/components/FFBadge';
@@ -33,6 +35,8 @@ interface NotificationRule {
 
 const NotificationRulesScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const roles = ['PARENT', 'CHILD', 'TEACHER', 'ELDER'];
@@ -77,11 +81,31 @@ const NotificationRulesScreen: React.FC = () => {
     }));
   };
 
-  const handleSave = () => {
+  useEffect(() => {
+    if (!user?.familyId) return;
+    FamilyAdminL2Repository.getNotificationRules(user.familyId).then(items => {
+      setRules(items.map(item => ({
+        id: item.ruleId,
+        event: item.ruleKey.toUpperCase(),
+        recipients: item.isEnabled ? ['PARENT'] : [],
+        channels: item.isEnabled ? (['push'] as ('push' | 'sms' | 'email')[]) : [],
+      })));
+    }).catch(() => { /* keep defaults */ }).finally(() => setIsLoading(false));
+  }, [user?.familyId]);
+
+  const handleSave = async () => {
+    if (!user?.familyId) return;
     setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-    }, 1500);
+    try {
+      await Promise.all(
+        rules.map(rule =>
+          FamilyAdminL2Repository.updateNotificationRule(user.familyId!, rule.id, {
+            isEnabled: rule.recipients.length > 0,
+          })
+        )
+      );
+    } catch { /* silent */ }
+    finally { setIsSaving(false); }
   };
 
   return (

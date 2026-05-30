@@ -66,7 +66,7 @@ export const MASTER_API_REFERENCE = {
     GET_HISTORY: '/api/notifications/history', // GET
     UPDATE_PREFERENCES: '/api/notifications/preferences', // PATCH
     REGISTER_FCM_TOKEN: '/api/notifications/fcm-token', // POST
-    SEND_CAMPAIGN: '/api/admin/notifications/campaign', // POST (Admin)
+    SEND_CAMPAIGN: '/api/v1/admin/notifications/campaign', // POST (Admin)
   },
   REPORTS: {
     GET_WEEKLY_DIGEST: '/api/reports/weekly', // GET
@@ -74,7 +74,7 @@ export const MASTER_API_REFERENCE = {
     GET_PERFORMANCE_SCORES: '/api/reports/scores', // GET
   },
   ADMIN: {
-    GET_ANALYTICS: '/api/admin/analytics', // GET
+    GET_ANALYTICS: '/api/v1/admin/analytics/overview', // GET
     GET_SUPPORT_TICKETS: '/api/admin/support', // GET
     UPDATE_TICKET: '/api/admin/support/:id', // PATCH
     UPDATE_CONTENT: '/api/admin/content', // POST
