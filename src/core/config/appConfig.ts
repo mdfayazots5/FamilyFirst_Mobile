@@ -4,7 +4,7 @@
 
 export const AppConfig = {
   isDemo: true, // Set to true for demo mode, false for live API
-  apiBaseUrl: 'https://api.familyfirst.app/v1',
+  apiBaseUrl: 'https://api.familyfirst.app/api',
   fcmEnabled: true,
   analyticsEnabled: true,
   version: '1.0.0',

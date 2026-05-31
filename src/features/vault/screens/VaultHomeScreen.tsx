@@ -68,7 +68,7 @@ const VaultHomeContent: React.FC = () => {
           </button>
         </div>
         <p className="text-blue-200 text-xs mt-1">
-          {user?.familyId ? 'Your family's secure document store' : ''}
+          {user?.familyId ? "Your family's secure document store" : ''}
         </p>
       </div>
 
