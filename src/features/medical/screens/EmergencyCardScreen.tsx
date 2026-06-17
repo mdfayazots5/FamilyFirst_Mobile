@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import QRCode from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowLeft, Heart, AlertTriangle, Phone, Share2, RefreshCw,
   Link2, Copy, Check, Lock, Pill,
@@ -205,7 +205,7 @@ const EmergencyCardScreen: React.FC<EmergencyCardScreenProps> = ({ shareToken })
             <p className="text-sm font-semibold text-[#1A2E4A]">Share Options</p>
 
             <div className="flex justify-center">
-              <QRCode
+              <QRCodeSVG
                 value={`${window.location.origin}${shareData.shareLink}`}
                 size={160}
                 level="H"

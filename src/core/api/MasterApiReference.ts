@@ -82,3 +82,7 @@ export const MASTER_API_REFERENCE = {
     UPDATE_APP_CONFIG: '/api/admin/config', // POST
   }
 };
+
+export const MasterApiReference = {
+  GetMasters: '/api/GetMasters',
+} as const;
