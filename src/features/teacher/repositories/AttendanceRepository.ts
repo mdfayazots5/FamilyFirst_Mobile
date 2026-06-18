@@ -1,7 +1,11 @@
-import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import apiClient from '../../../core/network/apiClient';
+import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import { getMasters } from '../../../core/repositories/MasterDataRepository';
 
 export type AttendanceStatus = 'Present' | 'Absent' | 'Late' | 'LeftEarly';
+export type AttendanceStatusOption = MasterDataItem;
 
 export interface AttendanceSession {
   id: string;
@@ -28,6 +32,13 @@ export interface CommentTemplate {
   text: string;
   category: string;
 }
+
+const DEMO_ATTENDANCE_STATUSES: MasterDataItem[] = [
+  { id: 'status-present', name: 'Present', code: 'Present', sortOrder: 1 },
+  { id: 'status-absent', name: 'Absent', code: 'Absent', sortOrder: 2 },
+  { id: 'status-late', name: 'Late', code: 'Late', sortOrder: 3 },
+  { id: 'status-left-early', name: 'LeftEarly', code: 'LeftEarly', sortOrder: 4 },
+];
 
 export const AttendanceRepository = {
   getTodaySessions: async (familyId: string): Promise<AttendanceSession[]> => {
@@ -63,8 +74,11 @@ export const AttendanceRepository = {
         },
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/attendance/sessions`, { params: { date: 'today' } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<AttendanceSession[]>>(
+      resolvePath(MasterApiReference.Attendance.ListSessions, { familyId }),
+      { params: { date: 'today' } }
+    );
+    return response.data.data ?? [];
   },
 
   getSessionRecords: async (familyId: string, sessionId: string): Promise<AttendanceRecord[]> => {
@@ -78,13 +92,34 @@ export const AttendanceRepository = {
         { id: 'rec_6', childProfileId: 'c6', childName: 'Zaid', status: 'Present' },
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/attendance/sessions/${sessionId}/records`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<AttendanceRecord[]>>(
+      resolvePath(MasterApiReference.Attendance.SessionRecords, { familyId, sessionId })
+    );
+    return response.data.data ?? [];
   },
 
-  submitAttendance: async (sessionId: string, records: Partial<AttendanceRecord>[]): Promise<void> => {
+  getAttendanceStatuses: async (): Promise<AttendanceStatusOption[]> => {
+    if (AppConfig.isDemo) {
+      return DEMO_ATTENDANCE_STATUSES;
+    }
+
+    return getMasters('AttendanceStatus');
+  },
+
+  getCustomAttendanceStatuses: async (): Promise<AttendanceStatusOption[]> => {
+    if (AppConfig.isDemo) {
+      return [];
+    }
+
+    return getMasters('CustomAttendanceStatus');
+  },
+
+  submitAttendance: async (familyId: string, sessionId: string, records: Partial<AttendanceRecord>[]): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.post(`/sessions/${sessionId}/submit`, { records });
+    await apiClient.post<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Attendance.SubmitSession, { familyId, sessionId }),
+      { records }
+    );
   },
 
   getCommentTemplates: async (familyId: string): Promise<CommentTemplate[]> => {
@@ -96,8 +131,11 @@ export const AttendanceRepository = {
         { id: 't4', text: 'Consistent attendance', category: 'Attendance' },
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/comment-templates`, { params: { category: 'Attendance' } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<CommentTemplate[]>>(
+      resolvePath(MasterApiReference.Attendance.CommentTemplates, { familyId }),
+      { params: { category: 'Attendance' } }
+    );
+    return response.data.data ?? [];
   },
 
   createSession: async (familyId: string, sessionData: any): Promise<AttendanceSession> => {
@@ -109,7 +147,10 @@ export const AttendanceRepository = {
         isSubmitted: false
       };
     }
-    const response = await apiClient.post(`/families/${familyId}/attendance/sessions`, sessionData);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<AttendanceSession>>(
+      resolvePath(MasterApiReference.Attendance.CreateSession, { familyId }),
+      sessionData
+    );
+    return response.data.data as AttendanceSession;
   }
 };

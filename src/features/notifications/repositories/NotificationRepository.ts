@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export type NotificationType = 'Attendance' | 'Feedback' | 'Reward' | 'Task' | 'System' | 'Appreciation';
 
@@ -123,20 +125,27 @@ export const NotificationRepository = {
         }
       ];
     }
-    const response = await apiClient.get(`/users/${userId}/notifications`, { params: { page } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<AppNotification[]>>(
+      resolvePath(MasterApiReference.Notifications.UserNotifications, { userId }),
+      { params: { page } },
+    );
+    return response.data.data ?? [];
   },
 
   markAsRead: async (userId: string, notificationId: string): Promise<boolean> => {
     if (AppConfig.isDemo) return true;
-    const response = await apiClient.put(`/users/${userId}/notifications/${notificationId}/read`);
-    return response.data;
+    const response = await apiClient.put<ApiResponse<boolean>>(
+      resolvePath(MasterApiReference.Notifications.UserNotificationRead, { userId, notificationId }),
+    );
+    return response.data.data ?? false;
   },
 
   markAllAsRead: async (userId: string): Promise<number> => {
     if (AppConfig.isDemo) return 10;
-    const response = await apiClient.put(`/users/${userId}/notifications/read-all`);
-    return response.data.count;
+    const response = await apiClient.put<ApiResponse<number>>(
+      resolvePath(MasterApiReference.Notifications.UserNotificationsReadAll, { userId }),
+    );
+    return response.data.data ?? 0;
   },
 
   getPreferences: async (userId: string): Promise<NotificationPreferences> => {
@@ -153,13 +162,18 @@ export const NotificationRepository = {
         eveningDigestTime: '20:00'
       };
     }
-    const response = await apiClient.get(`/users/${userId}/notification-preferences`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<NotificationPreferences>>(
+      resolvePath(MasterApiReference.Notifications.Preferences, { userId }),
+    );
+    return response.data.data as NotificationPreferences;
   },
 
   updatePreferences: async (userId: string, data: Partial<NotificationPreferences>): Promise<NotificationPreferences> => {
     if (AppConfig.isDemo) return data as NotificationPreferences;
-    const response = await apiClient.put(`/users/${userId}/notification-preferences`, data);
-    return response.data;
+    const response = await apiClient.put<ApiResponse<NotificationPreferences>>(
+      resolvePath(MasterApiReference.Notifications.Preferences, { userId }),
+      data,
+    );
+    return response.data.data as NotificationPreferences;
   }
 };

@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export type DocumentCategory =
   | 'Medical' | 'Identity' | 'School' | 'Financial'
@@ -145,7 +147,9 @@ export const VaultRepository = {
         expiresAtUtc: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       };
     }
-    const response = await apiClient.post(`/families/${familyId}/vault/documents/upload-url`, {
+    const response = await apiClient.post<ApiResponse<UploadUrlResponse>>(resolvePath(MasterApiReference.Vault.UploadUrl, {
+      familyId,
+    }), {
       fileName, contentType, category,
     });
     return response.data.data;
@@ -189,7 +193,10 @@ export const VaultRepository = {
         hasPreviousPage: page > 1,
       };
     }
-    const response = await apiClient.get(`/families/${familyId}/vault/documents`, { params });
+    const response = await apiClient.get<ApiResponse<PaginatedDocuments>>(
+      resolvePath(MasterApiReference.Vault.Documents, { familyId }),
+      { params },
+    );
     return response.data.data;
   },
 
@@ -201,7 +208,9 @@ export const VaultRepository = {
         visibility: 2, versionHistory: [], activeShareLinks: [],
       };
     }
-    const response = await apiClient.get(`/families/${familyId}/vault/documents/${documentId}`);
+    const response = await apiClient.get<ApiResponse<DocumentDetail>>(
+      resolvePath(MasterApiReference.Vault.Document, { familyId, documentId }),
+    );
     return response.data.data;
   },
 
@@ -224,7 +233,10 @@ export const VaultRepository = {
         versionNumber: 1,
       };
     }
-    const response = await apiClient.post(`/families/${familyId}/vault/documents`, data);
+    const response = await apiClient.post<ApiResponse<VaultDocument>>(
+      resolvePath(MasterApiReference.Vault.Documents, { familyId }),
+      data,
+    );
     return response.data.data;
   },
 
@@ -240,13 +252,18 @@ export const VaultRepository = {
       const doc = DEMO_DOCS.find(d => d.documentId === documentId) ?? DEMO_DOCS[0];
       return { ...doc, ...data } as VaultDocument;
     }
-    const response = await apiClient.put(`/families/${familyId}/vault/documents/${documentId}`, data);
+    const response = await apiClient.put<ApiResponse<VaultDocument>>(
+      resolvePath(MasterApiReference.Vault.Document, { familyId, documentId }),
+      data,
+    );
     return response.data.data;
   },
 
   deleteDocument: async (familyId: string, documentId: string): Promise<boolean> => {
     if (AppConfig.isDemo) return true;
-    const response = await apiClient.delete(`/families/${familyId}/vault/documents/${documentId}`);
+    const response = await apiClient.delete<ApiResponse<boolean>>(
+      resolvePath(MasterApiReference.Vault.Document, { familyId, documentId }),
+    );
     return response.data.data;
   },
 
@@ -254,7 +271,9 @@ export const VaultRepository = {
     if (AppConfig.isDemo) {
       return DEMO_DOCS.filter(d => d.expiryStatus === 'Red' || d.expiryStatus === 'Amber');
     }
-    const response = await apiClient.get(`/families/${familyId}/vault/expiry`);
+    const response = await apiClient.get<ApiResponse<VaultDocument[]>>(
+      resolvePath(MasterApiReference.Vault.Expiry, { familyId }),
+    );
     return response.data.data;
   },
 
@@ -262,7 +281,9 @@ export const VaultRepository = {
     if (AppConfig.isDemo) {
       return DEMO_DOCS.filter(d => d.isEmergencyPriority);
     }
-    const response = await apiClient.get(`/families/${familyId}/vault/emergency`);
+    const response = await apiClient.get<ApiResponse<VaultDocument[]>>(
+      resolvePath(MasterApiReference.Vault.Emergency, { familyId }),
+    );
     return response.data.data;
   },
 
@@ -281,8 +302,9 @@ export const VaultRepository = {
         createdAt: new Date().toISOString(),
       };
     }
-    const response = await apiClient.post(
-      `/families/${familyId}/vault/documents/${documentId}/share`, data,
+    const response = await apiClient.post<ApiResponse<ShareLink>>(
+      resolvePath(MasterApiReference.Vault.Share, { familyId, documentId }),
+      data,
     );
     return response.data.data;
   },
@@ -293,8 +315,8 @@ export const VaultRepository = {
     shareLinkId: string,
   ): Promise<boolean> => {
     if (AppConfig.isDemo) return true;
-    const response = await apiClient.delete(
-      `/families/${familyId}/vault/documents/${documentId}/share/${shareLinkId}`,
+    const response = await apiClient.delete<ApiResponse<boolean>>(
+      resolvePath(MasterApiReference.Vault.ShareLink, { familyId, documentId, shareLinkId }),
     );
     return response.data.data;
   },
@@ -307,7 +329,9 @@ export const VaultRepository = {
         visibility: 2, versionHistory: [], activeShareLinks: [],
       };
     }
-    const response = await apiClient.get(`/vault/share/${token}`);
+    const response = await apiClient.get<ApiResponse<DocumentDetail>>(
+      resolvePath(MasterApiReference.Vault.ShareToken, { token }),
+    );
     return response.data.data;
   },
 };

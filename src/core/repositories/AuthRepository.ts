@@ -1,6 +1,8 @@
 import apiClient from '../network/apiClient';
+import { MasterApiReference } from '../api/MasterApiReference';
 import { AppConfig } from '../config/appConfig';
 import { UserRole } from '../auth/AuthContext';
+import type { ApiResponse } from '../network/apiTypes';
 
 export interface AuthResponse {
   accessToken: string;
@@ -14,13 +16,23 @@ export interface AuthResponse {
   };
 }
 
+interface SendOtpResponse {
+  otpToken: string;
+}
+
+interface JoinCodeChild {
+  id: string;
+  name: string;
+  age: number;
+}
+
 export const AuthRepository = {
   sendOtp: async (phoneNumber: string, countryCode: string) => {
     if (AppConfig.isDemo) {
       return { otpToken: 'demo_otp_token' };
     }
-    const response = await apiClient.post('/auth/send-otp', { phoneNumber, countryCode });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<SendOtpResponse>>(MasterApiReference.Auth.SendOtp, { phoneNumber, countryCode });
+    return response.data.data;
   },
 
   verifyOtp: async (phoneNumber: string, otpToken: string, otpCode: string): Promise<AuthResponse> => {
@@ -37,8 +49,8 @@ export const AuthRepository = {
         }
       };
     }
-    const response = await apiClient.post('/auth/verify-otp', { phoneNumber, otpToken, otpCode });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<AuthResponse>>(MasterApiReference.Auth.VerifyOtp, { phoneNumber, otpToken, otpCode });
+    return response.data.data as AuthResponse;
   },
 
   verifyPin: async (userId: string, pin: string): Promise<AuthResponse> => {
@@ -58,11 +70,11 @@ export const AuthRepository = {
         }
       };
     }
-    const response = await apiClient.post('/auth/verify-pin', { userId, pin });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<AuthResponse>>(MasterApiReference.Auth.VerifyPin, { userId, pin });
+    return response.data.data as AuthResponse;
   },
 
-  getChildrenByJoinCode: async (joinCode: string) => {
+  getChildrenByJoinCode: async (joinCode: string): Promise<JoinCodeChild[]> => {
     if (AppConfig.isDemo) {
       if (joinCode !== 'DEMO01') throw new Error('Invalid Join Code');
       return [
@@ -70,18 +82,20 @@ export const AuthRepository = {
         { id: 'demo_child_2', name: 'Sana', age: 8 }
       ];
     }
-    const response = await apiClient.get(`/families/children?joinCode=${joinCode}`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<JoinCodeChild[]>>(MasterApiReference.Families.ChildrenByJoinCode, {
+      params: { joinCode },
+    });
+    return response.data.data ?? [];
   },
 
-  getMe: async () => {
-    const response = await apiClient.get('/auth/me');
-    return response.data;
+  getMe: async (): Promise<AuthResponse['user']> => {
+    const response = await apiClient.get<ApiResponse<AuthResponse['user']>>(MasterApiReference.Auth.Me);
+    return response.data.data as AuthResponse['user'];
   },
 
-  logout: async (refreshToken: string) => {
+  logout: async (refreshToken: string): Promise<boolean> => {
     if (AppConfig.isDemo) return true;
-    const response = await apiClient.post('/auth/revoke-token', { refreshToken });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<boolean>>(MasterApiReference.Auth.RevokeToken, { refreshToken });
+    return response.data.data ?? false;
   }
 };

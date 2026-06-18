@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export interface Reward {
   id: string;
@@ -42,8 +44,11 @@ export const RewardRepository = {
         { id: 'r5', name: '₹50 Pocket Money', category: 'Money', coinCost: 300, isEnabled: true, icon: '💰' },
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/rewards`, { params: { enabled: enabledOnly } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<Reward[]>>(
+      resolvePath(MasterApiReference.Rewards.FamilyRewards, { familyId }),
+      { params: { enabled: enabledOnly } },
+    );
+    return response.data.data ?? [];
   },
 
   getCoinHistory: async (childId: string): Promise<CoinTransaction[]> => {
@@ -55,8 +60,10 @@ export const RewardRepository = {
         { id: 't4', amount: 15, type: 'Earned', description: 'Daily Streak Bonus', date: new Date(Date.now() - 86400000).toISOString() },
       ];
     }
-    const response = await apiClient.get(`/children/${childId}/coin-history`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<CoinTransaction[]>>(
+      resolvePath(MasterApiReference.Rewards.CoinHistory, { childId }),
+    );
+    return response.data.data ?? [];
   },
 
   redeemReward: async (rewardId: string, childProfileId: string): Promise<Redemption> => {
@@ -72,8 +79,11 @@ export const RewardRepository = {
         requestedAt: new Date().toISOString()
       };
     }
-    const response = await apiClient.post(`/rewards/${rewardId}/redeem`, { childProfileId });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<Redemption>>(
+      resolvePath(MasterApiReference.Rewards.Redeem, { rewardId }),
+      { childProfileId },
+    );
+    return response.data.data as Redemption;
   },
 
   getPendingRedemptions: async (familyId: string): Promise<Redemption[]> => {
@@ -82,27 +92,39 @@ export const RewardRepository = {
         { id: 'red_1', rewardId: 'r2', rewardName: 'Movie Night', childProfileId: 'mem_2', childName: 'Arjun', status: 'Pending', coinCost: 200, requestedAt: new Date().toISOString() }
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/rewards/redemptions`, { params: { status: 'Pending' } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<Redemption[]>>(
+      resolvePath(MasterApiReference.Rewards.Redemptions, { familyId }),
+      { params: { status: 'Pending' } },
+    );
+    return response.data.data ?? [];
   },
 
   reviewRedemption: async (redemptionId: string, status: 'Approved' | 'Rejected', parentNote?: string): Promise<Redemption> => {
     if (AppConfig.isDemo) {
       return { id: redemptionId, status, parentNote } as Redemption;
     }
-    const response = await apiClient.put(`/rewards/redemptions/${redemptionId}`, { status, parentNote });
-    return response.data;
+    const response = await apiClient.put<ApiResponse<Redemption>>(
+      resolvePath(MasterApiReference.Rewards.Redemption, { redemptionId }),
+      { status, parentNote },
+    );
+    return response.data.data as Redemption;
   },
 
   createReward: async (familyId: string, data: Partial<Reward>): Promise<Reward> => {
     if (AppConfig.isDemo) return { id: 'r_new', ...data } as Reward;
-    const response = await apiClient.post(`/families/${familyId}/rewards`, data);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<Reward>>(
+      resolvePath(MasterApiReference.Rewards.FamilyRewards, { familyId }),
+      data,
+    );
+    return response.data.data as Reward;
   },
 
   updateReward: async (familyId: string, rewardId: string, data: Partial<Reward>): Promise<Reward> => {
     if (AppConfig.isDemo) return { id: rewardId, ...data } as Reward;
-    const response = await apiClient.put(`/families/${familyId}/rewards/${rewardId}`, data);
-    return response.data;
+    const response = await apiClient.put<ApiResponse<Reward>>(
+      resolvePath(MasterApiReference.Rewards.FamilyReward, { familyId, rewardId }),
+      data,
+    );
+    return response.data.data as Reward;
   }
 };

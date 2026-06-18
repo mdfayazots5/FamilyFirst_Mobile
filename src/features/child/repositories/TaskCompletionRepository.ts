@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export type CompletionStatus = 'pending' | 'submitted' | 'approved' | 'flagged' | 'missed';
 
@@ -30,16 +32,22 @@ export const TaskCompletionRepository = {
         { id: 'c7', taskId: 't7', taskName: 'Revision', childProfileId: childId, status: 'pending', timeBlock: 'Night', coinValue: 20 },
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/tasks/completions`, { params: { childId, date } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<TaskCompletion[]>>(
+      resolvePath(MasterApiReference.Tasks.FamilyTaskCompletions, { familyId }),
+      { params: { childId, date } },
+    );
+    return response.data.data ?? [];
   },
 
   getUploadUrl: async (fileName: string): Promise<{ presignedUrl: string; s3Key: string }> => {
     if (AppConfig.isDemo) {
       return { presignedUrl: 'https://demo-upload.com', s3Key: `tasks/${fileName}` };
     }
-    const response = await apiClient.post('/tasks/completions/upload-url', { fileName });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<{ presignedUrl: string; s3Key: string }>>(
+      MasterApiReference.Tasks.UploadUrl,
+      { fileName },
+    );
+    return response.data.data as { presignedUrl: string; s3Key: string };
   },
 
   submitCompletion: async (taskId: string, data: { scheduledDate: string; photoUrl?: string }): Promise<TaskCompletion> => {
@@ -56,8 +64,11 @@ export const TaskCompletionRepository = {
         ...data
       } as TaskCompletion;
     }
-    const response = await apiClient.post(`/tasks/${taskId}/completions`, data);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<TaskCompletion>>(
+      resolvePath(MasterApiReference.Tasks.TaskCompletions, { taskId }),
+      data,
+    );
+    return response.data.data as TaskCompletion;
   },
 
   getVerificationQueue: async (familyId: string): Promise<TaskCompletion[]> => {
@@ -68,18 +79,25 @@ export const TaskCompletionRepository = {
         { id: 'q3', taskId: 't9', taskName: 'Science Project', childProfileId: 'mem_3', status: 'submitted', timeBlock: 'Evening', coinValue: 100, photoUrl: 'https://picsum.photos/seed/science/400/300', submittedAt: new Date().toISOString() },
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/tasks/verification-queue`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<TaskCompletion[]>>(
+      resolvePath(MasterApiReference.Tasks.VerificationQueue, { familyId }),
+    );
+    return response.data.data ?? [];
   },
 
   reviewCompletion: async (completionId: string, status: 'approved' | 'flagged', reviewNote?: string): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.put(`/tasks/completions/${completionId}/review`, { status, reviewNote });
+    await apiClient.put<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Tasks.TaskCompletionReview, { completionId }),
+      { status, reviewNote },
+    );
   },
 
   approveAll: async (familyId: string): Promise<number> => {
     if (AppConfig.isDemo) return 3;
-    const response = await apiClient.post(`/families/${familyId}/tasks/verification-queue/approve-all`);
-    return response.data.approvedCount;
+    const response = await apiClient.post<ApiResponse<{ approvedCount: number }>>(
+      resolvePath(MasterApiReference.Tasks.ApproveAllVerificationQueue, { familyId }),
+    );
+    return response.data.data?.approvedCount ?? 0;
   }
 };

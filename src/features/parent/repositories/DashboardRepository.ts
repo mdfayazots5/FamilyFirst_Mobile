@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export interface ChildSummary {
   id: string;
@@ -96,7 +98,9 @@ export const DashboardRepository = {
       };
     }
     
-    const response = await apiClient.get(`/families/${familyId}/dashboard`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<DashboardData>>(
+      resolvePath(MasterApiReference.Families.Dashboard, { familyId }),
+    );
+    return response.data.data as DashboardData;
   }
 };

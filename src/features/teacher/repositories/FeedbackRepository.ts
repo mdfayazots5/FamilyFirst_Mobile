@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export type FeedbackType = 'Appreciation' | 'Complaint' | 'Observation' | 'Homework' | 'Urgent' | 'WeeklySummary';
 export type Severity = 'Low' | 'Medium' | 'Urgent';
@@ -37,8 +39,11 @@ export const FeedbackRepository = {
         ...data
       };
     }
-    const response = await apiClient.post(`/families/${familyId}/feedback`, data);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<Feedback>>(
+      resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
+      data,
+    );
+    return response.data.data as Feedback;
   },
 
   getFeedbackHistory: async (familyId: string, teacherId: string): Promise<Feedback[]> => {
@@ -71,8 +76,11 @@ export const FeedbackRepository = {
         }
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/feedback`, { params: { teacherId } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<Feedback[]>>(
+      resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
+      { params: { teacherId } },
+    );
+    return response.data.data ?? [];
   },
 
   getFeedbackInbox: async (familyId: string, childId?: string): Promise<Feedback[]> => {
@@ -122,8 +130,11 @@ export const FeedbackRepository = {
         }
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/feedback`, { params: { childId } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<Feedback[]>>(
+      resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
+      { params: { childId } },
+    );
+    return response.data.data ?? [];
   },
 
   acknowledgeFeedback: async (feedbackId: string, parentResponseText: string): Promise<Feedback> => {
@@ -135,19 +146,27 @@ export const FeedbackRepository = {
         acknowledgedAt: new Date().toISOString()
       } as Feedback;
     }
-    const response = await apiClient.post(`/feedback/${feedbackId}/acknowledge`, { parentResponseText });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<Feedback>>(
+      resolvePath(MasterApiReference.Feedback.Acknowledge, { feedbackId }),
+      { parentResponseText },
+    );
+    return response.data.data as Feedback;
   },
 
   updateFeedback: async (familyId: string, feedbackId: string, data: any): Promise<Feedback> => {
     if (AppConfig.isDemo) return { id: feedbackId, ...data } as Feedback;
-    const response = await apiClient.put(`/families/${familyId}/feedback/${feedbackId}`, data);
-    return response.data;
+    const response = await apiClient.put<ApiResponse<Feedback>>(
+      resolvePath(MasterApiReference.Feedback.FamilyFeedbackItem, { familyId, feedbackId }),
+      data,
+    );
+    return response.data.data as Feedback;
   },
 
   deleteFeedback: async (familyId: string, feedbackId: string): Promise<boolean> => {
     if (AppConfig.isDemo) return true;
-    const response = await apiClient.delete(`/families/${familyId}/feedback/${feedbackId}`);
-    return response.data;
+    const response = await apiClient.delete<ApiResponse<boolean>>(
+      resolvePath(MasterApiReference.Feedback.FamilyFeedbackItem, { familyId, feedbackId }),
+    );
+    return response.data.data ?? false;
   }
 };

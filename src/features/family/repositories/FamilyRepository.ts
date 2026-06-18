@@ -1,6 +1,8 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
 import { UserRole } from '../../../core/auth/AuthContext';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export interface FamilyMember {
   id: string;
@@ -31,8 +33,8 @@ export const FamilyRepository = {
         subscription: 'FreeTrial'
       };
     }
-    const response = await apiClient.post('/families', { familyName: name, city });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<Family>>(MasterApiReference.Families.Root, { familyName: name, city });
+    return response.data.data as Family;
   },
 
   addMember: async (familyId: string, member: Partial<FamilyMember>): Promise<FamilyMember> => {
@@ -45,8 +47,11 @@ export const FamilyRepository = {
         ...member
       };
     }
-    const response = await apiClient.post(`/families/${familyId}/members`, member);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<FamilyMember>>(
+      resolvePath(MasterApiReference.Families.Members, { familyId }),
+      member,
+    );
+    return response.data.data as FamilyMember;
   },
 
   getMembers: async (familyId: string): Promise<FamilyMember[]> => {
@@ -58,19 +63,25 @@ export const FamilyRepository = {
         { id: 'mem_4', name: 'Dadi', role: UserRole.ELDER, linkType: 'Grandmother' },
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/members`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<FamilyMember[]>>(
+      resolvePath(MasterApiReference.Families.Members, { familyId }),
+    );
+    return response.data.data ?? [];
   },
 
   getJoinCode: async (familyId: string): Promise<{ joinCode: string }> => {
     if (AppConfig.isDemo) return { joinCode: 'DEMO01' };
-    const response = await apiClient.get(`/families/${familyId}/join-code`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<{ joinCode: string }>>(
+      resolvePath(MasterApiReference.Families.JoinCode, { familyId }),
+    );
+    return response.data.data as { joinCode: string };
   },
 
   regenerateJoinCode: async (familyId: string): Promise<{ joinCode: string }> => {
     if (AppConfig.isDemo) return { joinCode: 'NEW123' };
-    const response = await apiClient.post(`/families/${familyId}/join-code/regenerate`);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<{ joinCode: string }>>(
+      resolvePath(MasterApiReference.Families.RegenerateJoinCode, { familyId }),
+    );
+    return response.data.data as { joinCode: string };
   }
 };

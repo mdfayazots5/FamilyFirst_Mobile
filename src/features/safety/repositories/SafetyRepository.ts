@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export interface MemberPin {
   memberId: string;
@@ -129,7 +131,9 @@ const DEMO_ALERTS: LocationAlert[] = [
 export const SafetyRepository = {
   getMapView: async (familyId: string): Promise<MapView> => {
     if (AppConfig.isDemo) return DEMO_MAP;
-    const response = await apiClient.get(`/families/${familyId}/safety/map`);
+    const response = await apiClient.get<ApiResponse<MapView>>(
+      resolvePath(MasterApiReference.Safety.Map, { familyId }),
+    );
     return response.data.data;
   },
 
@@ -138,30 +142,43 @@ export const SafetyRepository = {
     data: { latitude: number; longitude: number; batteryLevel: number; timestamp: string },
   ): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.post(`/families/${familyId}/safety/location`, data);
+    await apiClient.post<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Safety.Location, { familyId }),
+      data,
+    );
   },
 
   listZones: async (familyId: string): Promise<SafeZone[]> => {
     if (AppConfig.isDemo) return DEMO_MAP.safeZones;
-    const response = await apiClient.get(`/families/${familyId}/safety/zones`);
+    const response = await apiClient.get<ApiResponse<SafeZone[]>>(
+      resolvePath(MasterApiReference.Safety.Zones, { familyId }),
+    );
     return response.data.data;
   },
 
   createZone: async (familyId: string, data: Omit<SafeZone, 'zoneId'>): Promise<SafeZone> => {
     if (AppConfig.isDemo) return { zoneId: `z-${Date.now()}`, ...data };
-    const response = await apiClient.post(`/families/${familyId}/safety/zones`, data);
+    const response = await apiClient.post<ApiResponse<SafeZone>>(
+      resolvePath(MasterApiReference.Safety.Zones, { familyId }),
+      data,
+    );
     return response.data.data;
   },
 
   updateZone: async (familyId: string, zoneId: string, data: Omit<SafeZone, 'zoneId'>): Promise<SafeZone> => {
     if (AppConfig.isDemo) return { zoneId, ...data };
-    const response = await apiClient.put(`/families/${familyId}/safety/zones/${zoneId}`, data);
+    const response = await apiClient.put<ApiResponse<SafeZone>>(
+      resolvePath(MasterApiReference.Safety.Zone, { familyId, zoneId }),
+      data,
+    );
     return response.data.data;
   },
 
   deleteZone: async (familyId: string, zoneId: string): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.delete(`/families/${familyId}/safety/zones/${zoneId}`);
+    await apiClient.delete<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Safety.Zone, { familyId, zoneId }),
+    );
   },
 
   listAlerts: async (
@@ -169,7 +186,10 @@ export const SafetyRepository = {
     params?: { memberId?: string; alertType?: string; fromDate?: string; toDate?: string; page?: number },
   ): Promise<{ items: LocationAlert[]; totalCount: number }> => {
     if (AppConfig.isDemo) return { items: DEMO_ALERTS, totalCount: DEMO_ALERTS.length };
-    const response = await apiClient.get(`/families/${familyId}/safety/alerts`, { params });
+    const response = await apiClient.get<ApiResponse<{ items: LocationAlert[]; totalCount: number }>>(
+      resolvePath(MasterApiReference.Safety.Alerts, { familyId }),
+      { params },
+    );
     return { items: response.data.data.items, totalCount: response.data.data.totalCount };
   },
 
@@ -178,7 +198,10 @@ export const SafetyRepository = {
       const alert = DEMO_ALERTS.find(a => a.alertId === alertId) ?? DEMO_ALERTS[0];
       return { ...alert, isResolved: true, resolvedAt: new Date().toISOString() };
     }
-    const response = await apiClient.put(`/families/${familyId}/safety/alerts/${alertId}/resolve`, { resolutionNote });
+    const response = await apiClient.put<ApiResponse<LocationAlert>>(
+      resolvePath(MasterApiReference.Safety.ResolveAlert, { familyId, alertId }),
+      { resolutionNote },
+    );
     return response.data.data;
   },
 
@@ -195,7 +218,10 @@ export const SafetyRepository = {
         alertsSentCount: 2,
       };
     }
-    const response = await apiClient.post(`/families/${familyId}/safety/sos`, data);
+    const response = await apiClient.post<ApiResponse<SosEvent>>(
+      resolvePath(MasterApiReference.Safety.Sos, { familyId }),
+      data,
+    );
     return response.data.data;
   },
 
@@ -209,7 +235,9 @@ export const SafetyRepository = {
         ],
       };
     }
-    const response = await apiClient.get(`/families/${familyId}/safety/settings`);
+    const response = await apiClient.get<ApiResponse<LocationSettings>>(
+      resolvePath(MasterApiReference.Safety.Settings, { familyId }),
+    );
     return response.data.data;
   },
 
@@ -221,7 +249,10 @@ export const SafetyRepository = {
     },
   ): Promise<LocationSettings> => {
     if (AppConfig.isDemo) return SafetyRepository.getSettings(familyId);
-    const response = await apiClient.put(`/families/${familyId}/safety/settings`, data);
+    const response = await apiClient.put<ApiResponse<LocationSettings>>(
+      resolvePath(MasterApiReference.Safety.Settings, { familyId }),
+      data,
+    );
     return response.data.data;
   },
 };

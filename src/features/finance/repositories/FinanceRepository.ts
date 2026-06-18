@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -174,7 +176,9 @@ const DEMO_SETTINGS: FinanceSettings = {
 export const FinanceRepository = {
   getDashboard: async (familyId: string): Promise<FinanceDashboard> => {
     if (AppConfig.isDemo) return DEMO_DASHBOARD;
-    const r = await apiClient.get(`/families/${familyId}/finance/dashboard`);
+    const r = await apiClient.get<ApiResponse<FinanceDashboard>>(
+      resolvePath(MasterApiReference.Finance.Dashboard, { familyId }),
+    );
     return r.data.data;
   },
 
@@ -183,7 +187,10 @@ export const FinanceRepository = {
     params?: { memberId?: string; category?: string; fromDate?: string; toDate?: string; page?: number; pageSize?: number },
   ): Promise<{ items: FinanceTransaction[]; totalCount: number }> => {
     if (AppConfig.isDemo) return { items: DEMO_DASHBOARD.todaysTransactions, totalCount: 3 };
-    const r = await apiClient.get(`/families/${familyId}/finance/transactions`, { params });
+    const r = await apiClient.get<ApiResponse<{ items: FinanceTransaction[]; totalCount: number }>>(
+      resolvePath(MasterApiReference.Finance.Transactions, { familyId }),
+      { params },
+    );
     return { items: r.data.data.items, totalCount: r.data.data.totalCount };
   },
 
@@ -192,45 +199,65 @@ export const FinanceRepository = {
     data: { questionType: string; contextNote?: string },
   ): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.post(`/families/${familyId}/finance/transactions/${transactionId}/question`, data);
+    await apiClient.post<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Finance.TransactionQuestion, { familyId, transactionId }),
+      data,
+    );
   },
 
   getBudgets: async (familyId: string): Promise<BudgetItem[]> => {
     if (AppConfig.isDemo) return DEMO_BUDGETS;
-    const r = await apiClient.get(`/families/${familyId}/finance/budget`);
+    const r = await apiClient.get<ApiResponse<BudgetItem[]>>(
+      resolvePath(MasterApiReference.Finance.Budget, { familyId }),
+    );
     return r.data.data;
   },
 
   setBudget: async (familyId: string, data: { category: string; budgetAmount: number }): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.put(`/families/${familyId}/finance/budget`, data);
+    await apiClient.put<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Finance.Budget, { familyId }),
+      data,
+    );
   },
 
   getCategoryBreakdown: async (familyId: string, fromDate?: string, toDate?: string): Promise<CategorySpend[]> => {
     if (AppConfig.isDemo) return DEMO_CATEGORIES;
-    const r = await apiClient.get(`/families/${familyId}/finance/categories`, { params: { fromDate, toDate } });
+    const r = await apiClient.get<ApiResponse<CategorySpend[]>>(
+      resolvePath(MasterApiReference.Finance.Categories, { familyId }),
+      { params: { fromDate, toDate } },
+    );
     return r.data.data;
   },
 
   listCommitments: async (familyId: string): Promise<Commitment[]> => {
     if (AppConfig.isDemo) return DEMO_DASHBOARD.upcomingCommitments;
-    const r = await apiClient.get(`/families/${familyId}/finance/commitments`);
+    const r = await apiClient.get<ApiResponse<Commitment[]>>(
+      resolvePath(MasterApiReference.Finance.Commitments, { familyId }),
+    );
     return r.data.data;
   },
 
   inviteConsent: async (familyId: string, data: { memberId: string; privacyTier: number }): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.post(`/families/${familyId}/finance/consent/invite`, data);
+    await apiClient.post<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Finance.ConsentInvite, { familyId }),
+      data,
+    );
   },
 
   revokeConsent: async (familyId: string, memberId: string): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.delete(`/families/${familyId}/finance/consent/${memberId}`);
+    await apiClient.delete<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Finance.ConsentMember, { familyId, memberId }),
+    );
   },
 
   getSettings: async (familyId: string): Promise<FinanceSettings> => {
     if (AppConfig.isDemo) return DEMO_SETTINGS;
-    const r = await apiClient.get(`/families/${familyId}/finance/settings`);
+    const r = await apiClient.get<ApiResponse<FinanceSettings>>(
+      resolvePath(MasterApiReference.Finance.Settings, { familyId }),
+    );
     return r.data.data;
   },
 
@@ -239,7 +266,10 @@ export const FinanceRepository = {
     data: { cfoMemberId?: string; memberTierChanges?: Array<{ memberId: string; privacyTier: number }> },
   ): Promise<FinanceSettings> => {
     if (AppConfig.isDemo) return DEMO_SETTINGS;
-    const r = await apiClient.put(`/families/${familyId}/finance/settings`, data);
+    const r = await apiClient.put<ApiResponse<FinanceSettings>>(
+      resolvePath(MasterApiReference.Finance.Settings, { familyId }),
+      data,
+    );
     return r.data.data;
   },
 };

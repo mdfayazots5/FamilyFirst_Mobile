@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 // ── Level 2 interfaces ────────────────────────────────────────────────────────
 
@@ -208,8 +210,11 @@ export const ReportsRepository = {
         upcomingEvents: ['Exam on Friday', 'LIC Premium Due']
       };
     }
-    const response = await apiClient.get(`/families/${familyId}/reports/weekly-digest`, { params: { weekStartDate } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<WeeklyDigest>>(
+      resolvePath(MasterApiReference.Reports.WeeklyDigest, { familyId }),
+      { params: { weekStartDate } },
+    );
+    return response.data.data as WeeklyDigest;
   },
 
   getAttendanceSummary: async (childId: string, fromDate: string, toDate: string): Promise<AttendanceDay[]> => {
@@ -225,8 +230,11 @@ export const ReportsRepository = {
       }
       return days;
     }
-    const response = await apiClient.get(`/children/${childId}/reports/attendance-summary`, { params: { fromDate, toDate } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<AttendanceDay[]>>(
+      resolvePath(MasterApiReference.Reports.AttendanceSummary, { childId }),
+      { params: { fromDate, toDate } },
+    );
+    return response.data.data ?? [];
   },
 
   getScoreHistory: async (childId: string, periodDays = 30): Promise<ScoreHistoryPoint[]> => {
@@ -249,13 +257,19 @@ export const ReportsRepository = {
       }
       return history;
     }
-    const response = await apiClient.get(`/children/${childId}/score-history`, { params: { periodDays } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<ScoreHistoryPoint[]>>(
+      resolvePath(MasterApiReference.Children.ScoreHistory, { childId }),
+      { params: { periodDays } },
+    );
+    return response.data.data ?? [];
   },
 
   updateParentRemark: async (childId: string, remark: string): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.put(`/children/${childId}`, { weeklyRemark: remark });
+    await apiClient.put<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Children.Update, { childId }),
+      { weeklyRemark: remark },
+    );
   },
 
   // ── Level 2 extensions ──────────────────────────────────────────────────────
@@ -264,7 +278,7 @@ export const ReportsRepository = {
     familyId: string, year?: number, month?: number,
   ): Promise<MonthlyFamilyReport> => {
     if (AppConfig.isDemo) return DEMO_MONTHLY_REPORT;
-    const response = await apiClient.get(`/families/${familyId}/reports/monthly`, {
+    const response = await apiClient.get<ApiResponse<MonthlyFamilyReport>>(resolvePath(MasterApiReference.Reports.MonthlyFamily, { familyId }), {
       params: { year, month },
     });
     return response.data.data;
@@ -274,8 +288,8 @@ export const ReportsRepository = {
     familyId: string, childId: string, year?: number, month?: number,
   ): Promise<ChildMonthlySummary> => {
     if (AppConfig.isDemo) return DEMO_CHILD_MONTHLY;
-    const response = await apiClient.get(
-      `/families/${familyId}/children/${childId}/reports/monthly`,
+    const response = await apiClient.get<ApiResponse<ChildMonthlySummary>>(
+      resolvePath(MasterApiReference.Reports.ChildMonthly, { familyId, childId }),
       { params: { year, month } },
     );
     return response.data.data;
@@ -283,13 +297,17 @@ export const ReportsRepository = {
 
   getDocumentExpiryReport: async (familyId: string): Promise<ExpiringDocument[]> => {
     if (AppConfig.isDemo) return DEMO_EXPIRING_DOCS;
-    const response = await apiClient.get(`/families/${familyId}/reports/documents/expiry`);
+    const response = await apiClient.get<ApiResponse<ExpiringDocument[]>>(
+      resolvePath(MasterApiReference.Reports.DocumentExpiry, { familyId }),
+    );
     return response.data.data;
   },
 
   getHealthReminderSummary: async (familyId: string): Promise<HealthReminder[]> => {
     if (AppConfig.isDemo) return DEMO_HEALTH_REMINDERS;
-    const response = await apiClient.get(`/families/${familyId}/reports/health/reminders`);
+    const response = await apiClient.get<ApiResponse<HealthReminder[]>>(
+      resolvePath(MasterApiReference.Reports.HealthReminders, { familyId }),
+    );
     return response.data.data;
   },
 };

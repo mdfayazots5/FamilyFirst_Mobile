@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 // ── Storage Config (AC-01 / AC-02) ───────────────────────────────────────────
 
@@ -179,67 +181,94 @@ export const FamilyAdminL2Repository = {
   // Storage
   getStorageConfig: async (familyId: string): Promise<StorageConfig> => {
     if (AppConfig.isDemo) return DEMO_STORAGE;
-    const r = await apiClient.get(`/families/${familyId}/admin/storage`);
+    const r = await apiClient.get<ApiResponse<StorageConfig>>(
+      resolvePath(MasterApiReference.FamilyAdmin.Storage, { familyId }),
+    );
     return r.data.data;
   },
   updateStorageConfig: async (familyId: string, data: Partial<StorageConfig>): Promise<StorageConfig> => {
     if (AppConfig.isDemo) return { ...DEMO_STORAGE, ...data };
-    const r = await apiClient.put(`/families/${familyId}/admin/storage`, data);
+    const r = await apiClient.put<ApiResponse<StorageConfig>>(
+      resolvePath(MasterApiReference.FamilyAdmin.Storage, { familyId }),
+      data,
+    );
     return r.data.data;
   },
 
   // Alert Thresholds
   getAlertThresholds: async (familyId: string): Promise<AlertThresholds> => {
     if (AppConfig.isDemo) return DEMO_THRESHOLDS;
-    const r = await apiClient.get(`/families/${familyId}/admin/alert-thresholds`);
+    const r = await apiClient.get<ApiResponse<AlertThresholds>>(
+      resolvePath(MasterApiReference.FamilyAdmin.AlertThresholds, { familyId }),
+    );
     return r.data.data;
   },
   updateAlertThresholds: async (familyId: string, data: Partial<AlertThresholds>): Promise<AlertThresholds> => {
     if (AppConfig.isDemo) return { ...DEMO_THRESHOLDS, ...data };
-    const r = await apiClient.put(`/families/${familyId}/admin/alert-thresholds`, data);
+    const r = await apiClient.put<ApiResponse<AlertThresholds>>(
+      resolvePath(MasterApiReference.FamilyAdmin.AlertThresholds, { familyId }),
+      data,
+    );
     return r.data.data;
   },
 
   // Emergency Access
   getEmergencyConfig: async (familyId: string): Promise<EmergencyAccessRules> => {
     if (AppConfig.isDemo) return DEMO_EMERGENCY;
-    const r = await apiClient.get(`/families/${familyId}/admin/emergency-config`);
+    const r = await apiClient.get<ApiResponse<EmergencyAccessRules>>(
+      resolvePath(MasterApiReference.FamilyAdmin.EmergencyConfig, { familyId }),
+    );
     return r.data.data;
   },
   updateEmergencyConfig: async (familyId: string, data: Partial<EmergencyAccessRules>): Promise<EmergencyAccessRules> => {
     if (AppConfig.isDemo) return { ...DEMO_EMERGENCY, ...data };
-    const r = await apiClient.put(`/families/${familyId}/admin/emergency-config`, data);
+    const r = await apiClient.put<ApiResponse<EmergencyAccessRules>>(
+      resolvePath(MasterApiReference.FamilyAdmin.EmergencyConfig, { familyId }),
+      data,
+    );
     return r.data.data;
   },
 
   // Finance Privacy
   getFinancePrivacyConfig: async (familyId: string): Promise<FinancePrivacyConfig> => {
     if (AppConfig.isDemo) return DEMO_FINANCE_PRIVACY;
-    const r = await apiClient.get(`/families/${familyId}/admin/finance-config`);
+    const r = await apiClient.get<ApiResponse<FinancePrivacyConfig>>(
+      resolvePath(MasterApiReference.FamilyAdmin.FinanceConfig, { familyId }),
+    );
     return r.data.data;
   },
   updateFinancePrivacyConfig: async (familyId: string, data: Partial<FinancePrivacyConfig>): Promise<FinancePrivacyConfig> => {
     if (AppConfig.isDemo) return { ...DEMO_FINANCE_PRIVACY, ...data };
-    const r = await apiClient.put(`/families/${familyId}/admin/finance-config`, data);
+    const r = await apiClient.put<ApiResponse<FinancePrivacyConfig>>(
+      resolvePath(MasterApiReference.FamilyAdmin.FinanceConfig, { familyId }),
+      data,
+    );
     return r.data.data;
   },
 
   // Module Visibility
   getModuleVisibility: async (familyId: string): Promise<ModuleVisibilityItem[]> => {
     if (AppConfig.isDemo) return DEMO_MODULE_VISIBILITY;
-    const r = await apiClient.get(`/families/${familyId}/admin/module-visibility`);
+    const r = await apiClient.get<ApiResponse<ModuleVisibilityItem[]>>(
+      resolvePath(MasterApiReference.FamilyAdmin.ModuleVisibility, { familyId }),
+    );
     return r.data.data;
   },
   updateModuleVisibility: async (familyId: string, data: UpdateModuleVisibilityRequest): Promise<ModuleVisibilityItem[]> => {
     if (AppConfig.isDemo) return DEMO_MODULE_VISIBILITY;
-    const r = await apiClient.put(`/families/${familyId}/admin/module-visibility`, data);
+    const r = await apiClient.put<ApiResponse<ModuleVisibilityItem[]>>(
+      resolvePath(MasterApiReference.FamilyAdmin.ModuleVisibility, { familyId }),
+      data,
+    );
     return r.data.data;
   },
 
   // Notification Rules
   getNotificationRules: async (familyId: string): Promise<NotificationRuleItem[]> => {
     if (AppConfig.isDemo) return DEMO_NOTIFICATION_RULES;
-    const r = await apiClient.get(`/families/${familyId}/admin/notification-rules`);
+    const r = await apiClient.get<ApiResponse<NotificationRuleItem[]>>(
+      resolvePath(MasterApiReference.FamilyAdmin.NotificationRules, { familyId }),
+    );
     return r.data.data;
   },
   updateNotificationRule: async (familyId: string, ruleId: string, data: UpdateNotificationRulePayload): Promise<NotificationRuleItem> => {
@@ -247,7 +276,10 @@ export const FamilyAdminL2Repository = {
       const existing = DEMO_NOTIFICATION_RULES.find(rule => rule.ruleId === ruleId) ?? DEMO_NOTIFICATION_RULES[0];
       return { ...existing, ...data };
     }
-    const r = await apiClient.put(`/families/${familyId}/admin/notification-rules/${ruleId}`, data);
+    const r = await apiClient.put<ApiResponse<NotificationRuleItem>>(
+      resolvePath(MasterApiReference.FamilyAdmin.NotificationRule, { familyId, ruleId }),
+      data,
+    );
     return r.data.data;
   },
 };

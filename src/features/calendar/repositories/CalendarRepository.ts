@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export type EventType = 
   | 'DoctorAppointment' 
@@ -131,8 +133,11 @@ export const CalendarRepository = {
         }
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/calendar/events`, { params: { fromDate, toDate } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<CalendarEvent[]>>(
+      resolvePath(MasterApiReference.Calendar.Events, { familyId }),
+      { params: { fromDate, toDate } },
+    );
+    return response.data.data ?? [];
   },
 
   getUpcomingEvents: async (familyId: string, days = 7): Promise<CalendarEvent[]> => {
@@ -140,25 +145,36 @@ export const CalendarRepository = {
       const all = await CalendarRepository.getEvents(familyId, '', '');
       return all.slice(0, 4);
     }
-    const response = await apiClient.get(`/families/${familyId}/calendar/upcoming`, { params: { days } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<CalendarEvent[]>>(
+      resolvePath(MasterApiReference.Calendar.Upcoming, { familyId }),
+      { params: { days } },
+    );
+    return response.data.data ?? [];
   },
 
   createEvent: async (familyId: string, data: Partial<CalendarEvent>): Promise<CalendarEvent> => {
     if (AppConfig.isDemo) return { id: `e_${Math.random()}`, ...data } as CalendarEvent;
-    const response = await apiClient.post(`/families/${familyId}/calendar/events`, data);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<CalendarEvent>>(
+      resolvePath(MasterApiReference.Calendar.Events, { familyId }),
+      data,
+    );
+    return response.data.data as CalendarEvent;
   },
 
   updateEvent: async (familyId: string, eventId: string, data: Partial<CalendarEvent>): Promise<CalendarEvent> => {
     if (AppConfig.isDemo) return { id: eventId, ...data } as CalendarEvent;
-    const response = await apiClient.put(`/families/${familyId}/calendar/events/${eventId}`, data);
-    return response.data;
+    const response = await apiClient.put<ApiResponse<CalendarEvent>>(
+      resolvePath(MasterApiReference.Calendar.Event, { familyId, eventId }),
+      data,
+    );
+    return response.data.data as CalendarEvent;
   },
 
   deleteEvent: async (familyId: string, eventId: string): Promise<boolean> => {
     if (AppConfig.isDemo) return true;
-    const response = await apiClient.delete(`/families/${familyId}/calendar/events/${eventId}`);
-    return response.data;
+    const response = await apiClient.delete<ApiResponse<boolean>>(
+      resolvePath(MasterApiReference.Calendar.Event, { familyId, eventId }),
+    );
+    return response.data.data ?? false;
   }
 };

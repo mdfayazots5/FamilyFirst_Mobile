@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export interface TaskCompletion {
   id: string;
@@ -50,8 +52,10 @@ export const ChildRepository = {
         ]
       };
     }
-    const response = await apiClient.get(`/families/${familyId}/children/${childId}`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<ChildDetail>>(
+      resolvePath(MasterApiReference.Children.Detail, { familyId, childId }),
+    );
+    return response.data.data as ChildDetail;
   },
 
   getTaskCompletions: async (familyId: string, childId: string): Promise<TaskCompletion[]> => {
@@ -65,8 +69,11 @@ export const ChildRepository = {
         { id: '6', title: 'Clean Room', status: 'missed', time: '08:00 PM', category: 'Cleanliness' },
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/tasks/completions`, { params: { childId, date: 'today' } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<TaskCompletion[]>>(
+      resolvePath(MasterApiReference.Tasks.FamilyTaskCompletions, { familyId }),
+      { params: { childId, date: 'today' } },
+    );
+    return response.data.data ?? [];
   },
 
   getFeedback: async (familyId: string, childId: string): Promise<Feedback[]> => {
@@ -77,22 +84,34 @@ export const ChildRepository = {
         { id: '3', teacherName: 'Mr. Khan', type: 'Observation', message: 'Arjun seems a bit distracted lately.', date: '2024-04-08', isRead: true },
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/feedback`, { params: { childId, page: 1, pageSize: 20 } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<Feedback[]>>(
+      resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
+      { params: { childId, page: 1, pageSize: 20 } },
+    );
+    return response.data.data ?? [];
   },
 
   reviewTask: async (taskId: string, status: 'done' | 'flagged', note?: string): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.put(`/tasks/completions/${taskId}/review`, { status, reviewNote: note });
+    await apiClient.put<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Tasks.TaskCompletionReview, { completionId: taskId }),
+      { status, reviewNote: note },
+    );
   },
 
   acknowledgeFeedback: async (feedbackId: string, responseText: string): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.post(`/feedback/${feedbackId}/acknowledge`, { parentResponseText: responseText });
+    await apiClient.post<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Feedback.Acknowledge, { feedbackId }),
+      { parentResponseText: responseText },
+    );
   },
 
   deductCoins: async (childId: string, amount: number, note: string): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.post(`/children/${childId}/coin-deduction`, { amount, note });
+    await apiClient.post<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Children.CoinDeduction, { childId }),
+      { amount, note },
+    );
   }
 };

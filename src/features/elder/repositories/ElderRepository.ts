@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export interface Appreciation {
   id: string;
@@ -30,8 +32,10 @@ export const ElderRepository = {
         { id: 'mem_3', name: 'Zara', tasksCompleted: 4, totalTasks: 8, status: 'Needs Help' }
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/members/grandchildren`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<GrandchildStatus[]>>(
+      resolvePath(MasterApiReference.Elder.Grandchildren, { familyId }),
+    );
+    return response.data.data ?? [];
   },
 
   sendAppreciation: async (familyId: string, data: Partial<Appreciation>): Promise<Appreciation> => {
@@ -42,8 +46,11 @@ export const ElderRepository = {
         ...data
       } as Appreciation;
     }
-    const response = await apiClient.post(`/families/${familyId}/feedback`, { ...data, type: 'Appreciation' });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<Appreciation>>(
+      resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
+      { ...data, type: 'Appreciation' },
+    );
+    return response.data.data as Appreciation;
   },
 
   getAppreciations: async (familyId: string): Promise<Appreciation[]> => {
@@ -71,7 +78,10 @@ export const ElderRepository = {
         }
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/feedback`, { params: { type: 'Appreciation' } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<Appreciation[]>>(
+      resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
+      { params: { type: 'Appreciation' } },
+    );
+    return response.data.data ?? [];
   }
 };

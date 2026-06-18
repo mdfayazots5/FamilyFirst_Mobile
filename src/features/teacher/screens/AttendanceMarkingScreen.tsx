@@ -22,7 +22,8 @@ import {
   AttendanceRepository, 
   AttendanceRecord, 
   AttendanceStatus,
-  CommentTemplate 
+  CommentTemplate,
+  AttendanceStatusOption,
 } from '../repositories/AttendanceRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
@@ -37,6 +38,8 @@ const AttendanceMarkingScreen: React.FC = () => {
 
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [templates, setTemplates] = useState<CommentTemplate[]>([]);
+  const [statusOptions, setStatusOptions] = useState<AttendanceStatus[]>([]);
+  const [customStatusOptions, setCustomStatusOptions] = useState<AttendanceStatusOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -59,12 +62,22 @@ const AttendanceMarkingScreen: React.FC = () => {
   const fetchData = useCallback(async () => {
     if (!user?.familyId || !sessionId) return;
     try {
-      const [recordList, templateList] = await Promise.all([
-         AttendanceRepository.getSessionRecords(user.familyId, sessionId),
-         AttendanceRepository.getCommentTemplates(user.familyId)
+      const [recordList, templateList, attendanceStatuses, customAttendanceStatuses] = await Promise.all([
+        AttendanceRepository.getSessionRecords(user.familyId, sessionId),
+        AttendanceRepository.getCommentTemplates(user.familyId),
+        AttendanceRepository.getAttendanceStatuses(),
+        AttendanceRepository.getCustomAttendanceStatuses(),
       ]);
       setRecords(recordList);
       setTemplates(templateList);
+      setStatusOptions(
+        attendanceStatuses
+          .map((status) => status.code as AttendanceStatus)
+          .filter((status): status is AttendanceStatus =>
+            ['Present', 'Absent', 'Late', 'LeftEarly'].includes(status),
+          )
+      );
+      setCustomStatusOptions(customAttendanceStatuses);
     } catch (error) {
       console.error('Failed to fetch attendance data', error);
     } finally {
@@ -77,7 +90,11 @@ const AttendanceMarkingScreen: React.FC = () => {
   }, [fetchData]);
 
   const toggleStatus = (recordId: string) => {
-    const statusCycle: AttendanceStatus[] = ['Present', 'Absent', 'Late', 'LeftEarly'];
+    if (statusOptions.length === 0) {
+      return;
+    }
+
+    const statusCycle = statusOptions;
     setRecords(prev => prev.map(rec => {
       if (rec.id === recordId) {
         const currentIndex = statusCycle.indexOf(rec.status);
@@ -97,7 +114,7 @@ const AttendanceMarkingScreen: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (!sessionId) return;
+    if (!sessionId || !user?.familyId) return;
     setIsSubmitting(true);
     try {
       if (isOffline) {
@@ -105,7 +122,7 @@ const AttendanceMarkingScreen: React.FC = () => {
         localStorage.setItem(`offline_attendance_${sessionId}`, JSON.stringify(records));
         alert('Offline: Attendance saved locally. It will sync when you are back online.');
       } else {
-        await AttendanceRepository.submitAttendance(sessionId, records);
+        await AttendanceRepository.submitAttendance(user.familyId, sessionId, records);
       }
       navigate('/teacher');
     } catch (error) {
@@ -191,6 +208,33 @@ const AttendanceMarkingScreen: React.FC = () => {
             <span className="text-[10px] font-black uppercase tracking-[0.4em] italic leading-none">LOCAL_CACHE_MODE_ACTIVE // SYNC_PENDING_PROTOCOL</span>
           </motion.div>
         )}
+
+        {customStatusOptions.length > 0 && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            className="mt-8 rounded-[24px] border border-accent/10 bg-accent/5 px-6 py-5"
+          >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-accent/70 italic leading-none">CUSTOM_STATUS_CONFIG</p>
+                <p className="mt-2 text-sm font-bold text-primary">
+                  Family-specific attendance labels are configured and visible here, but final submission still uses the core attendance protocol statuses.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {customStatusOptions.map((status) => (
+                  <span
+                    key={status.id}
+                    className="rounded-full border border-black/5 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-primary shadow-sm"
+                  >
+                    {status.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
       </header>
 
       <main className="max-w-4xl mx-auto p-8 lg:p-14 space-y-8">
@@ -229,6 +273,7 @@ const AttendanceMarkingScreen: React.FC = () => {
              className="w-full md:w-auto h-20 px-16 rounded-[36px] text-[12px] font-black uppercase tracking-[0.5em] shadow-3xl shadow-primary/30 group active:scale-95 italic transition-all" 
              icon={<Send size={24} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
              onClick={() => setIsConfirmSheetOpen(true)}
+             disabled={statusOptions.length === 0}
            >
              FORMALIZE_RECORDS
            </FFButton>

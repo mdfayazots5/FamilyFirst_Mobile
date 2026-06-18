@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export type TimeBlock = 'Morning' | 'School' | 'Evening' | 'Night';
 export type PillarTag = 'Study' | 'Cleanliness' | 'Discipline' | 'ScreenControl' | 'Responsibility';
@@ -83,30 +85,41 @@ export const TaskRepository = {
         }
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/tasks`, { params: { childId } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<TaskItem[]>>(
+      resolvePath(MasterApiReference.Tasks.FamilyTasks, { familyId }),
+      { params: { childId } },
+    );
+    return response.data.data ?? [];
   },
 
   createTask: async (familyId: string, data: Partial<TaskItem>): Promise<TaskItem> => {
     if (AppConfig.isDemo) {
       return { id: Math.random().toString(36).substr(2, 9), ...data } as TaskItem;
     }
-    const response = await apiClient.post(`/families/${familyId}/tasks`, data);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<TaskItem>>(
+      resolvePath(MasterApiReference.Tasks.FamilyTasks, { familyId }),
+      data,
+    );
+    return response.data.data as TaskItem;
   },
 
   updateTask: async (familyId: string, taskId: string, data: Partial<TaskItem>): Promise<TaskItem> => {
     if (AppConfig.isDemo) {
       return { id: taskId, ...data } as TaskItem;
     }
-    const response = await apiClient.put(`/families/${familyId}/tasks/${taskId}`, data);
-    return response.data;
+    const response = await apiClient.put<ApiResponse<TaskItem>>(
+      resolvePath(MasterApiReference.Tasks.FamilyTask, { familyId, taskId }),
+      data,
+    );
+    return response.data.data as TaskItem;
   },
 
   deleteTask: async (familyId: string, taskId: string): Promise<boolean> => {
     if (AppConfig.isDemo) return true;
-    const response = await apiClient.delete(`/families/${familyId}/tasks/${taskId}`);
-    return response.data;
+    const response = await apiClient.delete<ApiResponse<boolean>>(
+      resolvePath(MasterApiReference.Tasks.FamilyTask, { familyId, taskId }),
+    );
+    return response.data.data ?? false;
   },
 
   getTemplates: async (ageGroup: number): Promise<TaskTemplate[]> => {
@@ -124,13 +137,19 @@ export const TaskRepository = {
         { id: 'tmp10', name: 'Journaling', category: 'Self-care', defaultDuration: 15, defaultCoinValue: 20, pillarTag: 'Discipline', icon: '📓' },
       ];
     }
-    const response = await apiClient.get('/admin/task-templates', { params: { ageGroup } });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<TaskTemplate[]>>(
+      MasterApiReference.Admin.TaskTemplates,
+      { params: { ageGroup } },
+    );
+    return response.data.data ?? [];
   },
 
   applyExamSeasonMode: async (familyId: string, childId: string): Promise<boolean> => {
     if (AppConfig.isDemo) return true;
-    const response = await apiClient.post(`/families/${familyId}/tasks/exam-mode`, { childId });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<boolean>>(
+      resolvePath(MasterApiReference.Tasks.ExamMode, { familyId }),
+      { childId },
+    );
+    return response.data.data ?? false;
   }
 };

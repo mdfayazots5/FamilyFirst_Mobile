@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export interface AllergyEntry { text: string; category: 'Food' | 'Medication' | 'Environmental'; }
 
@@ -142,13 +144,17 @@ const DEMO_SUMMARIES: HealthProfileSummary[] = [
 export const MedicalRepository = {
   listHealthProfiles: async (familyId: string): Promise<HealthProfileSummary[]> => {
     if (AppConfig.isDemo) return DEMO_SUMMARIES;
-    const response = await apiClient.get(`/families/${familyId}/health-profiles`);
+    const response = await apiClient.get<ApiResponse<HealthProfileSummary[]>>(
+      resolvePath(MasterApiReference.Medical.HealthProfiles, { familyId }),
+    );
     return response.data.data;
   },
 
   getHealthProfile: async (familyId: string, memberId: string): Promise<HealthProfile> => {
     if (AppConfig.isDemo) return { ...DEMO_PROFILE, memberId };
-    const response = await apiClient.get(`/families/${familyId}/health-profiles/${memberId}`);
+    const response = await apiClient.get<ApiResponse<HealthProfile>>(
+      resolvePath(MasterApiReference.Medical.HealthProfile, { familyId, memberId }),
+    );
     return response.data.data;
   },
 
@@ -168,7 +174,10 @@ export const MedicalRepository = {
     }>,
   ): Promise<HealthProfile> => {
     if (AppConfig.isDemo) return { ...DEMO_PROFILE, ...data } as HealthProfile;
-    const response = await apiClient.put(`/families/${familyId}/health-profiles/${memberId}`, data);
+    const response = await apiClient.put<ApiResponse<HealthProfile>>(
+      resolvePath(MasterApiReference.Medical.HealthProfile, { familyId, memberId }),
+      data,
+    );
     return response.data.data;
   },
 
@@ -184,18 +193,25 @@ export const MedicalRepository = {
     if (AppConfig.isDemo) {
       return { prescriptionId: `rx-${Date.now()}`, isArchived: false, ...data };
     }
-    const response = await apiClient.post(`/families/${familyId}/health-profiles/${memberId}/prescriptions`, data);
+    const response = await apiClient.post<ApiResponse<Medication>>(
+      resolvePath(MasterApiReference.Medical.Prescriptions, { familyId, memberId }),
+      data,
+    );
     return response.data.data;
   },
 
   deletePrescription: async (familyId: string, memberId: string, prescriptionId: string): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.delete(`/families/${familyId}/health-profiles/${memberId}/prescriptions/${prescriptionId}`);
+    await apiClient.delete<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Medical.Prescription, { familyId, memberId, prescriptionId }),
+    );
   },
 
   listVaccinations: async (familyId: string, memberId: string): Promise<VaccinationEntry[]> => {
     if (AppConfig.isDemo) return DEMO_PROFILE.vaccinationStatus;
-    const response = await apiClient.get(`/families/${familyId}/health-profiles/${memberId}/vaccinations`);
+    const response = await apiClient.get<ApiResponse<VaccinationEntry[]>>(
+      resolvePath(MasterApiReference.Medical.Vaccinations, { familyId, memberId }),
+    );
     return response.data.data;
   },
 
@@ -205,7 +221,10 @@ export const MedicalRepository = {
     data: Omit<VaccinationEntry, 'vaccinationId'>,
   ): Promise<VaccinationEntry> => {
     if (AppConfig.isDemo) return { vaccinationId: `v-${Date.now()}`, ...data };
-    const response = await apiClient.post(`/families/${familyId}/health-profiles/${memberId}/vaccinations`, data);
+    const response = await apiClient.post<ApiResponse<VaccinationEntry>>(
+      resolvePath(MasterApiReference.Medical.Vaccinations, { familyId, memberId }),
+      data,
+    );
     return response.data.data;
   },
 
@@ -220,8 +239,9 @@ export const MedicalRepository = {
         ?? DEMO_PROFILE.vaccinationStatus[0];
       return { ...v, ...data } as VaccinationEntry;
     }
-    const response = await apiClient.put(
-      `/families/${familyId}/health-profiles/${memberId}/vaccinations/${vaccinationId}/status`, data,
+    const response = await apiClient.put<ApiResponse<VaccinationEntry>>(
+      resolvePath(MasterApiReference.Medical.VaccinationStatus, { familyId, memberId, vaccinationId }),
+      data,
     );
     return response.data.data;
   },
@@ -244,8 +264,9 @@ export const MedicalRepository = {
         totalCount: 3,
       };
     }
-    const response = await apiClient.get(
-      `/families/${familyId}/health-profiles/${memberId}/timeline`, { params },
+    const response = await apiClient.get<ApiResponse<{ items: HealthRecord[]; totalCount: number }>>(
+      resolvePath(MasterApiReference.Medical.Timeline, { familyId, memberId }),
+      { params },
     );
     return { items: response.data.data.items, totalCount: response.data.data.totalCount };
   },
@@ -261,7 +282,9 @@ export const MedicalRepository = {
         organDonor: false, isProfileComplete: true,
       };
     }
-    const response = await apiClient.get(`/families/${familyId}/health-profiles/${memberId}/emergency-card`);
+    const response = await apiClient.get<ApiResponse<EmergencyCard>>(
+      resolvePath(MasterApiReference.Medical.EmergencyCard, { familyId, memberId }),
+    );
     return response.data.data;
   },
 
@@ -277,8 +300,9 @@ export const MedicalRepository = {
         expiresAt: new Date(Date.now() + 72 * 3600000).toISOString(),
       };
     }
-    const response = await apiClient.post(
-      `/families/${familyId}/health-profiles/${memberId}/emergency-card/share`, data,
+    const response = await apiClient.post<ApiResponse<EmergencyCardShare>>(
+      resolvePath(MasterApiReference.Medical.ShareEmergencyCard, { familyId, memberId }),
+      data,
     );
     return response.data.data;
   },
@@ -294,7 +318,9 @@ export const MedicalRepository = {
         organDonor: false, isProfileComplete: true,
       };
     }
-    const response = await apiClient.get(`/medical/emergency-card/${token}`);
+    const response = await apiClient.get<ApiResponse<EmergencyCard>>(
+      resolvePath(MasterApiReference.Medical.EmergencyCardByToken, { token }),
+    );
     return response.data.data;
   },
 
@@ -305,7 +331,9 @@ export const MedicalRepository = {
         { heightWeightRecordId: 'hw-2', recordedDate: '2024-09-15', heightCm: 138, weightKg: 34.2 },
       ];
     }
-    const response = await apiClient.get(`/families/${familyId}/health-profiles/${memberId}/height-weight`);
+    const response = await apiClient.get<ApiResponse<HeightWeightEntry[]>>(
+      resolvePath(MasterApiReference.Medical.HeightWeight, { familyId, memberId }),
+    );
     return response.data.data;
   },
 
@@ -315,8 +343,9 @@ export const MedicalRepository = {
     data: { recordedDate: string; heightCm?: number; weightKg?: number },
   ): Promise<HeightWeightEntry> => {
     if (AppConfig.isDemo) return { heightWeightRecordId: `hw-${Date.now()}`, ...data };
-    const response = await apiClient.post(
-      `/families/${familyId}/health-profiles/${memberId}/height-weight`, data,
+    const response = await apiClient.post<ApiResponse<HeightWeightEntry>>(
+      resolvePath(MasterApiReference.Medical.HeightWeight, { familyId, memberId }),
+      data,
     );
     return response.data.data;
   },

@@ -1,5 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
+import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export interface AdminDashboardStats {
   totalFamilies: number;
@@ -56,8 +58,8 @@ export const AdminRepository = {
         revenueTrend: 12
       };
     }
-    const response = await apiClient.get('/admin/dashboard');
-    return response.data;
+    const response = await apiClient.get<ApiResponse<AdminDashboardStats>>(MasterApiReference.Admin.Dashboard);
+    return response.data.data as AdminDashboardStats;
   },
 
   getFamilies: async (params?: any): Promise<AdminFamily[]> => {
@@ -70,8 +72,8 @@ export const AdminRepository = {
         { id: 'f5', name: 'Reddy Family', plan: 'Premium', status: 'Flagged', memberCount: 5, createdAt: '2025-11-05', lastActive: '2026-04-09' },
       ];
     }
-    const response = await apiClient.get('/admin/families', { params });
-    return response.data;
+    const response = await apiClient.get<ApiResponse<AdminFamily[]>>(MasterApiReference.Admin.Families, { params });
+    return response.data.data ?? [];
   },
 
   getPlans: async (): Promise<SubscriptionPlan[]> => {
@@ -83,8 +85,8 @@ export const AdminRepository = {
         { id: 'p4', name: 'Family Plus', price: 999, maxChildren: 10, features: ['Multi-Family Support', 'Priority Support'] },
       ];
     }
-    const response = await apiClient.get('/admin/plans');
-    return response.data;
+    const response = await apiClient.get<ApiResponse<SubscriptionPlan[]>>(MasterApiReference.Admin.Plans);
+    return response.data.data ?? [];
   },
 
   getTaskTemplates: async (): Promise<TaskTemplate[]> => {
@@ -98,8 +100,8 @@ export const AdminRepository = {
         ageGroup: i % 2 === 0 ? '5-8' : '9-12'
       }));
     }
-    const response = await apiClient.get('/admin/task-templates');
-    return response.data;
+    const response = await apiClient.get<ApiResponse<TaskTemplate[]>>(MasterApiReference.Admin.TaskTemplates);
+    return response.data.data ?? [];
   },
 
   getFeatureFlags: async (): Promise<FeatureFlag[]> => {
@@ -115,17 +117,20 @@ export const AdminRepository = {
         { id: 'f8', name: 'Trial Extension', description: 'Allow parents to request trial extensions', isEnabled: true },
       ];
     }
-    const response = await apiClient.get('/admin/feature-flags');
-    return response.data;
+    const response = await apiClient.get<ApiResponse<FeatureFlag[]>>(MasterApiReference.Admin.FeatureFlags);
+    return response.data.data ?? [];
   },
 
   updateFeatureFlag: async (flagId: string, isEnabled: boolean): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.put(`/admin/feature-flags/${flagId}`, { isEnabled });
+    await apiClient.put<ApiResponse<null>>(
+      resolvePath(MasterApiReference.Admin.FeatureFlag, { flagId }),
+      { isEnabled },
+    );
   },
 
   sendCampaign: async (data: any): Promise<void> => {
     if (AppConfig.isDemo) return;
-    await apiClient.post('/admin/notifications/campaign', data);
+    await apiClient.post<ApiResponse<null>>(MasterApiReference.Admin.NotificationCampaign, data);
   }
 };

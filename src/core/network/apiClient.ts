@@ -1,6 +1,13 @@
 import axios from 'axios';
+import { MasterApiReference } from '../api/MasterApiReference';
 import { AppConfig } from '../config/appConfig';
 import { SecureStorageService } from '../storage/SecureStorageService';
+import type { ApiResponse } from './apiTypes';
+
+type RefreshTokenPayload = {
+  accessToken: string;
+  refreshToken: string;
+};
 
 const apiClient = axios.create({
   baseURL: AppConfig.apiBaseUrl,
@@ -35,11 +42,16 @@ apiClient.interceptors.response.use(
         if (!refreshToken) throw new Error('No refresh token');
 
         // Call refresh token endpoint
-        const response = await axios.post(`${AppConfig.apiBaseUrl}/auth/refresh-token`, {
+        const response = await axios.post<ApiResponse<RefreshTokenPayload>>(`${AppConfig.apiBaseUrl}${MasterApiReference.Auth.RefreshToken}`, {
           refreshToken,
         });
 
-        const { accessToken, refreshToken: newRefreshToken } = response.data;
+        const refreshData = response.data.data;
+        if (!refreshData) {
+          throw new Error(response.data.message ?? 'Refresh token response did not include token data.');
+        }
+
+        const { accessToken, refreshToken: newRefreshToken } = refreshData;
         
         SecureStorageService.saveAccessToken(accessToken);
         SecureStorageService.saveRefreshToken(newRefreshToken);
