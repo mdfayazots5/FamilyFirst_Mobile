@@ -1,50 +1,76 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { 
   ArrowLeft, 
   Share2, 
   TrendingUp, 
   TrendingDown, 
-  Star, 
   Calendar,
   MessageSquare,
   CheckCircle2,
-  ChevronRight,
-  Download,
   Sparkles,
   Quote,
-  Target,
   RefreshCcw,
   Monitor,
   Cpu,
-  Fingerprint,
   Layers,
-  Activity,
   Command,
-  Smartphone,
   ShieldCheck,
   Send
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../../core/auth/AuthContext';
 import { useReports } from '../providers/ReportsProvider';
-import { ReportsRepository } from '../repositories/ReportsRepository';
+import { ReportsRepository, ReportLookupOption } from '../repositories/ReportsRepository';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFBadge from '../../../shared/components/FFBadge';
 
+const normalizeLookupValue = (value: string) =>
+  value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
+
+const matchesLookup = (value: string, option: ReportLookupOption) => {
+  const normalizedValue = normalizeLookupValue(value);
+  const normalizedCode = normalizeLookupValue(option.code);
+  const normalizedLabel = normalizeLookupValue(option.label);
+
+  return normalizedValue.includes(normalizedCode) || normalizedValue.includes(normalizedLabel);
+};
+
 const WeeklyDigestScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { weeklyDigest, fetchWeeklyDigest, isLoading } = useReports();
   const [remark, setRemark] = useState('');
   const [isSavingRemark, setIsSavingRemark] = useState(false);
+  const [taskTypes, setTaskTypes] = useState<ReportLookupOption[]>([]);
+  const [eventTypes, setEventTypes] = useState<ReportLookupOption[]>([]);
+  const [selectedTaskType, setSelectedTaskType] = useState<string>('All');
+  const [selectedEventType, setSelectedEventType] = useState<string>('All');
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  const loadLookups = async () => {
+    setLookupError(null);
+    try {
+      const [liveTaskTypes, liveEventTypes] = await Promise.all([
+        ReportsRepository.getTaskTypes(),
+        ReportsRepository.getCalendarEventTypes(),
+      ]);
+      setTaskTypes(liveTaskTypes);
+      setEventTypes(liveEventTypes);
+    } catch (error) {
+      console.error('Failed to load report filters', error);
+      setLookupError('Unable to load report focus filters right now.');
+    }
+  };
 
   useEffect(() => {
     const today = new Date();
     const lastSunday = new Date(today.setDate(today.getDate() - today.getDay()));
     fetchWeeklyDigest(lastSunday.toISOString().split('T')[0]);
   }, [fetchWeeklyDigest]);
+
+  useEffect(() => {
+    void loadLookups();
+  }, []);
 
   const handleSaveRemark = async (childId: string) => {
     if (!remark) return;
@@ -79,6 +105,26 @@ const WeeklyDigestScreen: React.FC = () => {
   }
 
   const scoreDiff = weeklyDigest.familyScore - weeklyDigest.previousFamilyScore;
+  const filteredChildSummaries = weeklyDigest.childSummaries
+    .map((child) => ({
+      ...child,
+      highlights:
+        selectedTaskType === 'All'
+          ? child.highlights
+          : child.highlights.filter((highlight) => {
+              const selected = taskTypes.find((option) => option.id === selectedTaskType);
+              return selected ? matchesLookup(highlight, selected) : true;
+            }),
+    }))
+    .filter((child) => selectedTaskType === 'All' || child.highlights.length > 0);
+
+  const filteredUpcomingEvents =
+    selectedEventType === 'All'
+      ? weeklyDigest.upcomingEvents
+      : weeklyDigest.upcomingEvents.filter((event) => {
+          const selected = eventTypes.find((option) => option.id === selectedEventType);
+          return selected ? matchesLookup(event, selected) : true;
+        });
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] pb-48">
@@ -167,9 +213,89 @@ const WeeklyDigestScreen: React.FC = () => {
              <h3 className="text-2xl font-display font-black uppercase tracking-widest text-primary italic leading-none">INTELLIGENCE_HIGHLIGHTS</h3>
              <div className="h-px flex-1 bg-primary/10" />
           </div>
+          <div className="space-y-5 px-4">
+            <div className="space-y-3">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic">TASK_FOCUS_FILTER</p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTaskType('All')}
+                  className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
+                    selectedTaskType === 'All'
+                      ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                      : 'bg-white text-gray-400 border border-black/[0.05]'
+                  }`}
+                >
+                  All Tasks
+                </button>
+                {taskTypes.map((taskType) => (
+                  <button
+                    key={taskType.id}
+                    type="button"
+                    onClick={() => setSelectedTaskType(taskType.id)}
+                    className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
+                      selectedTaskType === taskType.id
+                        ? 'bg-accent text-primary shadow-lg shadow-accent/20'
+                        : 'bg-white text-gray-400 border border-black/[0.05]'
+                    }`}
+                  >
+                    {taskType.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-3">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic">EVENT_FOCUS_FILTER</p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedEventType('All')}
+                  className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
+                    selectedEventType === 'All'
+                      ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                      : 'bg-white text-gray-400 border border-black/[0.05]'
+                  }`}
+                >
+                  All Events
+                </button>
+                {eventTypes.map((eventType) => (
+                  <button
+                    key={eventType.id}
+                    type="button"
+                    onClick={() => setSelectedEventType(eventType.id)}
+                    className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
+                      selectedEventType === eventType.id
+                        ? 'bg-accent text-primary shadow-lg shadow-accent/20'
+                        : 'bg-white text-gray-400 border border-black/[0.05]'
+                    }`}
+                  >
+                    {eventType.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {lookupError && (
+              <div className="flex items-center justify-between gap-4 rounded-[24px] border border-alert/10 bg-alert/5 px-5 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-alert italic">{lookupError}</p>
+                <button
+                  type="button"
+                  onClick={() => void loadLookups()}
+                  className="rounded-full bg-alert px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-white italic"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+          </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            {weeklyDigest.childSummaries.map((child, index) => (
+            {filteredChildSummaries.length === 0 ? (
+              <FFCard className="p-12 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[64px] lg:col-span-2">
+                <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em] italic">
+                  No child highlights match the selected task focus.
+                </p>
+              </FFCard>
+            ) : filteredChildSummaries.map((child, index) => (
               <motion.div
                 key={child.childId}
                 initial={{ opacity: 0, x: index % 2 === 0 ? -30 : 30 }}
@@ -260,7 +386,7 @@ const WeeklyDigestScreen: React.FC = () => {
             </div>
           </FFCard>
           
-          <FFCard className="p-12 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[56px] relative overflow-hidden group/fut">
+            <FFCard className="p-12 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[56px] relative overflow-hidden group/fut">
             <div className="absolute top-0 right-0 p-12 opacity-[0.01] pointer-events-none translate-x-10 translate-y-[-10%] group-hover:scale-110 transition-transform duration-1000">
                <Layers size={140} strokeWidth={1} />
             </div>
@@ -268,7 +394,11 @@ const WeeklyDigestScreen: React.FC = () => {
               <Calendar size={20} /> NEXT_CYCLE_VECTORS
             </h4>
             <div className="space-y-6">
-              {weeklyDigest.upcomingEvents.map((event, i) => (
+              {filteredUpcomingEvents.length === 0 ? (
+                <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.3em] italic">
+                  No upcoming events match the selected event focus.
+                </p>
+              ) : filteredUpcomingEvents.map((event, i) => (
                 <motion.div 
                    key={i} 
                    whileHover={{ x: 10 }}

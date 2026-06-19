@@ -20,6 +20,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const refresh = useCallback(async () => {
     if (!user?.id) return;
+    if (!NotificationRepository.supportsLiveHistory()) {
+      setNotifications([]);
+      return;
+    }
     setIsLoading(true);
     try {
       const data = await NotificationRepository.getNotifications(user.id);
@@ -40,6 +44,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const markRead = async (id: string) => {
     if (!user?.id) return;
+    if (!NotificationRepository.supportsLiveHistory()) return;
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
     try {
       await NotificationRepository.markAsRead(user.id, id);
@@ -50,6 +55,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const markAllRead = async () => {
     if (!user?.id) return;
+    if (!NotificationRepository.supportsLiveHistory()) return;
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     try {
       await NotificationRepository.markAllAsRead(user.id);

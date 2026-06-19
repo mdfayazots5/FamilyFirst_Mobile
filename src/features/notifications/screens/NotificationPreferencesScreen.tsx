@@ -10,7 +10,7 @@ import {
   AlertCircle,
   MessageSquare,
   Trophy,
-  Heart,
+  Calendar,
   ShieldCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -150,12 +150,12 @@ const NotificationPreferencesScreen: React.FC = () => {
               color="bg-success/10 text-success"
             />
             <PreferenceToggle 
-              icon={<Heart size={20} />} 
-              label="Family Appreciations" 
-              desc="When an elder sends love or stickers"
-              isEnabled={prefs.appreciationEnabled}
-              onToggle={() => handleToggle('appreciationEnabled')}
-              color="bg-accent/10 text-accent"
+              icon={<Calendar size={20} />} 
+              label="Calendar Alerts" 
+              desc="Birthdays, reminders, and upcoming family schedules"
+              isEnabled={prefs.calendarEnabled}
+              onToggle={() => handleToggle('calendarEnabled')}
+              color="bg-blue-50 text-blue-500"
             />
           </div>
         </section>
@@ -182,12 +182,31 @@ const NotificationPreferencesScreen: React.FC = () => {
                 <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em] italic leading-none">SILENCE_NON_CRITICAL_TELEMETRY</p>
               </div>
             </div>
+            <div className="flex items-center justify-between p-8 mb-10 bg-gray-50/70 rounded-[32px] border border-black/[0.03] relative z-10">
+              <div>
+                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] italic leading-none mb-2">QUIET_HOURS_SWITCH</p>
+                <h5 className="text-xl font-display font-black text-primary uppercase italic tracking-tighter leading-none">Quiet Hours Enabled</h5>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleToggle('quietHoursEnabled')}
+                className={`w-20 h-10 rounded-full transition-all relative group/toggle ${prefs.quietHoursEnabled ? 'bg-primary shadow-glow shadow-primary/20' : 'bg-gray-100 shadow-inner'}`}
+              >
+                <motion.div
+                  animate={{ x: prefs.quietHoursEnabled ? 44 : 4 }}
+                  className="absolute top-1 w-8 h-8 bg-white rounded-full shadow-2xl flex items-center justify-center"
+                >
+                  <div className={`w-1.5 h-1.5 rounded-full ${prefs.quietHoursEnabled ? 'bg-primary animate-pulse' : 'bg-gray-200'}`} />
+                </motion.div>
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-10 relative z-10">
               <div className="space-y-4">
                 <label className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] ml-4 italic">START_T_SYNC</label>
                 <div className="relative">
                   <input 
                     type="time" 
+                    disabled={!prefs.quietHoursEnabled}
                     className="w-full px-8 h-20 bg-gray-50/50 border-2 border-transparent rounded-[28px] focus:bg-white focus:border-primary/10 transition-all outline-none font-display font-black text-2xl text-primary italic tabular-nums shadow-inner"
                     value={prefs.quietHoursStart}
                     onChange={e => setPrefs({ ...prefs, quietHoursStart: e.target.value })}
@@ -200,6 +219,7 @@ const NotificationPreferencesScreen: React.FC = () => {
                 <div className="relative">
                   <input 
                     type="time" 
+                    disabled={!prefs.quietHoursEnabled}
                     className="w-full px-8 h-20 bg-gray-50/50 border-2 border-transparent rounded-[28px] focus:bg-white focus:border-primary/10 transition-all outline-none font-display font-black text-2xl text-primary italic tabular-nums shadow-inner"
                     value={prefs.quietHoursEnd}
                     onChange={e => setPrefs({ ...prefs, quietHoursEnd: e.target.value })}
@@ -221,6 +241,24 @@ const NotificationPreferencesScreen: React.FC = () => {
             <div className="h-px flex-1 bg-primary/10" />
           </div>
           <FFCard className="p-10 lg:p-14 rounded-[56px] border-none shadow-3xl shadow-black/[0.01] bg-white space-y-12">
+            <div className="flex items-center justify-between p-8 bg-gray-50/70 rounded-[32px] border border-black/[0.03]">
+              <div>
+                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] italic leading-none mb-2">DIGEST_DELIVERY_SWITCH</p>
+                <h5 className="text-xl font-display font-black text-primary uppercase italic tracking-tighter leading-none">Weekly Digest Enabled</h5>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleToggle('weeklyDigestEnabled')}
+                className={`w-20 h-10 rounded-full transition-all relative group/toggle ${prefs.weeklyDigestEnabled ? 'bg-primary shadow-glow shadow-primary/20' : 'bg-gray-100 shadow-inner'}`}
+              >
+                <motion.div
+                  animate={{ x: prefs.weeklyDigestEnabled ? 44 : 4 }}
+                  className="absolute top-1 w-8 h-8 bg-white rounded-full shadow-2xl flex items-center justify-center"
+                >
+                  <div className={`w-1.5 h-1.5 rounded-full ${prefs.weeklyDigestEnabled ? 'bg-primary animate-pulse' : 'bg-gray-200'}`} />
+                </motion.div>
+              </button>
+            </div>
             <div className="flex items-center justify-between group">
               <div className="flex items-center gap-8">
                 <div className="w-16 h-16 bg-amber-50 rounded-[24px] flex items-center justify-center text-amber-500 shadow-inner group-hover:rotate-12 transition-transform duration-500">

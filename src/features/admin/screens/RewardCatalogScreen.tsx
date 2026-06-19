@@ -18,20 +18,25 @@ import FFBadge from '../../../shared/components/FFBadge';
 const RewardCatalogScreen: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rewards, setRewards] = useState<Awaited<ReturnType<typeof AdminRepository.getRewardCatalog>>>([]);
 
   useEffect(() => {
-    // Simulate loading
-    setTimeout(() => setIsLoading(false), 500);
-  }, []);
+    const loadCatalog = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        setRewards(await AdminRepository.getRewardCatalog());
+      } catch (loadError) {
+        console.error('Failed to load admin reward catalog', loadError);
+        setError('Reward catalog sync failed. Verify admin reward APIs and retry.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const demoRewards = [
-    { id: 'r1', title: 'Extra Screen Time', cost: 50, category: 'Privilege', icon: '📺' },
-    { id: 'r2', title: 'Pizza Night', cost: 200, category: 'Food', icon: '🍕' },
-    { id: 'r3', title: 'New Toy', cost: 500, category: 'Physical', icon: '🧸' },
-    { id: 'r4', title: 'Bedtime Extension', cost: 30, category: 'Privilege', icon: '⏰' },
-    { id: 'r5', title: 'Ice Cream Treat', cost: 40, category: 'Food', icon: '🍦' },
-    { id: 'r6', title: 'Zoo Trip', cost: 1000, category: 'Experience', icon: '🦁' },
-  ];
+    loadCatalog();
+  }, []);
 
   return (
     <div className="min-h-screen bg-bg-cream pb-32">
@@ -61,12 +66,19 @@ const RewardCatalogScreen: React.FC = () => {
       </header>
 
       <main className="px-6 space-y-8">
+      {error ? (
+        <div className="bg-alert/5 border border-alert/20 p-4 rounded-2xl text-alert font-medium">
+          {error}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {isLoading ? (
           <div className="col-span-full text-center py-12 text-gray-400">Loading rewards...</div>
+        ) : rewards.length === 0 ? (
+          <div className="col-span-full text-center py-12 text-gray-400">No reward catalog items found.</div>
         ) : (
-          demoRewards.map(reward => (
+          rewards.map(reward => (
             <FFCard key={reward.id} className="p-6 flex flex-col group">
               <div className="flex justify-between items-start mb-4">
                 <div className="w-14 h-14 bg-white border border-black/5 rounded-2xl flex items-center justify-center text-3xl shadow-sm">
@@ -83,6 +95,9 @@ const RewardCatalogScreen: React.FC = () => {
               </div>
 
               <h3 className="text-lg font-bold text-primary mb-1">{reward.title}</h3>
+              {reward.description ? (
+                <p className="text-sm text-gray-400 mb-3">{reward.description}</p>
+              ) : null}
               <div className="flex items-center gap-2 mb-4">
                 <FFBadge variant="outline" size="sm">{reward.category}</FFBadge>
               </div>

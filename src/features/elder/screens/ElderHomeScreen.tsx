@@ -6,17 +6,18 @@ import {
   Settings, 
   Phone, 
   ChevronRight,
-  MessageCircle,
   Star,
   Users
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { ElderRepository, GrandchildStatus } from '../repositories/ElderRepository';
-import { CalendarRepository, CalendarEvent } from '../../calendar/repositories/CalendarRepository';
+import { ElderRepository, GrandchildStatus, ElderEventTypeOption } from '../repositories/ElderRepository';
+import { CalendarRepository, CalendarEvent, EventType } from '../../calendar/repositories/CalendarRepository';
 import FFCard from '../../../shared/components/FFCard';
 import FFBadge from '../../../shared/components/FFBadge';
 import FFAvatar from '../../../shared/components/FFAvatar';
+
+type ElderTimelineFilter = 'All' | EventType;
 
 const ElderHomeScreen: React.FC = () => {
   const { user } = useAuth();
@@ -24,7 +25,10 @@ const ElderHomeScreen: React.FC = () => {
 
   const [grandchildren, setGrandchildren] = useState<GrandchildStatus[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [eventTypes, setEventTypes] = useState<ElderEventTypeOption[]>([]);
+  const [selectedEventType, setSelectedEventType] = useState<ElderTimelineFilter>('All');
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Elder font size setting (1.0, 1.3, 1.6)
   const fontSizeScale = localStorage.getItem('elderFontSize') || '1.3';
@@ -33,15 +37,19 @@ const ElderHomeScreen: React.FC = () => {
   const fetchData = useCallback(async () => {
     if (!user?.familyId) return;
     setIsLoading(true);
+    setErrorMessage(null);
     try {
-      const [grandList, eventList] = await Promise.all([
+      const [grandList, eventList, liveEventTypes] = await Promise.all([
         ElderRepository.getGrandchildren(user.familyId),
-        CalendarRepository.getUpcomingEvents(user.familyId, 30)
+        CalendarRepository.getUpcomingEvents(user.familyId, 30),
+        ElderRepository.getCalendarEventTypes(),
       ]);
       setGrandchildren(grandList);
       setEvents(eventList.filter(e => e.visibilityScope.includes('Elder') || e.type === 'Birthday'));
+      setEventTypes(liveEventTypes);
     } catch (error) {
       console.error('Failed to fetch elder home data', error);
+      setErrorMessage('Unable to load elder updates right now.');
     } finally {
       setIsLoading(false);
     }
@@ -52,6 +60,9 @@ const ElderHomeScreen: React.FC = () => {
   }, [fetchData]);
 
   const familyScore = 78;
+  const filteredEvents = events.filter(
+    (event) => selectedEventType === 'All' || event.type === selectedEventType,
+  );
 
   return (
     <div className="min-h-screen bg-bg-cream pb-32" style={{ fontSize: `${16 * scale}px` }}>
@@ -192,29 +203,95 @@ const ElderHomeScreen: React.FC = () => {
               Chronicle Archives <ChevronRight size={20} />
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {events.slice(0, 3).map(event => (
-              <FFCard key={event.id} className="p-8 flex items-center gap-8 hover:bg-white transition-colors cursor-pointer border-black/[0.02] rounded-[48px]">
-                <div className="w-20 h-20 bg-primary/5 rounded-[24px] border border-primary/10 flex flex-col items-center justify-center text-primary shrink-0 shadow-inner group-hover:bg-primary group-hover:text-white transition-all duration-500">
-                  <span className="font-bold uppercase tracking-widest opacity-60" style={{ fontSize: `${11 * scale}px` }}>
-                    {new Date(event.startDateTime).toLocaleDateString('en-US', { month: 'short' })}
-                  </span>
-                  <span className="font-display font-bold leading-none mt-1" style={{ fontSize: `${32 * scale}px` }}>
-                    {new Date(event.startDateTime).getDate()}
-                  </span>
-                </div>
-                <div>
-                  <h4 className="font-display font-bold text-primary group-hover:text-accent transition-colors" style={{ fontSize: `${22 * scale}px` }}>{event.title}</h4>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Calendar size={14} className="text-gray-300" />
-                    <p className="font-bold text-gray-400 uppercase tracking-widest" style={{ fontSize: `${12 * scale}px` }}>
-                      {event.isAllDay ? 'All Day Protocol' : new Date(event.startDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+          {eventTypes.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedEventType('All')}
+                className={`rounded-full px-5 py-3 font-bold uppercase tracking-[0.2em] transition-all ${
+                  selectedEventType === 'All'
+                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                    : 'bg-white text-gray-500 border border-black/[0.05]'
+                }`}
+                style={{ fontSize: `${11 * scale}px` }}
+              >
+                All Events
+              </button>
+              {eventTypes.map((eventType) => (
+                <button
+                  key={eventType.id}
+                  type="button"
+                  onClick={() => setSelectedEventType(eventType.code)}
+                  className={`rounded-full px-5 py-3 font-bold uppercase tracking-[0.2em] transition-all ${
+                    selectedEventType === eventType.code
+                      ? 'bg-accent text-primary shadow-lg shadow-accent/20'
+                      : 'bg-white text-gray-500 border border-black/[0.05]'
+                  }`}
+                  style={{ fontSize: `${11 * scale}px` }}
+                >
+                  {eventType.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {isLoading ? (
+            <FFCard className="p-8 rounded-[48px] border-black/[0.02]">
+              <p className="font-bold text-gray-400 uppercase tracking-[0.2em]" style={{ fontSize: `${12 * scale}px` }}>
+                Loading elder timeline...
+              </p>
+            </FFCard>
+          ) : errorMessage ? (
+            <FFCard className="p-8 rounded-[48px] border border-alert/10 bg-alert/5">
+              <div className="space-y-4">
+                <p className="font-bold text-alert uppercase tracking-[0.2em]" style={{ fontSize: `${12 * scale}px` }}>
+                  {errorMessage}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void fetchData()}
+                  className="rounded-full bg-alert px-5 py-3 font-bold uppercase tracking-[0.2em] text-white"
+                  style={{ fontSize: `${11 * scale}px` }}
+                >
+                  Retry Timeline
+                </button>
+              </div>
+            </FFCard>
+          ) : filteredEvents.length === 0 ? (
+            <FFCard className="p-8 rounded-[48px] border-black/[0.02]">
+              <p className="font-bold text-gray-400 uppercase tracking-[0.2em]" style={{ fontSize: `${12 * scale}px` }}>
+                No family events match this timeline filter yet.
+              </p>
+            </FFCard>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredEvents.slice(0, 3).map(event => (
+                <FFCard key={event.id} className="p-8 flex items-center gap-8 hover:bg-white transition-colors cursor-pointer border-black/[0.02] rounded-[48px]">
+                  <div className="w-20 h-20 bg-primary/5 rounded-[24px] border border-primary/10 flex flex-col items-center justify-center text-primary shrink-0 shadow-inner group-hover:bg-primary group-hover:text-white transition-all duration-500">
+                    <span className="font-bold uppercase tracking-widest opacity-60" style={{ fontSize: `${11 * scale}px` }}>
+                      {new Date(event.startDateTime).toLocaleDateString('en-US', { month: 'short' })}
+                    </span>
+                    <span className="font-display font-bold leading-none mt-1" style={{ fontSize: `${32 * scale}px` }}>
+                      {new Date(event.startDateTime).getDate()}
+                    </span>
                   </div>
-                </div>
-              </FFCard>
-            ))}
-          </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h4 className="font-display font-bold text-primary group-hover:text-accent transition-colors" style={{ fontSize: `${22 * scale}px` }}>{event.title}</h4>
+                      <FFBadge variant="accent" className="border-none">
+                        {event.type}
+                      </FFBadge>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Calendar size={14} className="text-gray-300" />
+                      <p className="font-bold text-gray-400 uppercase tracking-widest" style={{ fontSize: `${12 * scale}px` }}>
+                        {event.isAllDay ? 'All Day Protocol' : new Date(event.startDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                </FFCard>
+              ))}
+            </div>
+          )}
         </section>
       </main>
 

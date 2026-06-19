@@ -42,15 +42,18 @@ const FeedbackInboxScreen: React.FC = () => {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [filter, setFilter] = useState<FeedbackType | 'All' | 'Unread'>('All');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchFeedback = useCallback(async () => {
     if (!user?.familyId) return;
     setIsLoading(true);
+    setError(null);
     try {
       const data = await FeedbackRepository.getFeedbackInbox(user.familyId);
       setFeedbacks(data);
     } catch (error) {
       console.error('Failed to fetch feedback', error);
+      setError('Feedback inbox sync failed. Verify the family feedback API and retry.');
     } finally {
       setTimeout(() => setIsLoading(false), 800);
     }
@@ -139,6 +142,12 @@ const FeedbackInboxScreen: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto p-8 lg:p-14 space-y-24 pt-16">
+        {error ? (
+          <div className="bg-alert/5 border border-alert/20 p-6 rounded-[28px] text-alert font-medium">
+            {error}
+          </div>
+        ) : null}
+
         {/* Signal Filters Feed */}
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-12 px-4">
             <div className="space-y-4">
@@ -154,7 +163,7 @@ const FeedbackInboxScreen: React.FC = () => {
             </div>
             
             <div className="flex gap-4 p-3 bg-white border border-black/[0.03] rounded-[36px] shadow-3xl shadow-black/[0.01] overflow-x-auto no-scrollbar scroll-smooth">
-              {['All', 'Unread', 'Appreciation', 'Complaint', 'Observation', 'WeeklySummary'].map((f) => (
+              {['All', 'Unread', 'Appreciation', 'Complaint', 'Observation', 'Homework', 'Urgent', 'WeeklySummary'].map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f as any)}

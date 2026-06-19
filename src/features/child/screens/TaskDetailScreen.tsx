@@ -77,7 +77,7 @@ const TaskDetailScreen: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (!task || !completionId) return;
+    if (!task || !completionId || !user?.familyId) return;
     
     setIsSubmitting(true);
     try {
@@ -85,12 +85,14 @@ const TaskDetailScreen: React.FC = () => {
       
       if (capturedImage && fileInputRef.current?.files?.[0]) {
         photoUrl = await S3UploadService.uploadImage(
+          user.familyId,
+          task.taskId,
           fileInputRef.current.files[0],
           (progress) => setUploadProgress(progress)
         );
       }
 
-      await TaskCompletionRepository.submitCompletion(task.taskId, {
+      await TaskCompletionRepository.submitCompletion(user.familyId, task.taskId, {
         scheduledDate: new Date().toISOString().split('T')[0],
         photoUrl
       });

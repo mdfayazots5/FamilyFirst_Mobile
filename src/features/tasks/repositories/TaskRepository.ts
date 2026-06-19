@@ -1,7 +1,8 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
-import type { ApiResponse } from '../../../core/network/apiTypes';
+import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import { getMasters } from '../../../core/repositories/MasterDataRepository';
 
 export type TimeBlock = 'Morning' | 'School' | 'Evening' | 'Night';
 export type PillarTag = 'Study' | 'Cleanliness' | 'Discipline' | 'ScreenControl' | 'Responsibility';
@@ -16,9 +17,11 @@ export interface TaskItem {
   isPhotoRequired: boolean;
   pillarTag: PillarTag;
   isRecurring: boolean;
-  recurringDays: number[]; // 0-6 (Sun-Sat)
+  recurringDays: number[]; // 1-7 (Mon-Sun)
   icon?: string;
   isCompleted?: boolean;
+  instructions?: string;
+  activeFromDate?: string;
 }
 
 export interface TaskTemplate {
@@ -31,8 +34,158 @@ export interface TaskTemplate {
   icon: string;
 }
 
+export interface TaskLookupOption {
+  id: string;
+  label: string;
+  code: string;
+}
+
+interface TaskItemDto {
+  TaskId?: string;
+  taskId?: string;
+  ChildProfileId?: string | null;
+  childProfileId?: string | null;
+  TaskName?: string;
+  taskName?: string;
+  Instructions?: string | null;
+  instructions?: string | null;
+  IconCode?: string | null;
+  iconCode?: string | null;
+  TimeBlock?: number | string;
+  timeBlock?: number | string;
+  DurationMinutes?: number;
+  durationMinutes?: number;
+  CoinValue?: number;
+  coinValue?: number;
+  IsPhotoRequired?: boolean;
+  isPhotoRequired?: boolean;
+  PillarTag?: string | null;
+  pillarTag?: string | null;
+  IsRecurring?: boolean;
+  isRecurring?: boolean;
+  RecurringDays?: number[];
+  recurringDays?: number[];
+  ActiveFromDate?: string;
+  activeFromDate?: string;
+}
+
+interface TaskRequestDto {
+  TaskName: string;
+  ChildProfileId: string | null;
+  Instructions: string | null;
+  IconCode: string | null;
+  TimeBlock: number;
+  DurationMinutes: number;
+  CoinValue: number;
+  IsPhotoRequired: boolean;
+  PillarTag: string | null;
+  IsRecurring: boolean;
+  RecurringDays: number[] | null;
+  ActiveFromDate: string;
+}
+
+const TASK_TIME_BLOCK_TO_ENUM: Record<TimeBlock, number> = {
+  Morning: 1,
+  School: 2,
+  Evening: 3,
+  Night: 4,
+};
+
+const mapTimeBlock = (value: number | string | undefined): TimeBlock => {
+  if (typeof value === 'number') {
+    switch (value) {
+      case 1:
+        return 'Morning';
+      case 2:
+        return 'School';
+      case 3:
+        return 'Evening';
+      case 4:
+        return 'Night';
+      default:
+        return 'Morning';
+    }
+  }
+
+  switch ((value ?? '').toString().toLowerCase()) {
+    case 'school':
+      return 'School';
+    case 'evening':
+      return 'Evening';
+    case 'night':
+      return 'Night';
+    default:
+      return 'Morning';
+  }
+};
+
+const mapPillarTag = (value: string | null | undefined): PillarTag => {
+  switch ((value ?? '').toString().toLowerCase()) {
+    case 'study':
+      return 'Study';
+    case 'cleanliness':
+      return 'Cleanliness';
+    case 'screencontrol':
+      return 'ScreenControl';
+    case 'responsibility':
+      return 'Responsibility';
+    default:
+      return 'Discipline';
+  }
+};
+
+const normalizeRecurringDays = (days: number[] | undefined, isRecurring: boolean): number[] =>
+  isRecurring ? (days ?? []).filter((day) => day >= 1 && day <= 7) : [];
+
+const mapTaskDto = (task: TaskItemDto): TaskItem => {
+  const isRecurring = task.IsRecurring ?? task.isRecurring ?? false;
+
+  return {
+    id: task.TaskId ?? task.taskId ?? '',
+    childProfileId: task.ChildProfileId ?? task.childProfileId ?? '',
+    name: task.TaskName ?? task.taskName ?? '',
+    instructions: task.Instructions ?? task.instructions ?? undefined,
+    icon: task.IconCode ?? task.iconCode ?? undefined,
+    timeBlock: mapTimeBlock(task.TimeBlock ?? task.timeBlock),
+    duration: task.DurationMinutes ?? task.durationMinutes ?? 15,
+    coinValue: task.CoinValue ?? task.coinValue ?? 0,
+    isPhotoRequired: task.IsPhotoRequired ?? task.isPhotoRequired ?? false,
+    pillarTag: mapPillarTag(task.PillarTag ?? task.pillarTag),
+    isRecurring,
+    recurringDays: normalizeRecurringDays(task.RecurringDays ?? task.recurringDays, isRecurring),
+    activeFromDate: task.ActiveFromDate ?? task.activeFromDate ?? undefined,
+  };
+};
+
+const toTaskRequestDto = (data: Partial<TaskItem>): TaskRequestDto => {
+  const isRecurring = data.isRecurring ?? true;
+  const recurringDays = normalizeRecurringDays(data.recurringDays, isRecurring);
+
+  return {
+    TaskName: data.name?.trim() ?? '',
+    ChildProfileId: data.childProfileId?.trim() ? data.childProfileId : null,
+    Instructions: data.instructions?.trim() ? data.instructions.trim() : null,
+    IconCode: data.icon?.trim() ? data.icon.trim() : null,
+    TimeBlock: TASK_TIME_BLOCK_TO_ENUM[data.timeBlock ?? 'Morning'],
+    DurationMinutes: data.duration ?? 15,
+    CoinValue: data.coinValue ?? 5,
+    IsPhotoRequired: data.isPhotoRequired ?? false,
+    PillarTag: data.pillarTag ?? null,
+    IsRecurring: isRecurring,
+    RecurringDays: isRecurring ? recurringDays : null,
+    ActiveFromDate: data.activeFromDate ?? new Date().toISOString().split('T')[0],
+  };
+};
+
+const mapLookupItems = (items: MasterDataItem[]): TaskLookupOption[] =>
+  items.map((item) => ({
+    id: item.id,
+    label: item.name,
+    code: item.code,
+  }));
+
 export const TaskRepository = {
-  getTasks: async (familyId: string, childId: string): Promise<TaskItem[]> => {
+  getTasks: async (familyId: string, childId: string, date?: string): Promise<TaskItem[]> => {
     if (AppConfig.isDemo) {
       return [
         {
@@ -81,37 +234,45 @@ export const TaskRepository = {
           isPhotoRequired: false,
           pillarTag: 'Discipline',
           isRecurring: true,
-          recurringDays: [1, 2, 3, 4, 5, 6, 0]
+          recurringDays: [1, 2, 3, 4, 5, 6, 7]
         }
       ];
     }
-    const response = await apiClient.get<ApiResponse<TaskItem[]>>(
+    const params: Record<string, string> = {
+      date: date ?? new Date().toISOString().split('T')[0],
+    };
+
+    if (childId.trim()) {
+      params.childId = childId;
+    }
+
+    const response = await apiClient.get<ApiResponse<TaskItemDto[]>>(
       resolvePath(MasterApiReference.Tasks.FamilyTasks, { familyId }),
-      { params: { childId } },
+      { params },
     );
-    return response.data.data ?? [];
+    return (response.data.data ?? []).map(mapTaskDto);
   },
 
   createTask: async (familyId: string, data: Partial<TaskItem>): Promise<TaskItem> => {
     if (AppConfig.isDemo) {
       return { id: Math.random().toString(36).substr(2, 9), ...data } as TaskItem;
     }
-    const response = await apiClient.post<ApiResponse<TaskItem>>(
+    const response = await apiClient.post<ApiResponse<TaskItemDto>>(
       resolvePath(MasterApiReference.Tasks.FamilyTasks, { familyId }),
-      data,
+      toTaskRequestDto(data),
     );
-    return response.data.data as TaskItem;
+    return mapTaskDto(response.data.data as TaskItemDto);
   },
 
   updateTask: async (familyId: string, taskId: string, data: Partial<TaskItem>): Promise<TaskItem> => {
     if (AppConfig.isDemo) {
       return { id: taskId, ...data } as TaskItem;
     }
-    const response = await apiClient.put<ApiResponse<TaskItem>>(
+    const response = await apiClient.put<ApiResponse<TaskItemDto>>(
       resolvePath(MasterApiReference.Tasks.FamilyTask, { familyId, taskId }),
-      data,
+      toTaskRequestDto(data),
     );
-    return response.data.data as TaskItem;
+    return mapTaskDto(response.data.data as TaskItemDto);
   },
 
   deleteTask: async (familyId: string, taskId: string): Promise<boolean> => {
@@ -151,5 +312,13 @@ export const TaskRepository = {
       { childId },
     );
     return response.data.data ?? false;
-  }
+  },
+
+  getTaskTypes: async (): Promise<TaskLookupOption[]> => {
+    return mapLookupItems(await getMasters('TaskType'));
+  },
+
+  getTaskStatuses: async (): Promise<TaskLookupOption[]> => {
+    return mapLookupItems(await getMasters('TaskStatus'));
+  },
 };

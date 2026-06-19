@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, 
-  Filter, 
-  ChevronRight, 
   ArrowLeft, 
   MoreVertical,
   Calendar,
@@ -22,7 +20,7 @@ import {
   Cpu
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { AdminRepository, AdminFamily } from '../repositories/AdminRepository';
+import { AdminRepository, AdminFamily, AdminLookupOption } from '../repositories/AdminRepository';
 import FFCard from '../../../shared/components/FFCard';
 import FFBadge from '../../../shared/components/FFBadge';
 import FFButton from '../../../shared/components/FFButton';
@@ -32,13 +30,19 @@ const FamilyManagementScreen: React.FC = () => {
   const [families, setFamilies] = useState<AdminFamily[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [filterPlan, setFilterPlan] = useState<string>('All');
+  const [planOptions, setPlanOptions] = useState<AdminLookupOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchFamilies = async () => {
       try {
-        const data = await AdminRepository.getFamilies();
-        setFamilies(data);
+        const [familyData, livePlanOptions] = await Promise.all([
+          AdminRepository.getFamilies(),
+          AdminRepository.getPlanOptions(),
+        ]);
+        setFamilies(familyData);
+        setPlanOptions(livePlanOptions);
       } catch (error) {
         console.error('Failed to fetch families', error);
       } finally {
@@ -51,7 +55,9 @@ const FamilyManagementScreen: React.FC = () => {
   const filteredFamilies = families.filter(f => {
     const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filterStatus === 'All' || f.status === filterStatus;
-    return matchesSearch && matchesFilter;
+    const normalizedPlan = f.plan.replace(/[_\s-]/g, '').toLowerCase();
+    const matchesPlan = filterPlan === 'All' || normalizedPlan === filterPlan.toLowerCase();
+    return matchesSearch && matchesFilter && matchesPlan;
   });
 
   const getStatusVariant = (status: string): any => {
@@ -103,6 +109,20 @@ const FamilyManagementScreen: React.FC = () => {
                     {s}
                   </button>
                 ))}
+            </div>
+            <div className="relative">
+              <select
+                value={filterPlan}
+                onChange={(e) => setFilterPlan(e.target.value)}
+                className="h-16 px-6 pr-10 bg-white rounded-[24px] border border-black/5 text-[10px] font-black uppercase tracking-[0.3em] text-primary shadow-sm appearance-none"
+              >
+                <option value="All">ALL PLANS</option>
+                {planOptions.map((plan) => (
+                  <option key={plan.id} value={plan.code}>
+                    {plan.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <button 
               onClick={() => navigate(-1)}

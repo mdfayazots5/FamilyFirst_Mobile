@@ -1,7 +1,8 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
-import type { ApiResponse } from '../../../core/network/apiTypes';
+import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import { getMasters } from '../../../core/repositories/MasterDataRepository';
 
 export interface Reward {
   id: string;
@@ -33,6 +34,101 @@ export interface CoinTransaction {
   date: string;
 }
 
+export interface RewardLookupOption {
+  id: string;
+  label: string;
+  code: string;
+}
+
+interface RewardDto {
+  RewardId?: string;
+  rewardId?: string;
+  RewardName?: string;
+  rewardName?: string;
+  Category?: string;
+  category?: string;
+  CoinCost?: number;
+  coinCost?: number;
+  IsEnabled?: boolean;
+  isEnabled?: boolean;
+  IconCode?: string;
+  iconCode?: string;
+  Description?: string | null;
+  description?: string | null;
+}
+
+interface RedemptionDto {
+  RedemptionId?: string;
+  redemptionId?: string;
+  RewardId?: string;
+  rewardId?: string;
+  RewardName?: string;
+  rewardName?: string;
+  ChildProfileId?: string;
+  childProfileId?: string;
+  ChildName?: string;
+  childName?: string;
+  Status?: number | string;
+  status?: number | string;
+  CoinsSpent?: number;
+  coinsSpent?: number;
+  RequestedAt?: string;
+  requestedAt?: string;
+  ParentNote?: string | null;
+  parentNote?: string | null;
+}
+
+const mapRewardDto = (reward: RewardDto): Reward => ({
+  id: reward.RewardId ?? reward.rewardId ?? '',
+  name: reward.RewardName ?? reward.rewardName ?? '',
+  category: reward.Category ?? reward.category ?? '',
+  coinCost: reward.CoinCost ?? reward.coinCost ?? 0,
+  isEnabled: reward.IsEnabled ?? reward.isEnabled ?? false,
+  icon: reward.IconCode ?? reward.iconCode ?? '🎁',
+  description: reward.Description ?? reward.description ?? undefined,
+});
+
+const mapRedemptionStatus = (status: number | string | undefined): Redemption['status'] => {
+  if (typeof status === 'number') {
+    switch (status) {
+      case 2:
+        return 'Approved';
+      case 3:
+        return 'Rejected';
+      default:
+        return 'Pending';
+    }
+  }
+
+  switch ((status ?? '').toString().toLowerCase()) {
+    case 'approved':
+      return 'Approved';
+    case 'rejected':
+      return 'Rejected';
+    default:
+      return 'Pending';
+  }
+};
+
+const mapRedemptionDto = (redemption: RedemptionDto): Redemption => ({
+  id: redemption.RedemptionId ?? redemption.redemptionId ?? '',
+  rewardId: redemption.RewardId ?? redemption.rewardId ?? '',
+  rewardName: redemption.RewardName ?? redemption.rewardName ?? '',
+  childProfileId: redemption.ChildProfileId ?? redemption.childProfileId ?? '',
+  childName: redemption.ChildName ?? redemption.childName ?? '',
+  status: mapRedemptionStatus(redemption.Status ?? redemption.status),
+  coinCost: redemption.CoinsSpent ?? redemption.coinsSpent ?? 0,
+  requestedAt: redemption.RequestedAt ?? redemption.requestedAt ?? '',
+  parentNote: redemption.ParentNote ?? redemption.parentNote ?? undefined,
+});
+
+const mapLookupItems = (items: MasterDataItem[]): RewardLookupOption[] =>
+  items.map((item) => ({
+    id: item.id,
+    label: item.name,
+    code: item.code,
+  }));
+
 export const RewardRepository = {
   getRewards: async (familyId: string, enabledOnly = true): Promise<Reward[]> => {
     if (AppConfig.isDemo) {
@@ -44,11 +140,11 @@ export const RewardRepository = {
         { id: 'r5', name: '₹50 Pocket Money', category: 'Money', coinCost: 300, isEnabled: true, icon: '💰' },
       ];
     }
-    const response = await apiClient.get<ApiResponse<Reward[]>>(
+    const response = await apiClient.get<ApiResponse<RewardDto[]>>(
       resolvePath(MasterApiReference.Rewards.FamilyRewards, { familyId }),
       { params: { enabled: enabledOnly } },
     );
-    return response.data.data ?? [];
+    return (response.data.data ?? []).map(mapRewardDto);
   },
 
   getCoinHistory: async (childId: string): Promise<CoinTransaction[]> => {
@@ -66,7 +162,7 @@ export const RewardRepository = {
     return response.data.data ?? [];
   },
 
-  redeemReward: async (rewardId: string, childProfileId: string): Promise<Redemption> => {
+  redeemReward: async (familyId: string, rewardId: string, childProfileId: string): Promise<Redemption> => {
     if (AppConfig.isDemo) {
       return {
         id: `red_${Math.random().toString(36).substr(2, 9)}`,
@@ -79,11 +175,11 @@ export const RewardRepository = {
         requestedAt: new Date().toISOString()
       };
     }
-    const response = await apiClient.post<ApiResponse<Redemption>>(
-      resolvePath(MasterApiReference.Rewards.Redeem, { rewardId }),
-      { childProfileId },
+    const response = await apiClient.post<ApiResponse<RedemptionDto>>(
+      resolvePath(MasterApiReference.Rewards.Redeem, { familyId, rewardId }),
+      { ChildProfileId: childProfileId },
     );
-    return response.data.data as Redemption;
+    return mapRedemptionDto(response.data.data as RedemptionDto);
   },
 
   getPendingRedemptions: async (familyId: string): Promise<Redemption[]> => {
@@ -92,39 +188,77 @@ export const RewardRepository = {
         { id: 'red_1', rewardId: 'r2', rewardName: 'Movie Night', childProfileId: 'mem_2', childName: 'Arjun', status: 'Pending', coinCost: 200, requestedAt: new Date().toISOString() }
       ];
     }
-    const response = await apiClient.get<ApiResponse<Redemption[]>>(
+    const response = await apiClient.get<ApiResponse<RedemptionDto[]>>(
       resolvePath(MasterApiReference.Rewards.Redemptions, { familyId }),
       { params: { status: 'Pending' } },
     );
-    return response.data.data ?? [];
+    return (response.data.data ?? []).map(mapRedemptionDto);
   },
 
-  reviewRedemption: async (redemptionId: string, status: 'Approved' | 'Rejected', parentNote?: string): Promise<Redemption> => {
+  reviewRedemption: async (familyId: string, redemptionId: string, status: 'Approved' | 'Rejected', parentNote?: string): Promise<Redemption> => {
     if (AppConfig.isDemo) {
       return { id: redemptionId, status, parentNote } as Redemption;
     }
-    const response = await apiClient.put<ApiResponse<Redemption>>(
-      resolvePath(MasterApiReference.Rewards.Redemption, { redemptionId }),
-      { status, parentNote },
+    const response = await apiClient.put<ApiResponse<RedemptionDto>>(
+      resolvePath(MasterApiReference.Rewards.Redemption, { familyId, redemptionId }),
+      { Status: status === 'Approved' ? 2 : 3, ParentNote: parentNote },
     );
-    return response.data.data as Redemption;
+    return mapRedemptionDto(response.data.data as RedemptionDto);
   },
 
   createReward: async (familyId: string, data: Partial<Reward>): Promise<Reward> => {
     if (AppConfig.isDemo) return { id: 'r_new', ...data } as Reward;
-    const response = await apiClient.post<ApiResponse<Reward>>(
+    const response = await apiClient.post<ApiResponse<RewardDto>>(
       resolvePath(MasterApiReference.Rewards.FamilyRewards, { familyId }),
-      data,
+      {
+        RewardName: data.name,
+        Description: data.description ?? null,
+        IconCode: data.icon ?? null,
+        Category: data.category,
+        CoinCost: data.coinCost,
+      },
     );
-    return response.data.data as Reward;
+    return mapRewardDto(response.data.data as RewardDto);
   },
 
   updateReward: async (familyId: string, rewardId: string, data: Partial<Reward>): Promise<Reward> => {
     if (AppConfig.isDemo) return { id: rewardId, ...data } as Reward;
-    const response = await apiClient.put<ApiResponse<Reward>>(
+    const response = await apiClient.put<ApiResponse<RewardDto>>(
       resolvePath(MasterApiReference.Rewards.FamilyReward, { familyId, rewardId }),
-      data,
+      {
+        RewardName: data.name,
+        Description: data.description ?? null,
+        IconCode: data.icon ?? null,
+        Category: data.category,
+        CoinCost: data.coinCost,
+        IsEnabled: data.isEnabled,
+      },
     );
-    return response.data.data as Reward;
-  }
+    return mapRewardDto(response.data.data as RewardDto);
+  },
+
+  getRewardTypes: async (): Promise<RewardLookupOption[]> => {
+    if (AppConfig.isDemo) {
+      return [
+        { id: 'reward-screen-time', label: 'Screen Time', code: 'ScreenTime' },
+        { id: 'reward-food-treat', label: 'Food Treat', code: 'FoodTreat' },
+        { id: 'reward-outing', label: 'Outing', code: 'Outing' },
+        { id: 'reward-purchase', label: 'Purchase', code: 'Purchase' },
+        { id: 'reward-family-activity', label: 'Family Activity', code: 'FamilyActivity' },
+      ];
+    }
+
+    return mapLookupItems(await getMasters('RewardType'));
+  },
+
+  getCoinTransactionTypes: async (): Promise<RewardLookupOption[]> => {
+    if (AppConfig.isDemo) {
+      return [
+        { id: 'coin-earned', label: 'Earned', code: 'Earned' },
+        { id: 'coin-spent', label: 'Spent', code: 'Spent' },
+      ];
+    }
+
+    return mapLookupItems(await getMasters('CoinTransactionType'));
+  },
 };

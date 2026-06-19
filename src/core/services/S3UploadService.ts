@@ -1,9 +1,14 @@
 import { TaskCompletionRepository } from '../../features/child/repositories/TaskCompletionRepository';
 
 export const S3UploadService = {
-  uploadImage: async (file: File, onProgress?: (progress: number) => void): Promise<string> => {
+  uploadImage: async (
+    familyId: string,
+    taskId: string,
+    file: File,
+    onProgress?: (progress: number) => void,
+  ): Promise<string> => {
     // 1. Get presigned URL
-    const { presignedUrl, s3Key } = await TaskCompletionRepository.getUploadUrl(file.name);
+    const { presignedUrl, s3Key } = await TaskCompletionRepository.getUploadUrl(familyId, taskId);
 
     // 2. Simulate upload progress
     return new Promise((resolve, reject) => {

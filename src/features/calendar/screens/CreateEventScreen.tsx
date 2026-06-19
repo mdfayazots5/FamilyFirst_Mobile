@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { CalendarRepository, CalendarEvent, EventType } from '../repositories/CalendarRepository';
+import { CalendarRepository, CalendarEvent, EventTypeOption } from '../repositories/CalendarRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFBadge from '../../../shared/components/FFBadge';
@@ -24,6 +24,8 @@ const CreateEventScreen: React.FC = () => {
   const { user } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [eventTypes, setEventTypes] = useState<EventTypeOption[]>([]);
   const [formData, setFormData] = useState<Partial<CalendarEvent>>({
     title: '',
     type: 'FamilyTravel',
@@ -36,6 +38,18 @@ const CreateEventScreen: React.FC = () => {
     description: '',
     location: ''
   });
+
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        setEventTypes(await CalendarRepository.getEventTypes());
+      } catch (loadError) {
+        console.error('Failed to load calendar event types', loadError);
+      }
+    };
+
+    loadOptions();
+  }, []);
 
   useEffect(() => {
     if (eventId && eventId !== 'create') {
@@ -63,6 +77,7 @@ const CreateEventScreen: React.FC = () => {
     e.preventDefault();
     if (!user?.familyId) return;
     setIsLoading(true);
+    setError(null);
     try {
       if (eventId && eventId !== 'create') {
         await CalendarRepository.updateEvent(user.familyId, eventId, formData);
@@ -72,14 +87,11 @@ const CreateEventScreen: React.FC = () => {
       navigate('/calendar');
     } catch (error) {
       console.error('Failed to save event', error);
+      setError('Calendar sync failed. Verify event timing, visibility, and reminders, then retry.');
     } finally {
       setIsLoading(false);
     }
   };
-
-  const eventTypes: EventType[] = [
-    'DoctorAppointment', 'SchoolEvent', 'Tuition', 'Birthday', 'Medicine', 'Exam', 'FamilyTravel'
-  ];
 
   const roles = ['Family', 'Parent', 'Child', 'Elder', 'Caregiver'];
   const reminderOptions = ['5min', '15min', '30min', '1hr', '2hr', '1day', '3days'];
@@ -147,18 +159,28 @@ const CreateEventScreen: React.FC = () => {
               <div className="space-y-6">
                 <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em] ml-1 italic">STRATEGIC_CLASSIFICATION</label>
                 <div className="flex flex-wrap gap-4">
-                  {eventTypes.map(type => (
+                  {(eventTypes.length > 0
+                    ? eventTypes
+                    : [
+                        { id: 'fallback-doctor', label: 'Doctor Appointment', value: 'DoctorAppointment' },
+                        { id: 'fallback-school', label: 'School Event', value: 'SchoolEvent' },
+                        { id: 'fallback-tuition', label: 'Tuition', value: 'Tuition' },
+                        { id: 'fallback-birthday', label: 'Birthday', value: 'Birthday' },
+                        { id: 'fallback-medicine', label: 'Medicine', value: 'Medicine' },
+                        { id: 'fallback-exam', label: 'Exam', value: 'Exam' },
+                        { id: 'fallback-travel', label: 'Family Travel', value: 'FamilyTravel' },
+                      ]).map(type => (
                     <button
-                      key={type}
+                      key={type.id}
                       type="button"
-                      onClick={() => setFormData({ ...formData, type })}
+                      onClick={() => setFormData({ ...formData, type: type.value })}
                       className={`h-14 px-8 rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] italic transition-all border-2 ${
-                        formData.type === type 
+                        formData.type === type.value 
                           ? 'bg-primary text-white border-primary shadow-xl shadow-primary/20 scale-105' 
                           : 'bg-white text-gray-400 border-black/[0.03] hover:border-primary/20'
                       }`}
                     >
-                      {type.replace(/([A-Z])/g, '_$1').toUpperCase()}
+                      {type.label.replace(/([A-Z])/g, '_$1').toUpperCase()}
                     </button>
                   ))}
                 </div>
@@ -261,11 +283,7 @@ const CreateEventScreen: React.FC = () => {
                       key={role}
                       type="button"
                       onClick={() => {
-                        const current = formData.visibilityScope || [];
-                        const next = current.includes(role) 
-                          ? current.filter(r => r !== role) 
-                          : [...current, role];
-                        setFormData({ ...formData, visibilityScope: next });
+                        setFormData({ ...formData, visibilityScope: [role] });
                       }}
                       className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
                         formData.visibilityScope?.includes(role) 
@@ -340,6 +358,12 @@ const CreateEventScreen: React.FC = () => {
               </div>
             </FFCard>
           </section>
+
+          {error ? (
+            <div className="bg-alert/5 border border-alert/20 p-6 rounded-[28px] text-alert font-medium">
+              {error}
+            </div>
+          ) : null}
 
           <button 
             type="submit" 

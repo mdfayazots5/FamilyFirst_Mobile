@@ -1,7 +1,8 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
-import type { ApiResponse } from '../../../core/network/apiTypes';
+import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import { getMasters } from '../../../core/repositories/MasterDataRepository';
 
 export interface AdminDashboardStats {
   totalFamilies: number;
@@ -30,6 +31,21 @@ export interface SubscriptionPlan {
   features: string[];
 }
 
+export interface RewardCatalogItem {
+  id: string;
+  title: string;
+  cost: number;
+  category: string;
+  icon: string;
+  description?: string;
+}
+
+export interface AdminLookupOption {
+  id: string;
+  label: string;
+  code: string;
+}
+
 export interface TaskTemplate {
   id: string;
   taskName: string;
@@ -45,6 +61,82 @@ export interface FeatureFlag {
   description: string;
   isEnabled: boolean;
 }
+
+interface AdminPlanDto {
+  PlanId?: number;
+  planId?: number;
+  PlanName?: string;
+  planName?: string;
+  PlanCode?: string;
+  planCode?: string;
+  PriceMonthly?: number;
+  priceMonthly?: number;
+  MaxChildren?: number;
+  maxChildren?: number;
+  MaxTeachers?: number;
+  maxTeachers?: number;
+  HasElderMode?: boolean;
+  hasElderMode?: boolean;
+  HasWeeklyDigest?: boolean;
+  hasWeeklyDigest?: boolean;
+  HasAdvancedReports?: boolean;
+  hasAdvancedReports?: boolean;
+  StorageQuotaMb?: number;
+  storageQuotaMb?: number;
+  TrialDays?: number;
+  trialDays?: number;
+  IsActive?: boolean;
+  isActive?: boolean;
+}
+
+interface RewardCatalogDto {
+  RewardId?: string;
+  rewardId?: string;
+  RewardName?: string;
+  rewardName?: string;
+  CoinCost?: number;
+  coinCost?: number;
+  Category?: string;
+  category?: string;
+  IconCode?: string;
+  iconCode?: string;
+  Description?: string | null;
+  description?: string | null;
+}
+
+const mapLookupItems = (items: MasterDataItem[]): AdminLookupOption[] =>
+  items.map((item) => ({
+    id: item.id,
+    label: item.name,
+    code: item.code,
+  }));
+
+const mapPlanDto = (plan: AdminPlanDto): SubscriptionPlan => {
+  const features = [
+    (plan.HasElderMode ?? plan.hasElderMode) ? 'Elder Mode' : null,
+    (plan.HasWeeklyDigest ?? plan.hasWeeklyDigest) ? 'Weekly Digest' : null,
+    (plan.HasAdvancedReports ?? plan.hasAdvancedReports) ? 'Advanced Reports' : null,
+    `${plan.MaxTeachers ?? plan.maxTeachers ?? 0} Teachers`,
+    `${plan.StorageQuotaMb ?? plan.storageQuotaMb ?? 0} MB Storage`,
+  ].filter(Boolean) as string[];
+
+  return {
+    id: String(plan.PlanId ?? plan.planId ?? ''),
+    name: plan.PlanName ?? plan.planName ?? '',
+    price: plan.PriceMonthly ?? plan.priceMonthly ?? 0,
+    maxChildren: plan.MaxChildren ?? plan.maxChildren ?? 0,
+    features,
+  };
+};
+
+const mapRewardCatalogDto = (reward: RewardCatalogDto): RewardCatalogItem => ({
+  id: reward.RewardId ?? reward.rewardId ?? '',
+  title: reward.RewardName ?? reward.rewardName ?? '',
+  cost: reward.CoinCost ?? reward.coinCost ?? 0,
+  category: reward.Category ?? reward.category ?? '',
+  icon: reward.IconCode ?? reward.iconCode ?? '🎁',
+  description: reward.Description ?? reward.description ?? undefined,
+});
 
 export const AdminRepository = {
   getDashboardStats: async (): Promise<AdminDashboardStats> => {
@@ -85,8 +177,8 @@ export const AdminRepository = {
         { id: 'p4', name: 'Family Plus', price: 999, maxChildren: 10, features: ['Multi-Family Support', 'Priority Support'] },
       ];
     }
-    const response = await apiClient.get<ApiResponse<SubscriptionPlan[]>>(MasterApiReference.Admin.Plans);
-    return response.data.data ?? [];
+    const response = await apiClient.get<ApiResponse<AdminPlanDto[]>>(MasterApiReference.Admin.Plans);
+    return (response.data.data ?? []).map(mapPlanDto);
   },
 
   getTaskTemplates: async (): Promise<TaskTemplate[]> => {
@@ -132,5 +224,32 @@ export const AdminRepository = {
   sendCampaign: async (data: any): Promise<void> => {
     if (AppConfig.isDemo) return;
     await apiClient.post<ApiResponse<null>>(MasterApiReference.Admin.NotificationCampaign, data);
-  }
+  },
+
+  getRewardCatalog: async (): Promise<RewardCatalogItem[]> => {
+    if (AppConfig.isDemo) {
+      return [
+        { id: 'r1', title: 'Extra Screen Time', cost: 50, category: 'ScreenTime', icon: '📺' },
+        { id: 'r2', title: 'Pizza Night', cost: 200, category: 'FoodTreat', icon: '🍕' },
+        { id: 'r3', title: 'New Toy', cost: 500, category: 'Purchase', icon: '🧸' },
+        { id: 'r4', title: 'Bedtime Extension', cost: 30, category: 'FamilyActivity', icon: '⏰' },
+      ];
+    }
+
+    const response = await apiClient.get<ApiResponse<RewardCatalogDto[]>>(MasterApiReference.Admin.RewardCatalog);
+    return (response.data.data ?? []).map(mapRewardCatalogDto);
+  },
+
+  getPlanOptions: async (): Promise<AdminLookupOption[]> => {
+    if (AppConfig.isDemo) {
+      return [
+        { id: 'plan-free-trial', label: 'Free Trial', code: 'FreeTrial' },
+        { id: 'plan-basic', label: 'Basic', code: 'Basic' },
+        { id: 'plan-family', label: 'Family', code: 'Family' },
+        { id: 'plan-premium', label: 'Premium', code: 'Premium' },
+      ];
+    }
+
+    return mapLookupItems(await getMasters('Plan'));
+  },
 };

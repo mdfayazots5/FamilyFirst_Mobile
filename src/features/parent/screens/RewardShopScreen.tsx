@@ -69,8 +69,9 @@ const RewardShopScreen: React.FC = () => {
   }, [fetchData]);
 
   const handleReviewRedemption = async (id: string, status: 'Approved' | 'Rejected') => {
+    if (!user?.familyId) return;
     try {
-      await RewardRepository.reviewRedemption(id, status);
+      await RewardRepository.reviewRedemption(user.familyId, id, status);
       setPendingRedemptions(prev => prev.filter(r => r.id !== id));
     } catch (error) {
       console.error('Failed to review redemption', error);
@@ -80,7 +81,10 @@ const RewardShopScreen: React.FC = () => {
   const toggleReward = async (reward: Reward) => {
     if (!user?.familyId) return;
     try {
-      await RewardRepository.updateReward(user.familyId, reward.id, { isEnabled: !reward.isEnabled });
+      await RewardRepository.updateReward(user.familyId, reward.id, {
+        ...reward,
+        isEnabled: !reward.isEnabled,
+      });
       setRewards(prev => prev.map(r => r.id === reward.id ? { ...r, isEnabled: !r.isEnabled } : r));
     } catch (error) {
       console.error('Failed to toggle reward', error);

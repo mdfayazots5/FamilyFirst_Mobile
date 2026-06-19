@@ -24,6 +24,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { RewardRepository, Reward, CoinTransaction, Redemption } from '../../parent/repositories/RewardRepository';
+import { AppConfig } from '../../../core/config/appConfig';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFBadge from '../../../shared/components/FFBadge';
@@ -37,24 +38,34 @@ const CoinsRewardsScreen: React.FC = () => {
   const [history, setHistory] = useState<CoinTransaction[]>([]);
   const [redemptions, setRedemptions] = useState<Redemption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [activeTab, setActiveTab] = useState<'shop' | 'history'>('shop');
 
-  const currentCoins = 340; // Demo value
+  const currentCoins = AppConfig.isDemo
+    ? 340
+    : history.reduce(
+        (balance, item) => balance + (item.type === 'Earned' ? item.amount : -item.amount),
+        0,
+      );
 
   const fetchData = useCallback(async () => {
     if (!user?.familyId || !user?.id) return;
     setIsLoading(true);
+    setError(null);
     try {
-      const [rewardList, historyList] = await Promise.all([
+      const [rewardList, historyList, redemptionList] = await Promise.all([
         RewardRepository.getRewards(user.familyId),
-        RewardRepository.getCoinHistory(user.id)
+        RewardRepository.getCoinHistory(user.id),
+        RewardRepository.getPendingRedemptions(user.familyId),
       ]);
       setRewards(rewardList);
       setHistory(historyList);
+      setRedemptions(redemptionList);
     } catch (error) {
       console.error('Failed to fetch coins/rewards data', error);
+      setError('Treasury sync failed. Check reward APIs and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -65,26 +76,16 @@ const CoinsRewardsScreen: React.FC = () => {
   }, [fetchData]);
 
   const handleRedeem = async () => {
-    if (!selectedReward || !user?.id) return;
+    if (!selectedReward || !user?.id || !user?.familyId) return;
     setIsRedeeming(true);
+    setError(null);
     try {
-       // In a real app we'd call the repository
-       // await RewardRepository.redeemReward(selectedReward.id, user.id);
-       // For demo/UI polish:
-       const mockRedemption: Redemption = {
-         id: Math.random().toString(36).substr(2, 9),
-         rewardId: selectedReward.id,
-         rewardName: selectedReward.name,
-         childProfileId: user?.id || 'demo_child',
-         childName: user?.name || 'Arjun',
-         status: 'Pending',
-         coinCost: selectedReward.coinCost,
-         requestedAt: new Date().toISOString()
-       };
-      setRedemptions(prev => [...prev, mockRedemption]);
+      const redemption = await RewardRepository.redeemReward(user.familyId, selectedReward.id, user.id);
+      setRedemptions(prev => [redemption, ...prev]);
       setSelectedReward(null);
     } catch (error) {
       console.error('Failed to redeem reward', error);
+      setError('Reward redemption failed. It may already be pending or the coin balance may be insufficient.');
     } finally {
       setIsRedeeming(false);
     }
@@ -154,6 +155,12 @@ const CoinsRewardsScreen: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto p-8 lg:p-14 space-y-20">
+        {error ? (
+          <div className="bg-alert/5 border border-alert/20 p-6 rounded-[28px] text-alert font-medium">
+            {error}
+          </div>
+        ) : null}
+
         {/* Wealth Administration Section */}
         <section className="bg-primary p-16 rounded-[64px] text-white overflow-hidden relative shadow-2xl shadow-primary/30 group">
           <div className="absolute top-0 right-0 p-16 opacity-[0.03] group-hover:opacity-10 transition-opacity duration-1000 -rotate-12 translate-x-16 translate-y-[-20%] pointer-events-none">

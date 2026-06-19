@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, RefreshCw, ChevronRight, Calendar } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { ReportsRepository, WeeklyDigest } from '../repositories/ReportsRepository';
+import { AppConfig } from '../../../core/config/appConfig';
 
 // Archive screen — shows last 12 months of weekly digests.
 // Each entry taps back to WeeklyDigestScreen with the stored week date.
@@ -40,7 +40,7 @@ const ReportArchiveScreen: React.FC = () => {
       // In production: GET /families/{familyId}/reports/archive — not yet implemented.
       // Demo uses inline data; live will call an archive endpoint once WeeklyDigestWorker
       // stores digest rows in the WeeklyDigestArchive table (script 057).
-      if (true /* AppConfig.isDemo */) {
+      if (AppConfig.isDemo) {
         await new Promise(r => setTimeout(r, 400));
         setEntries(DEMO_ARCHIVE);
       }

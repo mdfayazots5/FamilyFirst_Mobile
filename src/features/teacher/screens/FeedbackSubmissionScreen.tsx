@@ -3,7 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Send, User, MessageSquare, AlertTriangle, Check, ShieldCheck, Activity, Cpu, Layers, Fingerprint, Zap, ChevronRight, Monitor } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, UserRole } from '../../../core/auth/AuthContext';
-import { FeedbackRepository, FeedbackType, Severity } from '../repositories/FeedbackRepository';
+import {
+  FeedbackRatingOption,
+  FeedbackRepository,
+  FeedbackType,
+  Severity,
+} from '../repositories/FeedbackRepository';
 import { FamilyRepository } from '../../family/repositories/FamilyRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
@@ -11,6 +16,23 @@ import FFBadge from '../../../shared/components/FFBadge';
 import FFAvatar from '../../../shared/components/FFAvatar';
 import FeedbackTypePicker from '../widgets/FeedbackTypePicker';
 import WeeklySummaryForm from '../widgets/WeeklySummaryForm';
+import FFEmptyState from '../../../shared/components/FFEmptyState';
+
+interface ChildOption {
+  id: string;
+  name: string;
+}
+
+const mapRatingToSeverity = (code: string): Severity => {
+  switch (code.toLowerCase()) {
+    case 'medium':
+      return 'Medium';
+    case 'urgent':
+      return 'Urgent';
+    default:
+      return 'Low';
+  }
+};
 
 const FeedbackSubmissionScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -19,8 +41,9 @@ const FeedbackSubmissionScreen: React.FC = () => {
   const [step, setStep] = useState(1);
   const [selectedType, setSelectedType] = useState<FeedbackType | null>(null);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
-  const [children, setChildren] = useState<any[]>([]);
+  const [children, setChildren] = useState<ChildOption[]>([]);
   const [severity, setSeverity] = useState<Severity>('Low');
+  const [severityOptions, setSeverityOptions] = useState<FeedbackRatingOption[]>([]);
   const [message, setMessage] = useState('');
   const [weeklyData, setWeeklyData] = useState({
     attendanceRate: '',
@@ -29,15 +52,28 @@ const FeedbackSubmissionScreen: React.FC = () => {
     focusArea: ''
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchChildren = async () => {
       if (!user?.familyId) return;
       try {
-        const members = await FamilyRepository.getMembers(user.familyId);
-        setChildren(members.filter(m => m.role === UserRole.CHILD));
+        const [members, ratings] = await Promise.all([
+          FamilyRepository.getMembers(user.familyId),
+          FeedbackRepository.getFeedbackRatings(),
+        ]);
+        setChildren(
+          members
+            .filter((m) => m.role === UserRole.CHILD)
+            .map((m) => ({ id: m.id, name: m.name })),
+        );
+        setSeverityOptions(ratings);
       } catch (error) {
         console.error('Failed to fetch children', error);
+        setError('Feedback setup failed. Verify child assignments and feedback ratings, then retry.');
+      } finally {
+        setIsBootstrapping(false);
       }
     };
     fetchChildren();
@@ -47,17 +83,19 @@ const FeedbackSubmissionScreen: React.FC = () => {
     if (!user?.familyId || !selectedChildId || !selectedType) return;
     
     setIsLoading(true);
+    setError(null);
     try {
       await FeedbackRepository.submitFeedback(user.familyId, {
         childProfileId: selectedChildId,
         type: selectedType,
-        severity,
+        severity: selectedType === 'Complaint' || selectedType === 'Urgent' ? severity : undefined,
         message: selectedType === 'WeeklySummary' ? 'Weekly Progress Report' : message,
         weeklyData: selectedType === 'WeeklySummary' ? weeklyData : undefined
       });
       navigate('/teacher');
     } catch (error) {
       console.error('Failed to submit feedback', error);
+      setError('Feedback dispatch failed. Verify the selected child, severity, and message payload, then retry.');
     } finally {
       setIsLoading(false);
     }
@@ -76,6 +114,22 @@ const FeedbackSubmissionScreen: React.FC = () => {
       default: return 'Operational Log';
     }
   };
+
+  if (isBootstrapping) {
+    return <div className="p-8 text-center text-gray-400">Loading Feedback Setup...</div>;
+  }
+
+  if (!children.length) {
+    return (
+      <div className="min-h-screen bg-[#FDFCFB] flex items-center justify-center p-8">
+        <FFEmptyState
+          title="NO_ASSIGNED_CHILDREN"
+          message="No active child assignments are available for feedback submission in this family."
+          icon={<ShieldCheck size={40} />}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] pb-48">
@@ -121,6 +175,12 @@ const FeedbackSubmissionScreen: React.FC = () => {
       </header>
 
       <main className="max-w-5xl mx-auto p-12 lg:p-20 pt-16 space-y-24">
+        {error ? (
+          <div className="bg-alert/5 border border-alert/20 p-6 rounded-[28px] text-alert font-medium">
+            {error}
+          </div>
+        ) : null}
+
         <AnimatePresence mode="wait">
           {step === 1 && (
             <motion.div
@@ -231,22 +291,30 @@ const FeedbackSubmissionScreen: React.FC = () => {
                 <WeeklySummaryForm data={weeklyData} onChange={setWeeklyData} />
               ) : (
                 <div className="space-y-16">
-                  {selectedType === 'Complaint' && (
+                  {(selectedType === 'Complaint' || selectedType === 'Urgent') && (
                     <div className="space-y-8 px-4">
                       <div className="flex items-center gap-4">
                          <div className="w-2 h-2 rounded-full bg-alert animate-ping" />
                          <label className="text-[11px] font-black uppercase tracking-[0.5em] text-primary italic">ESCALATION_SEVERITY_LEVEL</label>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {(['Low', 'Medium', 'Urgent'] as Severity[]).map(s => (
+                        {(severityOptions.length > 0
+                          ? severityOptions
+                          : [
+                              { id: 'severity-low', label: 'Low', code: 'Low' },
+                              { id: 'severity-medium', label: 'Medium', code: 'Medium' },
+                              { id: 'severity-urgent', label: 'Urgent', code: 'Urgent' },
+                            ]).map((option) => {
+                          const optionSeverity = mapRatingToSeverity(option.code);
+                          return (
                           <button
-                            key={s}
-                            onClick={() => setSeverity(s)}
-                            className={`h-20 rounded-[28px] font-black text-[12px] uppercase tracking-[0.4em] transition-all border-2 italic ${severity === s ? 'bg-alert text-white border-alert shadow-3xl shadow-alert/30' : 'bg-white border-black/[0.03] text-gray-300 hover:border-alert/20 hover:text-alert'}`}
+                            key={option.id}
+                            onClick={() => setSeverity(optionSeverity)}
+                            className={`h-20 rounded-[28px] font-black text-[12px] uppercase tracking-[0.4em] transition-all border-2 italic ${severity === optionSeverity ? 'bg-alert text-white border-alert shadow-3xl shadow-alert/30' : 'bg-white border-black/[0.03] text-gray-300 hover:border-alert/20 hover:text-alert'}`}
                           >
-                            {s}
+                            {option.label}
                           </button>
-                        ))}
+                        )})}
                       </div>
                     </div>
                   )}

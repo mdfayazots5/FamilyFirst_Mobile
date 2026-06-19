@@ -60,8 +60,9 @@ const VerificationQueueScreen: React.FC = () => {
   }, [fetchData]);
 
   const handleReview = async (id: string, status: 'approved' | 'flagged') => {
+    if (!user?.familyId) return;
     try {
-      await TaskCompletionRepository.reviewCompletion(id, status);
+      await TaskCompletionRepository.reviewCompletion(user.familyId, id, status);
       setQueue(prev => prev.filter(item => item.id !== id));
     } catch (error) {
       console.error('Failed to review task', error);

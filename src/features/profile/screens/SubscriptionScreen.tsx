@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, 
@@ -14,45 +14,94 @@ import { useNavigate } from 'react-router-dom';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFBadge from '../../../shared/components/FFBadge';
+import { FamilyRepository, type FamilyLookupOption } from '../../family/repositories/FamilyRepository';
+
+interface SubscriptionPlanCard {
+  id: string;
+  name: string;
+  price: string;
+  period: string;
+  features: string[];
+  badge?: string;
+  accentVariant: 'neutral' | 'primary' | 'accent';
+}
+
+const PLAN_DETAILS: Record<string, Omit<SubscriptionPlanCard, 'id'>> = {
+  FREETRIAL: {
+    name: 'Free Trial',
+    price: '₹0',
+    period: '14 days',
+    features: ['1 Child', 'Starter Family Setup', 'Core Task and Attendance Tracking'],
+    badge: 'TRIAL_ACCESS',
+    accentVariant: 'neutral',
+  },
+  BASIC: {
+    name: 'Basic',
+    price: '₹99',
+    period: 'per month',
+    features: ['Up to 2 Children', 'Core Task Tracking', 'Standard Rewards'],
+    accentVariant: 'primary',
+  },
+  FAMILY: {
+    name: 'Family',
+    price: '₹199',
+    period: 'per month',
+    features: ['Up to 4 Children', 'Teacher Integration', 'Shared Family Coordination'],
+    badge: 'GROWTH_TIER',
+    accentVariant: 'accent',
+  },
+  PREMIUM: {
+    name: 'Premium',
+    price: '₹299',
+    period: 'per month',
+    features: ['Unlimited Children', 'Advanced Reports', 'Full Household Coverage'],
+    badge: 'FULL_ACCESS',
+    accentVariant: 'primary',
+  },
+};
+
+const normalizePlanCode = (code: string): string => code.replace(/[_\s-]/g, '').toUpperCase();
+
+const mapPlanOptionsToCards = (options: FamilyLookupOption[]): SubscriptionPlanCard[] =>
+  options.map((option) => {
+    const key = normalizePlanCode(option.code);
+    const details = PLAN_DETAILS[key] ?? {
+      name: option.label,
+      price: 'Plan Price [VERIFY]',
+      period: 'Billing Cycle [VERIFY]',
+      features: ['Feature set not yet documented in mobile source'],
+      accentVariant: 'neutral' as const,
+    };
+
+    return {
+      id: option.id,
+      ...details,
+    };
+  });
 
 const SubscriptionScreen: React.FC = () => {
   const navigate = useNavigate();
+  const [plans, setPlans] = useState<SubscriptionPlanCard[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const plans = [
-    {
-      id: 'free',
-      name: 'Basic',
-      price: '₹0',
-      period: 'Forever',
-      features: ['Up to 2 Children', 'Basic Task Tracking', 'Standard Rewards'],
-      isCurrent: false,
-      color: 'bg-gray-50 text-gray-400'
-    },
-    {
-      id: 'premium',
-      name: 'Premium',
-      price: '₹199',
-      period: 'per month',
-      features: ['Unlimited Children', 'AI Task Suggestions', 'Teacher Integration', 'Advanced Reports', 'Priority Support'],
-      isCurrent: true,
-      color: 'bg-primary text-white'
-    },
-    {
-      id: 'family',
-      name: 'Family Plus',
-      price: '₹999',
-      period: 'per year',
-      features: ['Everything in Premium', '2 Months Free', 'Family Vault Access', 'Custom Reward Catalog'],
-      isCurrent: false,
-      color: 'bg-accent text-white'
-    }
-  ];
+  useEffect(() => {
+    const loadPlans = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const planOptions = await FamilyRepository.getPlanOptions();
+        setPlans(mapPlanOptionsToCards(planOptions));
+      } catch (loadError) {
+        console.error('Failed to load subscription plans', loadError);
+        setError('Plan catalog is unavailable right now. Retry after the family plan service is reachable.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const paymentHistory = [
-    { id: 'inv_1', date: 'Oct 12, 2025', amount: '₹199', status: 'Paid' },
-    { id: 'inv_2', date: 'Sep 12, 2025', amount: '₹199', status: 'Paid' },
-    { id: 'inv_3', date: 'Aug 12, 2025', amount: '₹199', status: 'Paid' },
-  ];
+    loadPlans();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] pb-48">
@@ -89,8 +138,8 @@ const SubscriptionScreen: React.FC = () => {
             <div className="relative z-10 space-y-12">
               <div className="flex justify-between items-start">
                 <div className="space-y-6">
-                  <FFBadge variant="accent" className="font-black px-6 py-2 shadow-2xl shadow-accent/40 uppercase italic tracking-[0.2em] rounded-xl text-[12px]">ACTIVE_ACCESS_PROTOCOL</FFBadge>
-                  <h2 className="text-5xl md:text-7xl font-display font-black tracking-tighter uppercase italic leading-none">Premium Matrix</h2>
+                  <FFBadge variant="accent" className="font-black px-6 py-2 shadow-2xl shadow-accent/40 uppercase italic tracking-[0.2em] rounded-xl text-[12px]">PLAN_ACCESS_MATRIX</FFBadge>
+                  <h2 className="text-5xl md:text-7xl font-display font-black tracking-tighter uppercase italic leading-none">Family Plans</h2>
                 </div>
                 <div className="w-24 h-24 bg-white/10 rounded-[32px] backdrop-blur-md border-2 border-white/10 flex items-center justify-center shadow-inner group-hover:rotate-[360deg] transition-transform duration-[2000ms]">
                   <CreditCard size={44} />
@@ -98,7 +147,7 @@ const SubscriptionScreen: React.FC = () => {
               </div>
               <div className="flex items-center gap-4 text-[12px] font-black uppercase tracking-[0.4em] text-white/60 italic leading-none">
                 <Clock size={18} className="text-accent" />
-                <span>Auto-sync sequence: Nov 12, 2025</span>
+                <span>Live plan options are sourced from the master-data catalog.</span>
               </div>
             </div>
           </FFCard>
@@ -115,7 +164,15 @@ const SubscriptionScreen: React.FC = () => {
           </div>
 
           <div className="grid gap-10">
-            {plans.map((plan, idx) => (
+            {isLoading ? (
+              <FFCard className="p-12 border-4 border-transparent bg-white/50 rounded-[56px] shadow-3xl shadow-black/[0.01]">
+                <p className="text-[12px] font-black uppercase tracking-[0.4em] text-gray-300 italic">LOADING_PLAN_CATALOG...</p>
+              </FFCard>
+            ) : error ? (
+              <FFCard className="p-12 border-4 border-alert/10 bg-white rounded-[56px] shadow-3xl shadow-black/[0.01]">
+                <p className="text-lg font-black text-alert uppercase italic tracking-tight leading-none">{error}</p>
+              </FFCard>
+            ) : plans.map((plan, idx) => (
               <motion.div
                 key={plan.id}
                 initial={{ opacity: 0, y: 30 }}
@@ -124,20 +181,24 @@ const SubscriptionScreen: React.FC = () => {
               >
                 <FFCard 
                   className={`p-12 border-4 transition-all hover:shadow-3xl relative overflow-hidden group rounded-[56px] ${
-                    plan.isCurrent 
-                      ? 'border-primary bg-white shadow-primary/10' 
-                      : 'border-transparent bg-white/50 grayscale-[0.5] hover:grayscale-0 hover:bg-white'
+                    plan.accentVariant === 'primary'
+                      ? 'border-primary bg-white shadow-primary/10'
+                      : plan.accentVariant === 'accent'
+                        ? 'border-accent/20 bg-white shadow-accent/10'
+                        : 'border-transparent bg-white/50'
                   }`}
                 >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-12 mb-12">
                     <div className="space-y-4">
                       <div className="flex items-center gap-4">
                          <h4 className="text-4xl font-display font-black text-primary uppercase italic tracking-tighter leading-none">{plan.name}</h4>
-                         {plan.isCurrent && (
-                           <FFBadge variant="success" className="font-black px-4 py-1 italic tracking-widest text-[9px] rounded-lg">LIVE_CONFIG</FFBadge>
+                         {plan.badge && (
+                           <FFBadge variant={plan.accentVariant === 'accent' ? 'accent' : 'success'} className="font-black px-4 py-1 italic tracking-widest text-[9px] rounded-lg">
+                             {plan.badge}
+                           </FFBadge>
                          )}
-                         {plan.id === 'family' && !plan.isCurrent && (
-                           <FFBadge variant="accent" className="font-black px-4 py-1 italic tracking-widest text-[9px] rounded-lg">OPTIMIZED_UNIT</FFBadge>
+                         {!plan.badge && plan.accentVariant === 'accent' && (
+                           <FFBadge variant="accent" className="font-black px-4 py-1 italic tracking-widest text-[9px] rounded-lg">SCALING_TIER</FFBadge>
                          )}
                       </div>
                       <div className="flex items-baseline gap-3">
@@ -146,17 +207,15 @@ const SubscriptionScreen: React.FC = () => {
                       </div>
                     </div>
 
-                    {!plan.isCurrent && (
-                      <FFButton 
-                        variant={plan.id === 'family' ? 'accent' : 'outline'}
-                        className="px-14 h-20 rounded-[28px] font-display font-black text-[13px] uppercase italic tracking-[0.2em] shadow-2xl active:scale-95 group/btn"
-                      >
-                        <div className="flex items-center gap-4">
-                           <span>{plan.id === 'free' ? 'DEGRADE_UNIT' : 'SYNC_PROTOCOL'}</span>
-                           <Zap size={18} className="group-hover/btn:animate-pulse" />
-                        </div>
-                      </FFButton>
-                    )}
+                    <FFButton 
+                      variant={plan.accentVariant === 'accent' ? 'accent' : 'outline'}
+                      className="px-14 h-20 rounded-[28px] font-display font-black text-[13px] uppercase italic tracking-[0.2em] shadow-2xl active:scale-95 group/btn"
+                    >
+                      <div className="flex items-center gap-4">
+                         <span>PLAN_REFERENCE_ONLY</span>
+                         <Zap size={18} className="group-hover/btn:animate-pulse" />
+                      </div>
+                    </FFButton>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 pt-12 border-t border-black/[0.03]">
@@ -186,30 +245,14 @@ const SubscriptionScreen: React.FC = () => {
           </div>
 
           <FFCard className="border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[56px] overflow-hidden">
-            <div className="divide-y-2 divide-black/[0.03]">
-              {paymentHistory.map((item, idx) => (
-                <motion.div 
-                  key={item.id} 
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                  className="p-10 flex justify-between items-center hover:bg-gray-50/50 transition-colors group cursor-default"
-                >
-                  <div className="flex items-center gap-10">
-                    <div className="w-16 h-16 bg-gray-50 rounded-[24px] flex items-center justify-center text-gray-300 border border-black/[0.03] group-hover:rotate-6 transition-transform">
-                      <History size={28} />
-                    </div>
-                    <div className="space-y-2">
-                      <p className="font-display font-black text-2xl text-primary uppercase italic tracking-tighter leading-none">{item.date}</p>
-                      <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.5em] italic leading-none opacity-40">NODE_ID::{item.id}</p>
-                    </div>
-                  </div>
-                  <div className="text-right space-y-4">
-                    <p className="text-4xl font-display font-black text-primary leading-none tracking-tighter italic">{item.amount}</p>
-                    <FFBadge variant="success" size="sm" className="font-black text-[9px] py-1 px-4 italic tracking-widest rounded-lg">LEDGER_PAID</FFBadge>
-                  </div>
-                </motion.div>
-              ))}
+            <div className="p-12 text-center space-y-6">
+              <div className="w-16 h-16 bg-gray-50 rounded-[24px] flex items-center justify-center text-gray-300 border border-black/[0.03] mx-auto">
+                <History size={28} />
+              </div>
+              <p className="font-display font-black text-2xl text-primary uppercase italic tracking-tighter leading-none">Billing History Not Exposed</p>
+              <p className="text-[11px] text-gray-400 font-black uppercase tracking-[0.4em] italic leading-none">
+                ProjectOverview does not document a family-side payment-history API for this screen yet.
+              </p>
             </div>
           </FFCard>
         </section>

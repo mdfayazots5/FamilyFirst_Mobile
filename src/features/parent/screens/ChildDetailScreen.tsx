@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { ChildRepository, ChildDetail, TaskCompletion, Feedback } from '../repositories/ChildRepository';
+import { ChildRepository, ChildDetail, TaskCompletion, Feedback, ChildLookupOption } from '../repositories/ChildRepository';
 import FFAvatar from '../../../shared/components/FFAvatar';
 import FFCard from '../../../shared/components/FFCard';
 import FFBadge from '../../../shared/components/FFBadge';
@@ -42,6 +42,22 @@ import ChildRadarChart from '../widgets/ChildRadarChart';
 import WeekMiniCalendar from '../widgets/WeekMiniCalendar';
 import FeedbackCard from '../widgets/FeedbackCard';
 import PhotoReviewSheet from '../widgets/PhotoReviewSheet';
+
+const normalizeLookupValue = (value: string) =>
+  value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
+
+const mapTaskStatusToLookupCode = (status: TaskCompletion['status']) => {
+  switch (status) {
+    case 'done':
+      return 'approved';
+    case 'flagged':
+      return 'flagged';
+    case 'missed':
+      return 'missed';
+    default:
+      return 'pending';
+  }
+};
 
 const ChildDetailScreen: React.FC = () => {
   const { childId } = useParams<{ childId: string }>();
@@ -53,9 +69,29 @@ const ChildDetailScreen: React.FC = () => {
   const [tasks, setTasks] = useState<TaskCompletion[]>([]);
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [taskTypes, setTaskTypes] = useState<ChildLookupOption[]>([]);
+  const [taskStatuses, setTaskStatuses] = useState<ChildLookupOption[]>([]);
+  const [selectedTaskType, setSelectedTaskType] = useState<string>('All');
+  const [selectedTaskStatus, setSelectedTaskStatus] = useState<string>('All');
+  const [lookupError, setLookupError] = useState<string | null>(null);
   
   const [selectedTask, setSelectedTask] = useState<TaskCompletion | null>(null);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+
+  const loadLookups = useCallback(async () => {
+    setLookupError(null);
+    try {
+      const [liveTaskTypes, liveTaskStatuses] = await Promise.all([
+        ChildRepository.getTaskTypes(),
+        ChildRepository.getTaskStatuses(),
+      ]);
+      setTaskTypes(liveTaskTypes);
+      setTaskStatuses(liveTaskStatuses);
+    } catch (error) {
+      console.error('Failed to load child task filters', error);
+      setLookupError('Unable to load child task filters right now.');
+    }
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!user?.familyId || !childId) return;
@@ -80,10 +116,14 @@ const ChildDetailScreen: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    void loadLookups();
+  }, [loadLookups]);
+
   const handleApprove = async () => {
-    if (!selectedTask) return;
+    if (!selectedTask || !user?.familyId) return;
     try {
-      await ChildRepository.reviewTask(selectedTask.id, 'done');
+      await ChildRepository.reviewTask(user.familyId, selectedTask.id, 'done');
       setTasks(tasks.map(t => t.id === selectedTask.id ? { ...t, status: 'done' } : t));
       setIsReviewOpen(false);
     } catch (error) {
@@ -92,9 +132,9 @@ const ChildDetailScreen: React.FC = () => {
   };
 
   const handleFlag = async (reason: string, note: string) => {
-    if (!selectedTask) return;
+    if (!selectedTask || !user?.familyId) return;
     try {
-      await ChildRepository.reviewTask(selectedTask.id, 'flagged', `${reason}: ${note}`);
+      await ChildRepository.reviewTask(user.familyId, selectedTask.id, 'flagged', `${reason}: ${note}`);
       setTasks(tasks.map(t => t.id === selectedTask.id ? { ...t, status: 'flagged' } : t));
       setIsReviewOpen(false);
     } catch (error) {
@@ -110,6 +150,28 @@ const ChildDetailScreen: React.FC = () => {
       console.error('Failed to acknowledge feedback', error);
     }
   };
+
+  const filteredTasks = tasks.filter((task) => {
+    const selectedType = taskTypes.find((option) => option.id === selectedTaskType);
+    const selectedStatus = taskStatuses.find((option) => option.id === selectedTaskStatus);
+
+    const matchesType =
+      selectedTaskType === 'All' ||
+      (selectedType
+        ? [task.category, task.title].some((value) =>
+            normalizeLookupValue(value).includes(normalizeLookupValue(selectedType.code)) ||
+            normalizeLookupValue(value).includes(normalizeLookupValue(selectedType.label)),
+          )
+        : true);
+
+    const matchesStatus =
+      selectedTaskStatus === 'All' ||
+      (selectedStatus
+        ? normalizeLookupValue(mapTaskStatusToLookupCode(task.status)) === normalizeLookupValue(selectedStatus.code)
+        : true);
+
+    return matchesType && matchesStatus;
+  });
 
   if (isLoading && !child) {
     return (
@@ -242,8 +304,91 @@ const ChildDetailScreen: React.FC = () => {
                 </div>
               </div>
 
+              <div className="space-y-5 px-4">
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic">TASK_TYPE_FILTER</p>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTaskType('All')}
+                      className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
+                        selectedTaskType === 'All'
+                          ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                          : 'bg-white text-gray-400 border border-black/[0.05]'
+                      }`}
+                    >
+                      All Types
+                    </button>
+                    {taskTypes.map((taskType) => (
+                      <button
+                        key={taskType.id}
+                        type="button"
+                        onClick={() => setSelectedTaskType(taskType.id)}
+                        className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
+                          selectedTaskType === taskType.id
+                            ? 'bg-accent text-primary shadow-lg shadow-accent/20'
+                            : 'bg-white text-gray-400 border border-black/[0.05]'
+                        }`}
+                      >
+                        {taskType.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic">TASK_STATUS_FILTER</p>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTaskStatus('All')}
+                      className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
+                        selectedTaskStatus === 'All'
+                          ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                          : 'bg-white text-gray-400 border border-black/[0.05]'
+                      }`}
+                    >
+                      All Statuses
+                    </button>
+                    {taskStatuses.map((taskStatus) => (
+                      <button
+                        key={taskStatus.id}
+                        type="button"
+                        onClick={() => setSelectedTaskStatus(taskStatus.id)}
+                        className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
+                          selectedTaskStatus === taskStatus.id
+                            ? 'bg-accent text-primary shadow-lg shadow-accent/20'
+                            : 'bg-white text-gray-400 border border-black/[0.05]'
+                        }`}
+                      >
+                        {taskStatus.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {lookupError && (
+                  <div className="flex items-center justify-between gap-4 rounded-[24px] border border-alert/10 bg-alert/5 px-5 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-alert italic">{lookupError}</p>
+                    <button
+                      type="button"
+                      onClick={() => void loadLookups()}
+                      className="rounded-full bg-alert px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-white italic"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="grid gap-10">
-                {tasks.map((task, index) => (
+                {filteredTasks.length === 0 ? (
+                  <FFCard className="p-10 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[56px]">
+                    <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em] italic">
+                      No child tasks match the selected timeline filters.
+                    </p>
+                  </FFCard>
+                ) : filteredTasks.map((task, index) => (
                   <motion.div
                     key={task.id}
                     initial={{ opacity: 0, x: -20 }}

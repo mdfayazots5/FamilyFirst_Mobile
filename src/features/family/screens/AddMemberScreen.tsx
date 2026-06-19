@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   UserPlus, 
@@ -25,7 +25,7 @@ import { useNavigate } from 'react-router-dom';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFBadge from '../../../shared/components/FFBadge';
-import { FamilyRepository } from '../repositories/FamilyRepository';
+import { FamilyLookupOption, FamilyRepository } from '../repositories/FamilyRepository';
 import { useAuth, UserRole } from '../../../core/auth/AuthContext';
 
 const AddMemberScreen: React.FC = () => {
@@ -35,21 +35,37 @@ const AddMemberScreen: React.FC = () => {
   const [linkType, setLinkType] = useState('Mother');
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [roleOptions, setRoleOptions] = useState<FamilyLookupOption[]>([]);
 
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        setRoleOptions(await FamilyRepository.getRoleOptions());
+      } catch (loadError) {
+        console.error('Failed to load member role options', loadError);
+      }
+    };
+
+    loadOptions();
+  }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.familyId) return;
     
     setIsLoading(true);
+    setError(null);
     try {
       await FamilyRepository.addMember(user.familyId, { name, phone, role, linkType });
       setIsSuccess(true);
       setTimeout(() => navigate('/parent/members'), 2500);
     } catch (error) {
       console.error('Failed to add member', error);
+      setError('Member invitation failed. Verify the phone number, role, and family limits, then retry.');
     } finally {
       setIsLoading(false);
     }
@@ -207,9 +223,24 @@ const AddMemberScreen: React.FC = () => {
                     onChange={(e) => setRole(e.target.value as UserRole)}
                     className="w-full h-20 bg-gray-50/50 border-2 border-transparent rounded-[28px] px-8 font-display font-black text-2xl text-primary appearance-none focus:bg-white focus:border-primary/10 transition-all outline-none cursor-pointer italic shadow-inner"
                   >
-                    <option value={UserRole.PARENT}>PARENT_COMMAND</option>
-                    <option value={UserRole.ELDER}>ELDER_ADVISOR</option>
-                    <option value={UserRole.TEACHER}>FIELD_OPERATIVE</option>
+                    {(roleOptions.length > 0 ? roleOptions : [
+                      { id: 'fallback-parent', label: 'Parent', code: 'Parent' },
+                      { id: 'fallback-elder', label: 'Elder', code: 'Elder' },
+                      { id: 'fallback-teacher', label: 'Teacher', code: 'Teacher' },
+                    ]).map((option) => {
+                      const optionRole =
+                        option.code.toLowerCase() === 'teacher'
+                          ? UserRole.TEACHER
+                          : option.code.toLowerCase() === 'elder'
+                            ? UserRole.ELDER
+                            : UserRole.PARENT;
+
+                      return (
+                        <option key={option.id} value={optionRole}>
+                          {option.label.replace(/([A-Z])/g, '_$1').toUpperCase()}
+                        </option>
+                      );
+                    })}
                   </select>
                   <div className="absolute right-6 top-1/2 -translate-y-1/2 text-primary/30 rotate-90 pointer-events-none">
                     <ChevronRight size={20} />
@@ -249,6 +280,12 @@ const AddMemberScreen: React.FC = () => {
              </div>
              <p className="text-sm text-gray-500 font-medium italic leading-relaxed relative z-10">Verification signals will be dispatched via the primary cellular array. Upon induction, the operative will be granted immediate access to the centralized family secure grid.</p>
           </div>
+
+          {error ? (
+            <div className="bg-alert/5 border border-alert/20 p-8 rounded-[40px] text-alert font-medium">
+              {error}
+            </div>
+          ) : null}
 
           <button 
             type="submit" 

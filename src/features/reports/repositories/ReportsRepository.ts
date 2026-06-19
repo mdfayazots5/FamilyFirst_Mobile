@@ -1,7 +1,8 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
-import type { ApiResponse } from '../../../core/network/apiTypes';
+import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import { getMasters } from '../../../core/repositories/MasterDataRepository';
 
 // ── Level 2 interfaces ────────────────────────────────────────────────────────
 
@@ -183,6 +184,19 @@ export interface ScoreHistoryPoint {
   };
 }
 
+export interface ReportLookupOption {
+  id: string;
+  label: string;
+  code: string;
+}
+
+const mapLookupItems = (items: MasterDataItem[]): ReportLookupOption[] =>
+  items.map((item) => ({
+    id: item.id,
+    label: item.name,
+    code: item.code,
+  }));
+
 export const ReportsRepository = {
   getWeeklyDigest: async (familyId: string, weekStartDate: string): Promise<WeeklyDigest> => {
     if (AppConfig.isDemo) {
@@ -309,5 +323,27 @@ export const ReportsRepository = {
       resolvePath(MasterApiReference.Reports.HealthReminders, { familyId }),
     );
     return response.data.data;
+  },
+
+  getCalendarEventTypes: async (): Promise<ReportLookupOption[]> => {
+    if (AppConfig.isDemo) {
+      return [
+        { id: 'report-event-family', label: 'Family Event', code: 'FamilyTravel' },
+        { id: 'report-event-school', label: 'School Event', code: 'SchoolEvent' },
+      ];
+    }
+
+    return mapLookupItems(await getMasters('CalendarEventType'));
+  },
+
+  getTaskTypes: async (): Promise<ReportLookupOption[]> => {
+    if (AppConfig.isDemo) {
+      return [
+        { id: 'report-task-study', label: 'Study', code: 'Study' },
+        { id: 'report-task-chores', label: 'Chores', code: 'Chores' },
+      ];
+    }
+
+    return mapLookupItems(await getMasters('TaskType'));
   },
 };

@@ -1,7 +1,9 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { AppConfig } from '../../../core/config/appConfig';
-import type { ApiResponse } from '../../../core/network/apiTypes';
+import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import { getMasters } from '../../../core/repositories/MasterDataRepository';
+import type { EventType } from '../../calendar/repositories/CalendarRepository';
 
 export interface Appreciation {
   id: string;
@@ -23,6 +25,72 @@ export interface GrandchildStatus {
   totalTasks: number;
   status: 'Doing Great' | 'Needs Help' | 'Just Started';
 }
+
+export interface ElderEventTypeOption {
+  id: string;
+  label: string;
+  code: EventType;
+}
+
+const mapCalendarEventTypeCode = (value: string | undefined): EventType => {
+  const normalized = (value ?? '').trim().toLowerCase();
+
+  switch (normalized) {
+    case 'doctorappointment':
+      return 'DoctorAppointment';
+    case 'schoolevent':
+      return 'SchoolEvent';
+    case 'tuition':
+    case 'tuitionclass':
+      return 'Tuition';
+    case 'birthday':
+      return 'Birthday';
+    case 'medicine':
+    case 'medicinereminder':
+      return 'Medicine';
+    case 'exam':
+    case 'examdate':
+      return 'Exam';
+    case 'familytravel':
+    case 'other':
+    default:
+      return 'FamilyTravel';
+  }
+};
+
+const mapLookupItems = (items: MasterDataItem[]): ElderEventTypeOption[] =>
+  items.map((item) => ({
+    id: item.id,
+    label: item.name,
+    code: mapCalendarEventTypeCode(item.code),
+  }));
+
+interface FeedbackDto {
+  FeedbackId?: string;
+  feedbackId?: string;
+  ChildProfileId?: string;
+  childProfileId?: string;
+  ChildName?: string;
+  childName?: string;
+  TeacherProfileId?: string;
+  teacherProfileId?: string;
+  TeacherName?: string;
+  teacherName?: string;
+  Message?: string;
+  message?: string;
+  CreatedAt?: string;
+  createdAt?: string;
+}
+
+const mapFeedbackToAppreciation = (feedback: FeedbackDto): Appreciation => ({
+  id: feedback.FeedbackId ?? feedback.feedbackId ?? '',
+  childProfileId: feedback.ChildProfileId ?? feedback.childProfileId ?? '',
+  childName: feedback.ChildName ?? feedback.childName ?? '',
+  authorId: feedback.TeacherProfileId ?? feedback.teacherProfileId ?? '',
+  authorName: feedback.TeacherName ?? feedback.teacherName ?? '',
+  message: feedback.Message ?? feedback.message ?? '',
+  createdAt: feedback.CreatedAt ?? feedback.createdAt ?? new Date().toISOString(),
+});
 
 export const ElderRepository = {
   getGrandchildren: async (familyId: string): Promise<GrandchildStatus[]> => {
@@ -46,11 +114,15 @@ export const ElderRepository = {
         ...data
       } as Appreciation;
     }
-    const response = await apiClient.post<ApiResponse<Appreciation>>(
+    const response = await apiClient.post<ApiResponse<FeedbackDto>>(
       resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
-      { ...data, type: 'Appreciation' },
+      {
+        ChildProfileId: data.childProfileId,
+        FeedbackType: 1,
+        Message: data.message,
+      },
     );
-    return response.data.data as Appreciation;
+    return mapFeedbackToAppreciation(response.data.data as FeedbackDto);
   },
 
   getAppreciations: async (familyId: string): Promise<Appreciation[]> => {
@@ -78,10 +150,21 @@ export const ElderRepository = {
         }
       ];
     }
-    const response = await apiClient.get<ApiResponse<Appreciation[]>>(
+    const response = await apiClient.get<ApiResponse<FeedbackDto[]>>(
       resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
-      { params: { type: 'Appreciation' } },
+      { params: { type: 1, page: 1, pageSize: 50 } },
     );
-    return response.data.data ?? [];
-  }
+    return (response.data.data ?? []).map(mapFeedbackToAppreciation);
+  },
+
+  getCalendarEventTypes: async (): Promise<ElderEventTypeOption[]> => {
+    if (AppConfig.isDemo) {
+      return [
+        { id: 'elder-event-birthday', label: 'Birthday', code: 'Birthday' },
+        { id: 'elder-event-family', label: 'Family Event', code: 'FamilyTravel' },
+      ];
+    }
+
+    return mapLookupItems(await getMasters('CalendarEventType'));
+  },
 };

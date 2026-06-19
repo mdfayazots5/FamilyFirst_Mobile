@@ -104,7 +104,8 @@ const RoutineBuilderScreen: React.FC = () => {
   };
 
   const getTasksForBlock = (blockId: TimeBlock, dayIndex: number) => {
-    return tasks.filter(t => t.timeBlock === blockId && t.recurringDays.includes(dayIndex + 1 === 7 ? 0 : dayIndex + 1));
+    const apiDay = dayIndex + 1;
+    return tasks.filter(t => t.timeBlock === blockId && t.recurringDays.includes(apiDay));
   };
 
   if (isLoading) {

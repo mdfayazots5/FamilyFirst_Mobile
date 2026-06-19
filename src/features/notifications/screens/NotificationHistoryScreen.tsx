@@ -4,15 +4,12 @@ import {
   ArrowLeft, 
   CheckCheck, 
   Settings, 
-  BellOff, 
-  Filter,
   Inbox
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { NotificationRepository, AppNotification } from '../repositories/NotificationRepository';
+import { NotificationRepository, AppNotification, NotificationTypeOption } from '../repositories/NotificationRepository';
 import NotificationTile from '../widgets/NotificationTile';
-import FFButton from '../../../shared/components/FFButton';
 
 const NotificationHistoryScreen: React.FC = () => {
   const { user } = useAuth();
@@ -21,13 +18,19 @@ const NotificationHistoryScreen: React.FC = () => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'All' | 'Unread'>('All');
+  const [typeOptions, setTypeOptions] = useState<NotificationTypeOption[]>([]);
+  const [typeFilter, setTypeFilter] = useState<string>('All');
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) return;
     setIsLoading(true);
     try {
-      const data = await NotificationRepository.getNotifications(user.id);
+      const [data, liveTypeOptions] = await Promise.all([
+        NotificationRepository.getNotifications(user.id),
+        NotificationRepository.getNotificationTypes(),
+      ]);
       setNotifications(data);
+      setTypeOptions(liveTypeOptions);
     } catch (error) {
       console.error('Failed to fetch notifications', error);
     } finally {
@@ -69,8 +72,19 @@ const NotificationHistoryScreen: React.FC = () => {
     }
   };
 
-  const filteredNotifications = notifications.filter(n => filter === 'All' || !n.isRead);
+  const filteredNotifications = notifications.filter((notification) => {
+    const matchesReadFilter = filter === 'All' || !notification.isRead;
+    const matchesTypeFilter = typeFilter === 'All' || notification.type === typeFilter;
+    return matchesReadFilter && matchesTypeFilter;
+  });
   const unreadCount = notifications.filter(n => !n.isRead).length;
+  const availableTypeFilters = [
+    { id: 'All', label: 'All' },
+    ...typeOptions.map((option) => ({
+      id: option.code === 'Calendar' || option.code === 'WeeklyDigest' ? 'System' : option.code,
+      label: option.label,
+    })),
+  ].filter((option, index, items) => items.findIndex((item) => item.id === option.id) === index);
 
   return (
     <div className="min-h-screen bg-bg-cream pb-32">
@@ -118,6 +132,20 @@ const NotificationHistoryScreen: React.FC = () => {
             <CheckCheck size={16} />
             <span className="hidden sm:inline">Mark All</span>
           </button>
+        </div>
+
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {availableTypeFilters.map((typeOption) => (
+            <button
+              key={typeOption.id}
+              onClick={() => setTypeFilter(typeOption.id)}
+              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${
+                typeFilter === typeOption.id ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-gray-400 border border-black/5'
+              }`}
+            >
+              {typeOption.label}
+            </button>
+          ))}
         </div>
       </header>
 

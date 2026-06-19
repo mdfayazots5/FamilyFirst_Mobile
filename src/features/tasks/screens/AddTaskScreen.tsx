@@ -45,6 +45,7 @@ const AddTaskScreen: React.FC = () => {
   const [pillarTag, setPillarTag] = useState<PillarTag>('Discipline');
   const [isRecurring, setIsRecurring] = useState(true);
   const [recurringDays, setRecurringDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [activeFromDate, setActiveFromDate] = useState(new Date().toISOString().split('T')[0]);
   const [isLoading, setIsLoading] = useState(false);
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
   const [childAge, setChildAge] = useState(10);
@@ -71,6 +72,7 @@ const AddTaskScreen: React.FC = () => {
             setPillarTag(task.pillarTag);
             setIsRecurring(task.isRecurring);
             setRecurringDays(task.recurringDays);
+            setActiveFromDate(task.activeFromDate ?? new Date().toISOString().split('T')[0]);
           }
         }
       } catch (error) {
@@ -94,7 +96,8 @@ const AddTaskScreen: React.FC = () => {
       isPhotoRequired,
       pillarTag,
       isRecurring,
-      recurringDays
+      recurringDays,
+      activeFromDate,
     };
 
     try {
@@ -112,7 +115,7 @@ const AddTaskScreen: React.FC = () => {
   };
 
   const toggleDay = (dayIndex: number) => {
-    const apiDay = dayIndex === 6 ? 0 : dayIndex + 1; // Convert to 0-6 (Sun-Sat)
+    const apiDay = dayIndex + 1;
     setRecurringDays(prev => 
       prev.includes(apiDay) ? prev.filter(d => d !== apiDay) : [...prev, apiDay]
     );
@@ -336,7 +339,7 @@ const AddTaskScreen: React.FC = () => {
                         className="flex justify-between gap-2 overflow-x-auto no-scrollbar py-2"
                       >
                         {days.map((day, i) => {
-                          const apiDay = i === 6 ? 0 : i + 1;
+                          const apiDay = i + 1;
                           const isActive = recurringDays.includes(apiDay);
                           return (
                             <button
