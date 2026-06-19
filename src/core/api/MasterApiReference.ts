@@ -11,6 +11,7 @@ export const resolvePath = (path: string, params: Record<string, string>) =>
 
 export const MasterApiReference = {
   Auth: {
+    Login: '/auth/login',
     SendOtp: '/auth/send-otp',
     VerifyOtp: '/auth/verify-otp',
     VerifyPin: '/auth/verify-pin',
@@ -136,6 +137,7 @@ export const MasterApiReference = {
   },
   Reports: {
     WeeklyDigest: '/families/:familyId/reports/weekly-digest',
+    Archive: '/families/:familyId/reports/archive',
     AttendanceSummary: '/children/:childId/reports/attendance-summary',
     MonthlyFamily: '/families/:familyId/reports/monthly',
     ChildMonthly: '/families/:familyId/children/:childId/reports/monthly',

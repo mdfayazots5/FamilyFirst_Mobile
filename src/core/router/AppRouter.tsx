@@ -116,7 +116,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
 
   if (!isAuthReady) return <SplashScreen />;
   if (!isAuthenticated) {
-    return <Navigate to={AppConfig.isDemo ? "/demo-login" : "/phone-login"} replace />;
+    return <Navigate to="/phone-login" replace />;
   }
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
     return <Navigate to="/" replace />;

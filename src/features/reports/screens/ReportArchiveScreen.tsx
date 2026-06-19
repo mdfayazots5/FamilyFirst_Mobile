@@ -2,48 +2,24 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, RefreshCw, ChevronRight, Calendar } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { AppConfig } from '../../../core/config/appConfig';
-
-// Archive screen — shows last 12 months of weekly digests.
-// Each entry taps back to WeeklyDigestScreen with the stored week date.
-
-interface DigestEntry {
-  weekStartDate: string;
-  label: string;
-  familyScore: number;
-  childCount: number;
-}
-
-const DEMO_ARCHIVE: DigestEntry[] = Array.from({ length: 12 }, (_, i) => {
-  const d = new Date();
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // last Monday
-  d.setDate(d.getDate() - i * 7);
-  const iso = d.toISOString().split('T')[0];
-  return {
-    weekStartDate: iso,
-    label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-    familyScore: 70 + Math.floor(Math.random() * 25),
-    childCount: 2,
-  };
-});
+import { ReportsRepository, DigestEntry } from '../repositories/ReportsRepository';
 
 const ReportArchiveScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [entries, setEntries] = useState<DigestEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     if (!user?.familyId) return;
     setIsLoading(true);
+    setError(null);
     try {
-      // In production: GET /families/{familyId}/reports/archive — not yet implemented.
-      // Demo uses inline data; live will call an archive endpoint once WeeklyDigestWorker
-      // stores digest rows in the WeeklyDigestArchive table (script 057).
-      if (AppConfig.isDemo) {
-        await new Promise(r => setTimeout(r, 400));
-        setEntries(DEMO_ARCHIVE);
-      }
+      const data = await ReportsRepository.getDigestArchive(user.familyId);
+      setEntries(data);
+    } catch {
+      setError('Could not load archive. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -79,6 +55,11 @@ const ReportArchiveScreen: React.FC = () => {
           <div className="flex justify-center py-12">
             <RefreshCw className="w-6 h-6 text-gray-300 animate-spin" />
           </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <p className="text-sm text-red-500">{error}</p>
+            <button onClick={load} className="mt-3 text-xs text-[#1A2E4A] underline">Retry</button>
+          </div>
         ) : entries.length === 0 ? (
           <div className="text-center py-12">
             <Calendar className="w-10 h-10 text-gray-200 mx-auto mb-3" />
@@ -99,7 +80,7 @@ const ReportArchiveScreen: React.FC = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-[#1A2E4A] truncate">
-                  Week of {entry.label}
+                  Week of {new Date(entry.weekStartDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">
                   Family Score: {entry.familyScore} · {entry.childCount} child{entry.childCount !== 1 ? 'ren' : ''}

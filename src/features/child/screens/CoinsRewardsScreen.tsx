@@ -24,7 +24,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { RewardRepository, Reward, CoinTransaction, Redemption } from '../../parent/repositories/RewardRepository';
-import { AppConfig } from '../../../core/config/appConfig';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFBadge from '../../../shared/components/FFBadge';
@@ -43,12 +42,18 @@ const CoinsRewardsScreen: React.FC = () => {
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [activeTab, setActiveTab] = useState<'shop' | 'history'>('shop');
 
-  const currentCoins = AppConfig.isDemo
-    ? 340
-    : history.reduce(
-        (balance, item) => balance + (item.type === 'Earned' ? item.amount : -item.amount),
-        0,
-      );
+  const currentCoins = history.reduce(
+    (balance, item) => balance + (item.type === 'Earned' ? item.amount : -item.amount),
+    0,
+  );
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayEarned = history
+    .filter(tx => tx.type === 'Earned' && tx.date.startsWith(todayStr))
+    .reduce((sum, tx) => sum + tx.amount, 0);
+  const todaySpent = history
+    .filter(tx => tx.type === 'Spent' && tx.date.startsWith(todayStr))
+    .reduce((sum, tx) => sum + tx.amount, 0);
 
   const fetchData = useCallback(async () => {
     if (!user?.familyId || !user?.id) return;
@@ -187,14 +192,14 @@ const CoinsRewardsScreen: React.FC = () => {
                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 italic">DAILY_ACCUMULATION</p>
                    <TrendingUp size={16} className="text-success" />
                 </div>
-                <div className="text-5xl font-display font-black italic text-success tracking-tighter">+55.00</div>
+                <div className="text-5xl font-display font-black italic text-success tracking-tighter">+{todayEarned}</div>
               </div>
               <div className="p-10 bg-white/5 rounded-[40px] border border-white/5 backdrop-blur-xl shadow-inner group/stat hover:bg-white/10 transition-all">
                 <div className="flex items-center justify-between mb-6">
                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 italic">VELOCITY_EXPENDED</p>
                    <TrendingDown size={16} className="text-alert" />
                 </div>
-                <div className="text-5xl font-display font-black italic text-alert tracking-tighter">-120.00</div>
+                <div className="text-5xl font-display font-black italic text-alert tracking-tighter">-{todaySpent}</div>
               </div>
             </div>
           </div>
@@ -319,7 +324,7 @@ const CoinsRewardsScreen: React.FC = () => {
                 <div className="space-y-6 relative z-10">
                   <h3 className="text-5xl font-display font-black text-primary tracking-tighter uppercase italic leading-tight">Authorize_Transfer?</h3>
                   <p className="text-gray-500 font-medium leading-relaxed text-lg px-8">
-                    Initiating high-velocity redemption order for <span className="text-primary font-black italic">{selectedReward.title.toUpperCase()}</span>. This operation will debit <span className="text-accent font-black underline decoration-4 underline-offset-8">{selectedReward.coinCost} CREDITS</span> from your reserve.
+                    Initiating high-velocity redemption order for <span className="text-primary font-black italic">{selectedReward.name.toUpperCase()}</span>. This operation will debit <span className="text-accent font-black underline decoration-4 underline-offset-8">{selectedReward.coinCost} CREDITS</span> from your reserve.
                   </p>
                 </div>
 

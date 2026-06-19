@@ -27,6 +27,14 @@ interface JoinCodeChild {
 }
 
 export const AuthRepository = {
+  loginWithPassword: async (phoneNumber: string, countryCode: string, password: string): Promise<AuthResponse> => {
+    const response = await apiClient.post<ApiResponse<AuthResponse>>(
+      MasterApiReference.Auth.Login,
+      { phoneNumber, countryCode, password },
+    );
+    return response.data.data as AuthResponse;
+  },
+
   sendOtp: async (phoneNumber: string, countryCode: string) => {
     if (AppConfig.isDemo) {
       return { otpToken: 'demo_otp_token' };

@@ -2,14 +2,28 @@
  * Production Configuration for FamilyFirst
  */
 
+const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
+  if (value === undefined) return fallback;
+  const normalised = value.trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(normalised)) return true;
+  if (['false', '0', 'no', 'off'].includes(normalised)) return false;
+  return fallback;
+};
+
+const resolveApiBaseUrl = (): string => {
+  const configuredUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (!configuredUrl) return 'https://api.familyfirst.app/api';
+  return configuredUrl.endsWith('/') ? configuredUrl.slice(0, -1) : configuredUrl;
+};
+
 export const AppConfig = {
-  isDemo: true, // Set to true for demo mode, false for live API
-  apiBaseUrl: 'https://api.familyfirst.app/api',
+  isDemo: parseBoolean(import.meta.env.VITE_IS_DEMO, false),
+  apiBaseUrl: resolveApiBaseUrl(),
   fcmEnabled: true,
   analyticsEnabled: true,
   version: '1.0.0',
   buildNumber: '100',
-  environment: 'production',
+  environment: import.meta.env.MODE ?? 'production',
   
   // Feature Flags
   features: {

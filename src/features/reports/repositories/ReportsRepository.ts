@@ -153,6 +153,16 @@ const DEMO_HEALTH_REMINDERS: HealthReminder[] = [
 
 // ── Existing Level 1 interfaces ───────────────────────────────────────────────
 
+export interface DigestEntry {
+  archiveId: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  generatedAt: string;
+  familyScore: number;
+  childCount: number;
+  shareableImageUrl?: string | null;
+}
+
 export interface WeeklyDigest {
   familyScore: number;
   previousFamilyScore: number;
@@ -198,6 +208,14 @@ const mapLookupItems = (items: MasterDataItem[]): ReportLookupOption[] =>
   }));
 
 export const ReportsRepository = {
+  getDigestArchive: async (familyId: string): Promise<DigestEntry[]> => {
+    const response = await apiClient.get<ApiResponse<{ items: DigestEntry[]; totalCount: number }>>(
+      resolvePath(MasterApiReference.Reports.Archive, { familyId }),
+      { params: { page: 1, pageSize: 12 } },
+    );
+    return response.data.data?.items ?? [];
+  },
+
   getWeeklyDigest: async (familyId: string, weekStartDate: string): Promise<WeeklyDigest> => {
     if (AppConfig.isDemo) {
       return {
