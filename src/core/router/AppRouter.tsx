@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-
 import { useAuth, UserRole } from '../auth/AuthContext';
 import { AppConfig } from '../config/appConfig';
 import SplashScreen from '../../features/auth/SplashScreen';
-import DemoLoginScreen from '../../features/auth/DemoLoginScreen';
 import PhoneLoginScreen from '../../features/auth/PhoneLoginScreen';
 import OtpVerifyScreen from '../../features/auth/OtpVerifyScreen';
 import ChildLoginScreen from '../../features/auth/ChildLoginScreen';
@@ -100,23 +99,15 @@ const EmergencyCardPublicRoute: React.FC = () => {
   return <EmergencyCardScreen shareToken={token} />;
 };
 
-// Stub components for Phase 01/02
-const HomeStub = ({ role }: { role: string }) => (
-  <div className="p-8">
-    <h1 className="text-3xl mb-4">{role} Home</h1>
-    <p className="text-gray-600">This is a placeholder for the {role} dashboard. Feature screens coming in Phase 03+.</p>
-  </div>
-);
-
-const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserRole[] }> = ({ 
-  children, 
-  allowedRoles 
+const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserRole[] }> = ({
+  children,
+  allowedRoles
 }) => {
   const { isAuthenticated, isAuthReady, user } = useAuth();
 
   if (!isAuthReady) return <SplashScreen />;
   if (!isAuthenticated) {
-    return <Navigate to="/phone-login" replace />;
+    return <Navigate to="/login" replace />;
   }
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
     return <Navigate to="/" replace />;
@@ -125,36 +116,50 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
   return <>{children}</>;
 };
 
-const AppRouter: React.FC = () => {
+const ProfileRoute: React.FC = () => {
+  const { user } = useAuth();
+  return user?.role === UserRole.TEACHER ? <TeacherProfileScreen /> : <ParentProfileScreen />;
+};
+
+// Reads auth context directly so it always has the live user value,
+// regardless of when the parent AppRouter last rendered.
+const RoleRedirect: React.FC = () => {
   const { user, isAuthReady } = useAuth();
+
+  if (!isAuthReady) return <SplashScreen />;
+
+  switch (user?.role) {
+    case UserRole.SUPER_ADMIN:   return <Navigate to="/admin" replace />;
+    case UserRole.FAMILY_ADMIN:  return <Navigate to="/parent/admin" replace />;
+    case UserRole.PARENT:        return <Navigate to="/parent" replace />;
+    case UserRole.CHILD:         return <Navigate to="/child" replace />;
+    case UserRole.TEACHER:       return <Navigate to="/teacher" replace />;
+    case UserRole.ELDER:         return <Navigate to="/elder" replace />;
+    default:                     return <Navigate to="/login" replace />;
+  }
+};
+
+const AppRouter: React.FC = () => {
+  const { isAuthReady } = useAuth();
 
   if (!isAuthReady) return <SplashScreen />;
 
   return (
     <Routes>
       <Route path="/splash" element={<SplashScreen />} />
-      <Route path="/demo-login" element={<DemoLoginScreen />} />
-      <Route path="/phone-login" element={<PhoneLoginScreen />} />
+      <Route path="/login" element={<PhoneLoginScreen />} />
       <Route path="/otp-verify" element={<OtpVerifyScreen />} />
       <Route path="/child-login" element={<ChildLoginScreen />} />
-      
+
       <Route path="/family-setup" element={<FamilySetupWizard />} />
-      
+
       {/* Main App Shell */}
       <Route path="/" element={
         <ProtectedRoute>
           <AppNavShell />
         </ProtectedRoute>
       }>
-        <Route index element={
-          user?.role === UserRole.SUPER_ADMIN ? <Navigate to="/admin" /> :
-          user?.role === UserRole.FAMILY_ADMIN ? <Navigate to="/parent/admin" /> :
-          user?.role === UserRole.PARENT ? <Navigate to="/parent" /> :
-          user?.role === UserRole.CHILD ? <Navigate to="/child" /> :
-          user?.role === UserRole.TEACHER ? <Navigate to="/teacher" /> :
-          user?.role === UserRole.ELDER ? <Navigate to="/elder" /> :
-          <HomeStub role="User" />
-        } />
+        <Route index element={<RoleRedirect />} />
         
         {/* Role Dashboards */}
         <Route path="parent" element={<ParentHomeScreen />} />
@@ -169,9 +174,7 @@ const AppRouter: React.FC = () => {
         <Route path="parent/join-code" element={<JoinCodeScreen />} />
         <Route path="parent/children/:childId" element={<ChildDetailScreen />} />
         
-        <Route path="profile" element={
-          user?.role === UserRole.TEACHER ? <TeacherProfileScreen /> : <ParentProfileScreen />
-        } />
+        <Route path="profile" element={<ProfileRoute />} />
         
         {/* Teacher Specific Routes */}
         <Route path="teacher/attendance/:sessionId" element={<AttendanceMarkingScreen />} />

@@ -224,7 +224,7 @@ const TeacherSettingsScreen: React.FC = () => {
           <button
             onClick={() => {
               logout();
-              navigate('/demo-login');
+              navigate('/login');
             }}
             className="w-full h-32 rounded-[56px] border-4 border-dashed border-alert/20 text-alert font-black uppercase tracking-[0.5em] flex items-center justify-center gap-8 hover:bg-alert hover:text-white hover:border-alert transition-all duration-700 group overflow-hidden relative shadow-lg italic"
           >

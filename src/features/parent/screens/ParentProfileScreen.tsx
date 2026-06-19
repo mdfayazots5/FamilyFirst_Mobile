@@ -39,7 +39,7 @@ const ParentProfileScreen: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/demo-login');
+    navigate('/login');
   };
 
   const badges = [

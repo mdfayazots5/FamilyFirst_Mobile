@@ -42,7 +42,7 @@ const ParentSettingsScreen: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/demo-login');
+    navigate('/login');
   };
 
   const code = 'FAM-7829-X';

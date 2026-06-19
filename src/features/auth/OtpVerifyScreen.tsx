@@ -21,7 +21,7 @@ const OtpVerifyScreen: React.FC = () => {
 
   useEffect(() => {
     if (!phoneNumber) {
-      navigate('/phone-login');
+      navigate('/login');
     }
   }, [phoneNumber, navigate]);
 
@@ -81,7 +81,7 @@ const OtpVerifyScreen: React.FC = () => {
       >
         <FFCard className="p-10 lg:p-14 shadow-3xl shadow-primary/5 rounded-[64px] border-none group bg-white/80 backdrop-blur-xl">
           <button 
-            onClick={() => navigate('/phone-login')}
+            onClick={() => navigate('/login')}
             className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 hover:text-primary hover:bg-white border border-black/[0.03] transition-all active:scale-95 shadow-sm group/back mb-12"
           >
             <ArrowLeft size={24} className="group-hover/back:-translate-x-1 transition-transform" />

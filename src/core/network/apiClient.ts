@@ -61,7 +61,7 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         // If refresh fails, clear storage and redirect to login (handled by AuthContext)
         SecureStorageService.clearAll();
-        window.location.href = '/phone-login';
+        window.location.href = '/login';
         return Promise.reject(refreshError);
       }
     }

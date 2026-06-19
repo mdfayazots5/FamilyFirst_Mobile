@@ -206,7 +206,7 @@ const ElderSettingsScreen: React.FC = () => {
           <button
             onClick={() => {
               logout();
-              navigate('/demo-login');
+              navigate('/login');
             }}
             className="w-full py-6 text-alert font-black uppercase tracking-[0.2em] text-[11px] flex items-center justify-center gap-4 bg-white border border-alert/10 rounded-[32px] shadow-sm hover:bg-alert hover:text-white hover:shadow-xl hover:shadow-alert/20 transition-all active:scale-95"
             style={{ fontSize: `${11 * scale}px` }}

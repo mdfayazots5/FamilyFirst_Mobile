@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
   Phone, ArrowRight, AlertCircle, Globe, ShieldCheck,
-  Eye, EyeOff, Zap,
-  Shield, Crown, Heart, Star, BookOpen, Users,
+  Eye, EyeOff,
 } from 'lucide-react';
 import FFButton from '../../shared/components/FFButton';
 import FFCard from '../../shared/components/FFCard';
@@ -12,26 +11,12 @@ import FFBadge from '../../shared/components/FFBadge';
 import { AuthRepository } from '../../core/repositories/AuthRepository';
 import { useAuth } from '../../core/auth/AuthContext';
 
-// ─── DEV ONLY — REMOVE BEFORE PRODUCTION ─────────────────────────────────────
-// One-tap role login for testing. Seeded accounts, password 123456.
-// See memory: project_temp_dev_login.md
-const DEV_ROLES = [
-  { label: 'Super Admin',   phone: '9000000001', role: 1, icon: Shield,   bg: 'bg-purple-600',    text: 'text-white' },
-  { label: 'Family Admin',  phone: '9000000002', role: 2, icon: Crown,    bg: 'bg-[#1A2E4A]',     text: 'text-white' },
-  { label: 'Parent',        phone: '9000000003', role: 3, icon: Heart,    bg: 'bg-[#2D6A4F]',     text: 'text-white' },
-  { label: 'Child',         phone: '9000000004', role: 4, icon: Star,     bg: 'bg-[#C8922A]',     text: 'text-white' },
-  { label: 'Teacher',       phone: '9000000005', role: 5, icon: BookOpen, bg: 'bg-blue-600',      text: 'text-white' },
-  { label: 'Elder',         phone: '9000000006', role: 6, icon: Users,    bg: 'bg-orange-500',    text: 'text-white' },
-] as const;
-// ─────────────────────────────────────────────────────────────────────────────
-
 const PhoneLoginScreen: React.FC = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [countryCode, setCountryCode] = useState('+91');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [devLoadingRole, setDevLoadingRole] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { handleAuthResponse } = useAuth();
@@ -51,26 +36,11 @@ const PhoneLoginScreen: React.FC = () => {
     try {
       const authResponse = await AuthRepository.loginWithPassword(phoneNumber, countryCode, password);
       handleAuthResponse(authResponse);
-      navigate('/home', { replace: true });
+      navigate('/', { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || 'Invalid phone number or password.');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // DEV ONLY — one-tap role login
-  const handleDevLogin = async (phone: string, roleInt: number) => {
-    setDevLoadingRole(roleInt);
-    setError(null);
-    try {
-      const authResponse = await AuthRepository.loginWithPassword(phone, '+91', '123456');
-      handleAuthResponse(authResponse);
-      navigate('/home', { replace: true });
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || 'Dev login failed.');
-    } finally {
-      setDevLoadingRole(null);
     }
   };
 
@@ -93,42 +63,6 @@ const PhoneLoginScreen: React.FC = () => {
         transition={{ duration: 0.8, ease: 'easeOut' }}
         className="max-w-md w-full relative z-10 space-y-4"
       >
-        {/* ── DEV ONLY — Quick Role Login ──────────────────────────────────── */}
-        <div className="rounded-[32px] border-2 border-dashed border-amber-400/60 bg-amber-50/80 p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Zap size={14} className="text-amber-600" />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-700">
-              Dev Testing — Quick Login
-            </span>
-            <span className="ml-auto text-[9px] font-bold text-amber-400 uppercase tracking-widest">
-              Remove before prod
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {DEV_ROLES.map(({ label, phone, role, icon: Icon, bg, text }) => (
-              <button
-                key={role}
-                onClick={() => handleDevLogin(phone, role)}
-                disabled={devLoadingRole !== null}
-                className={`${bg} ${text} rounded-[16px] p-3 flex items-center gap-3 active:scale-95 transition-transform disabled:opacity-50 text-left`}
-              >
-                <div className="shrink-0 w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-                  {devLoadingRole === role ? (
-                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <Icon size={16} strokeWidth={1.5} />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-wide leading-none">{label}</p>
-                  <p className="text-[9px] font-mono opacity-70 mt-0.5">{phone} / 123456</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* ── END DEV ONLY ─────────────────────────────────────────────────── */}
-
         <FFCard className="p-10 lg:p-14 shadow-3xl shadow-primary/5 rounded-[64px] border-none">
           <div className="flex justify-center mb-12">
             <div className="relative">

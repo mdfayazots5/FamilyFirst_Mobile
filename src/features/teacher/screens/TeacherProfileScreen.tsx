@@ -29,7 +29,7 @@ const TeacherProfileScreen: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/phone-login');
+    navigate('/login');
   };
 
   return (

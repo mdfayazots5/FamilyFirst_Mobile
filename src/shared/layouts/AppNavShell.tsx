@@ -5,23 +5,21 @@ import { useAuth, UserRole } from '../../core/auth/AuthContext';
 import { useNotifications } from '../../features/notifications/providers/NotificationProvider';
 import OfflineBanner from '../../core/connectivity/OfflineBanner';
 import FFButton from '../components/FFButton';
-import { 
-  Home, 
-  Users, 
+import {
+  Home,
+  Users,
   Shield,
-  Calendar, 
-  Lock, 
-  User, 
+  Calendar,
+  User,
   LogOut,
-  BookOpen,
   Star,
-  Heart,
   Settings,
   LayoutDashboard,
   Coins,
   Trophy,
+  BarChart2,
+  FileText,
   Bell,
-  FileText
 } from 'lucide-react';
 
 const AppNavShell: React.FC = () => {
@@ -31,7 +29,7 @@ const AppNavShell: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/demo-login');
+    navigate('/login');
   };
 
   // Define navigation items based on role
@@ -66,9 +64,10 @@ const AppNavShell: React.FC = () => {
         ];
       case UserRole.SUPER_ADMIN:
         return [
-          { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/admin' },
-          { icon: <Users size={20} />, label: 'Families', path: '/admin/families' },
-          { icon: <Settings size={20} />, label: 'Config', path: '/admin/config' },
+          { icon: <LayoutDashboard size={22} />, label: 'Dashboard', path: '/admin' },
+          { icon: <Users size={22} />, label: 'Families', path: '/admin/families' },
+          { icon: <BarChart2 size={22} />, label: 'Analytics', path: '/admin/analytics' },
+          { icon: <Settings size={22} />, label: 'Config', path: '/admin/config' },
         ];
       case UserRole.FAMILY_ADMIN:
         return [
@@ -180,30 +179,28 @@ const AppNavShell: React.FC = () => {
         </div>
       </nav>
 
-      {/* Bottom Navigation (Mobile) */}
-      <nav className="fixed bottom-4 left-4 right-4 z-50 flex h-18 items-center justify-between rounded-ff-lg bg-primary px-4 text-white shadow-2xl shadow-primary/40 md:hidden [padding-bottom:calc(env(safe-area-inset-bottom,0px)+0.25rem)]">
+      {/* Bottom Navigation (Mobile) — labels are MANDATORY per UIStandertds §2.8 */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-stretch justify-around bg-primary md:hidden border-t border-white/10"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
         {navItems.slice(0, 5).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             end={item.path.split('/').length <= 2}
-            className={({ isActive }) => `
-              relative flex min-h-12 min-w-12 flex-col items-center justify-center rounded-ff-sm transition-all duration-300
-              ${isActive ? 'text-accent scale-110' : 'text-white/40 hover:text-white/60'}
-            `}
+            className={({ isActive }) =>
+              `flex flex-col items-center justify-center gap-0.5 min-w-[56px] px-2 py-2 transition-colors duration-150
+               ${isActive ? 'text-accent' : 'text-white/40'}`
+            }
+            aria-label={item.label}
           >
             {({ isActive }) => (
               <>
-                <div className="relative z-10">
-                  {React.cloneElement(item.icon as React.ReactElement, { size: 22 })}
-                </div>
-                {isActive && (
-                  <motion.div 
-                    layoutId="nav-active"
-                    className="absolute -inset-2 bg-white/10 rounded-xl -z-0"
-                    transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-                  />
-                )}
+                {/* Active indicator bar */}
+                <div className={`h-0.5 w-6 rounded-full mb-0.5 transition-colors ${isActive ? 'bg-accent' : 'bg-transparent'}`} />
+                {React.cloneElement(item.icon as React.ReactElement, { size: 22 })}
+                <span className="font-body font-semibold text-[10px] leading-none mt-0.5">{item.label}</span>
               </>
             )}
           </NavLink>

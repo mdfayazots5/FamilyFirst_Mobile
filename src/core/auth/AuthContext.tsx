@@ -1,15 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { SecureStorageService } from '../storage/SecureStorageService';
 import { AuthRepository, AuthResponse } from '../repositories/AuthRepository';
-
-export enum UserRole {
-  SUPER_ADMIN = 'SUPER_ADMIN',
-  FAMILY_ADMIN = 'FAMILY_ADMIN',
-  PARENT = 'PARENT',
-  TEACHER = 'TEACHER',
-  CHILD = 'CHILD',
-  ELDER = 'ELDER',
-}
+export { UserRole, normalizeRole } from './UserRole';
+import { UserRole, normalizeRole } from './UserRole';
 
 interface User {
   id: string;
@@ -47,7 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (token && savedUser) {
         setState({
-          user: savedUser,
+          user: { ...savedUser, role: normalizeRole(savedUser.role) },
           isAuthenticated: true,
           isAuthReady: true,
         });

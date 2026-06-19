@@ -1,7 +1,7 @@
 import apiClient from '../network/apiClient';
 import { MasterApiReference } from '../api/MasterApiReference';
 import { AppConfig } from '../config/appConfig';
-import { UserRole } from '../auth/AuthContext';
+import { UserRole } from '../auth/UserRole';
 import type { ApiResponse } from '../network/apiTypes';
 
 export interface AuthResponse {
@@ -13,6 +13,36 @@ export interface AuthResponse {
     name: string;
     familyId?: string;
     childProfileId?: string;
+  };
+}
+
+// API returns PascalCase role strings; map them to internal UserRole enum values.
+const API_ROLE_MAP: Record<string, UserRole> = {
+  SuperAdmin: UserRole.SUPER_ADMIN,
+  FamilyAdmin: UserRole.FAMILY_ADMIN,
+  Parent: UserRole.PARENT,
+  Child: UserRole.CHILD,
+  Teacher: UserRole.TEACHER,
+  Elder: UserRole.ELDER,
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapApiUser(apiUser: any): AuthResponse['user'] {
+  return {
+    id: apiUser.userId ?? apiUser.id,
+    role: API_ROLE_MAP[apiUser.role] ?? apiUser.role,
+    name: apiUser.fullName ?? apiUser.name,
+    familyId: apiUser.familyId,
+    childProfileId: apiUser.childProfileId,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapApiAuthResponse(raw: any): AuthResponse {
+  return {
+    accessToken: raw.accessToken,
+    refreshToken: raw.refreshToken,
+    user: mapApiUser(raw.user),
   };
 }
 
@@ -32,7 +62,7 @@ export const AuthRepository = {
       MasterApiReference.Auth.Login,
       { phoneNumber, countryCode, password },
     );
-    return response.data.data as AuthResponse;
+    return mapApiAuthResponse(response.data.data);
   },
 
   sendOtp: async (phoneNumber: string, countryCode: string) => {
@@ -58,7 +88,7 @@ export const AuthRepository = {
       };
     }
     const response = await apiClient.post<ApiResponse<AuthResponse>>(MasterApiReference.Auth.VerifyOtp, { phoneNumber, otpToken, otpCode });
-    return response.data.data as AuthResponse;
+    return mapApiAuthResponse(response.data.data);
   },
 
   verifyPin: async (userId: string, pin: string): Promise<AuthResponse> => {
@@ -79,7 +109,7 @@ export const AuthRepository = {
       };
     }
     const response = await apiClient.post<ApiResponse<AuthResponse>>(MasterApiReference.Auth.VerifyPin, { userId, pin });
-    return response.data.data as AuthResponse;
+    return mapApiAuthResponse(response.data.data);
   },
 
   getChildrenByJoinCode: async (joinCode: string): Promise<JoinCodeChild[]> => {
@@ -98,7 +128,7 @@ export const AuthRepository = {
 
   getMe: async (): Promise<AuthResponse['user']> => {
     const response = await apiClient.get<ApiResponse<AuthResponse['user']>>(MasterApiReference.Auth.Me);
-    return response.data.data as AuthResponse['user'];
+    return mapApiUser(response.data.data);
   },
 
   logout: async (refreshToken: string): Promise<boolean> => {

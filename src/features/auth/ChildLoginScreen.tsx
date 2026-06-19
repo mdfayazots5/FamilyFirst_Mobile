@@ -81,7 +81,7 @@ const ChildLoginScreen: React.FC = () => {
         <FFCard className="p-10 lg:p-14 shadow-3xl shadow-primary/5 min-h-[700px] flex flex-col rounded-[64px] border-none group bg-white/80 backdrop-blur-xl">
           <div className="flex items-center justify-between mb-12">
             <button 
-              onClick={() => step === 'JOIN_CODE' ? navigate('/phone-login') : setStep(step === 'PIN_PAD' ? 'NAME_PICKER' : 'JOIN_CODE')}
+              onClick={() => step === 'JOIN_CODE' ? navigate('/login') : setStep(step === 'PIN_PAD' ? 'NAME_PICKER' : 'JOIN_CODE')}
               className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 hover:text-primary hover:bg-white border border-black/[0.03] transition-all active:scale-95 shadow-sm group/back"
             >
               <ArrowLeft size={24} className="group-hover/back:-translate-x-1 transition-transform" />

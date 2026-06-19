@@ -24,7 +24,7 @@ const ProfileScreen: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/demo-login');
+    navigate('/login');
   };
 
   const getSettingsPath = () => {
