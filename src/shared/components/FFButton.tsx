@@ -26,9 +26,9 @@ const FFButton: React.FC<FFButtonProps> = ({
   };
 
   const sizes = {
-    sm: 'px-4 py-2 text-xs rounded-ff-sm min-h-[40px]',
-    md: 'px-5 py-3 text-sm rounded-ff font-bold min-h-[48px]',
-    lg: 'px-6 py-4 text-base rounded-ff-lg font-bold min-h-[56px]',
+    sm: 'min-h-12 min-w-12 px-4 py-2.5 text-sm font-bold rounded-ff-sm',
+    md: 'min-h-12 min-w-12 px-5 py-3 text-sm font-bold rounded-ff',
+    lg: 'min-h-14 min-w-14 px-6 py-4 text-base font-bold rounded-ff-lg',
   };
 
   return (
@@ -36,12 +36,12 @@ const FFButton: React.FC<FFButtonProps> = ({
       whileHover={{ scale: 1.01, translateY: -1 }}
       whileTap={{ scale: 0.98 }}
       className={`
-        inline-flex items-center justify-center gap-2.5 transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none
+        inline-flex items-center justify-center gap-2.5 whitespace-nowrap transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none
         ${variants[variant]}
         ${sizes[size]}
         ${className}
       `}
-      disabled={isLoading}
+      disabled={isLoading || props.disabled}
       {...props}
     >
       {isLoading ? (

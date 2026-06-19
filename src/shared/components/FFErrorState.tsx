@@ -16,23 +16,24 @@ const FFErrorState: React.FC<FFErrorStateProps> = ({
   onRetry,
   type = 'generic'
 }) => {
-  const isOffline = type === 'offline' || !navigator.onLine;
+  const isOffline =
+    type === 'offline' || (typeof navigator !== 'undefined' && !navigator.onLine);
 
   return (
     <motion.div 
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="flex flex-col items-center justify-center p-12 text-center space-y-6"
+      className="flex flex-col items-center justify-center gap-6 px-6 py-12 text-center sm:px-10"
     >
-      <div className={`p-6 rounded-[40px] ${isOffline ? 'bg-amber-50 text-amber-500' : 'bg-alert/5 text-alert'}`}>
+      <div className={`flex h-24 w-24 items-center justify-center rounded-[32px] ${isOffline ? 'bg-amber-50 text-amber-600' : 'bg-alert/5 text-alert'}`}>
         {isOffline ? <WifiOff size={48} /> : <AlertCircle size={48} />}
       </div>
       
-      <div className="space-y-2 max-w-xs">
-        <h3 className="text-xl font-display font-bold text-primary">
+      <div className="max-w-md space-y-3">
+        <h3 className="text-2xl font-display font-bold text-primary">
           {isOffline ? 'No Internet Connection' : title}
         </h3>
-        <p className="text-sm text-gray-400 font-medium leading-relaxed">
+        <p className="text-sm font-body leading-relaxed text-slate-500 sm:text-base">
           {isOffline ? 'Please check your connection and try again to see the latest updates.' : message}
         </p>
       </div>
@@ -41,6 +42,7 @@ const FFErrorState: React.FC<FFErrorStateProps> = ({
         <FFButton 
           variant={isOffline ? 'accent' : 'primary'}
           icon={<RefreshCw size={18} />}
+          className="px-6"
           onClick={onRetry}
         >
           Try Again

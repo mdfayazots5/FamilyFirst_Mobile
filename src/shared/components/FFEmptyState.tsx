@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Inbox, Plus } from 'lucide-react';
+import { Inbox } from 'lucide-react';
 import FFButton from './FFButton';
 
 interface FFEmptyStateProps {
@@ -12,8 +12,8 @@ interface FFEmptyStateProps {
 }
 
 const FFEmptyState: React.FC<FFEmptyStateProps> = ({
-  title = 'NULL STATE',
-  message = 'System is awaiting initial data entry.',
+  title = 'Nothing here yet',
+  message = 'There is no data to show right now. Try the suggested action to get started.',
   actionLabel,
   onAction,
   icon = <Inbox size={32} />
@@ -22,21 +22,21 @@ const FFEmptyState: React.FC<FFEmptyStateProps> = ({
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center p-20 text-center space-y-10"
+      className="flex flex-col items-center justify-center gap-6 px-6 py-12 text-center sm:px-10"
     >
-      <div className="w-24 h-24 rounded-[32px] bg-gray-50 flex items-center justify-center text-gray-200 shadow-inner">
+      <div className="flex h-24 w-24 items-center justify-center rounded-[32px] bg-primary/5 text-primary shadow-inner">
         {icon}
       </div>
       
-      <div className="space-y-4 max-w-sm">
-        <h3 className="text-3xl font-display font-black text-primary uppercase italic tracking-tighter">{title}</h3>
-        <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] leading-loose">{message}</p>
+      <div className="max-w-md space-y-3">
+        <h3 className="text-2xl font-display font-bold text-primary sm:text-3xl">{title}</h3>
+        <p className="text-sm font-body leading-relaxed text-slate-500 sm:text-base">{message}</p>
       </div>
 
       {onAction && actionLabel && (
         <FFButton 
           variant="outline"
-          className="rounded-2xl text-[10px] font-black uppercase tracking-widest h-14 px-10"
+          className="px-6"
           onClick={onAction}
         >
           {actionLabel}

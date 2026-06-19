@@ -33,18 +33,22 @@ const FFCard: React.FC<FFCardProps> = ({
       {...hoverProps}
       onClick={onClick}
       className={`
-        ff-card flex flex-col gap-4 transition-all duration-300
+        ff-card flex h-full flex-col gap-4 overflow-hidden transition-all duration-300
         ${hoverable ? 'cursor-pointer hover:border-primary/10 hover:shadow-premium-lg' : ''}
         ${className}
       `}
     >
       {(title || icon) && (
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-3">
-            {icon && <div className="p-2.5 bg-primary/5 rounded-ff-sm text-primary">{icon}</div>}
+        <div className="mb-1 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            {icon && (
+              <div className="flex min-h-12 min-w-12 items-center justify-center rounded-ff-sm bg-primary/5 text-primary">
+                {icon}
+              </div>
+            )}
             <div>
               {title && <h3 className="text-base font-display font-bold leading-tight">{title}</h3>}
-              {subtitle && <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{subtitle}</p>}
+              {subtitle && <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-gray-400">{subtitle}</p>}
             </div>
           </div>
         </div>
@@ -55,7 +59,7 @@ const FFCard: React.FC<FFCardProps> = ({
       </div>
 
       {footer && (
-        <div className="pt-4 mt-auto border-t border-black/5 flex items-center justify-between">
+        <div className="mt-auto flex items-center justify-between border-t border-black/5 pt-4">
           {footer}
         </div>
       )}

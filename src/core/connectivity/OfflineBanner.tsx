@@ -13,14 +13,14 @@ const OfflineBanner: React.FC = () => {
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
-          className="bg-amber-500 text-white overflow-hidden sticky top-0 z-[100] shadow-md"
+          className="sticky top-0 z-[100] overflow-hidden border-b border-amber-700/20 bg-amber-500 text-white shadow-md"
         >
-          <div className="px-6 py-2 flex items-center justify-center gap-3">
-            <WifiOff size={16} className="animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-widest">
-              You are currently offline. Showing cached data.
+          <div className="flex min-h-12 items-center justify-center gap-3 px-4 py-2 text-center sm:px-6">
+            <WifiOff size={18} className="shrink-0 animate-pulse" />
+            <span className="text-sm font-bold leading-snug">
+              You are offline. FamilyFirst is showing cached data until the connection returns.
             </span>
-            <AlertTriangle size={14} className="opacity-50" />
+            <AlertTriangle size={16} className="shrink-0 opacity-70" />
           </div>
         </motion.div>
       )}

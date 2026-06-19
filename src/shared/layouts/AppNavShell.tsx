@@ -84,12 +84,16 @@ const AppNavShell: React.FC = () => {
   const navItems = getNavItems();
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg-cream">
+    <div className="flex min-h-screen flex-col bg-bg-cream text-primary">
       <OfflineBanner />
       {/* Top Header */}
-      <header className="h-16 bg-white border-b border-black/[0.03] flex items-center justify-between px-6 sticky top-0 z-40">
-        <div className="flex items-center gap-2.5 group cursor-pointer" onClick={() => navigate('/')}>
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-accent shadow-sm transition-transform duration-300">
+      <header className="sticky top-0 z-40 flex min-h-16 items-center justify-between border-b border-black/[0.03] bg-white/95 px-4 backdrop-blur sm:px-6">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="flex min-h-12 items-center gap-2.5 rounded-ff-sm text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-accent shadow-sm transition-transform duration-300">
             <Home size={22} fill="currentColor" />
           </div>
           <div className="flex flex-col leading-none">
@@ -98,26 +102,30 @@ const AppNavShell: React.FC = () => {
             </span>
             <span className="text-[9px] font-bold tracking-wider text-accent uppercase mt-0.5">PREMIUM CARE</span>
           </div>
-        </div>
+        </button>
         
-        <div className="flex items-center gap-3">
-          <button 
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            type="button"
             onClick={() => navigate('/notifications')}
-            className="p-2.5 hover:bg-gray-50 text-gray-400 hover:text-primary rounded-ff-sm transition-all relative"
+            className="touch-target relative rounded-ff-sm p-2.5 text-gray-400 transition-all hover:bg-gray-50 hover:text-primary"
             title="Notifications"
+            aria-label="Open notifications"
           >
             <Bell size={20} />
             {unreadCount > 0 && (
-              <span className="absolute top-2 right-2 w-4 h-4 bg-accent text-primary text-[8px] font-black flex items-center justify-center rounded-full border-2 border-white shadow-sm">
+              <span className="absolute right-2 top-2 flex min-h-4 min-w-4 items-center justify-center rounded-full border-2 border-white bg-accent px-1 text-[8px] font-black text-primary shadow-sm">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
           </button>
 
-          <button 
+          <button
+            type="button"
             onClick={() => navigate('/profile')}
-            className="p-2.5 hover:bg-gray-50 text-gray-400 hover:text-primary rounded-ff-sm transition-all"
+            className="touch-target rounded-ff-sm p-2.5 text-gray-400 transition-all hover:bg-gray-50 hover:text-primary"
             title="My Account"
+            aria-label="Open profile"
           >
             <User size={20} />
           </button>
@@ -144,14 +152,14 @@ const AppNavShell: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 pb-24 md:pb-0 md:pl-64">
-        <div className="max-w-5xl mx-auto">
+      <main className="flex-1 pb-28 md:pb-0 md:pl-64">
+        <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 md:px-8">
           <Outlet />
         </div>
       </main>
 
       {/* Sidebar Navigation (Desktop) */}
-      <nav className="hidden md:flex flex-col w-64 bg-white border-r border-black/[0.03] fixed top-16 bottom-0 left-0 p-5">
+      <nav className="fixed bottom-0 left-0 top-16 hidden w-64 flex-col border-r border-black/[0.03] bg-white p-5 md:flex">
         <div className="space-y-1.5">
           {navItems.map((item) => (
             <NavLink
@@ -159,7 +167,7 @@ const AppNavShell: React.FC = () => {
               to={item.path}
               end={item.path.split('/').length <= 2}
               className={({ isActive }) => `
-                flex items-center gap-3.5 px-4 py-3.5 rounded-ff-sm transition-all duration-300
+                flex min-h-12 items-center gap-3.5 rounded-ff-sm px-4 py-3.5 transition-all duration-300
                 ${isActive 
                   ? 'bg-primary text-white shadow-xl shadow-primary/15 translate-x-1' 
                   : 'text-gray-400 hover:bg-gray-50 hover:text-primary'}
@@ -173,14 +181,14 @@ const AppNavShell: React.FC = () => {
       </nav>
 
       {/* Bottom Navigation (Mobile) */}
-      <nav className="md:hidden fixed bottom-6 left-6 right-6 bg-primary text-white h-16 px-6 flex items-center justify-between z-50 rounded-ff-lg shadow-2xl shadow-primary/40">
+      <nav className="fixed bottom-4 left-4 right-4 z-50 flex h-18 items-center justify-between rounded-ff-lg bg-primary px-4 text-white shadow-2xl shadow-primary/40 md:hidden [padding-bottom:calc(env(safe-area-inset-bottom,0px)+0.25rem)]">
         {navItems.slice(0, 5).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             end={item.path.split('/').length <= 2}
             className={({ isActive }) => `
-              flex flex-col items-center justify-center transition-all duration-300 relative
+              relative flex min-h-12 min-w-12 flex-col items-center justify-center rounded-ff-sm transition-all duration-300
               ${isActive ? 'text-accent scale-110' : 'text-white/40 hover:text-white/60'}
             `}
           >
