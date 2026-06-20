@@ -1,27 +1,94 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Send, User, MessageSquare, AlertTriangle, Check, ShieldCheck, Activity, Cpu, Layers, Fingerprint, Zap, ChevronRight, Monitor } from 'lucide-react';
+import React, { useEffect, useMemo, useReducer, useState } from 'react';
+import { AlertCircle, Award, BookOpen, Calendar, CheckCircle2, List, MessageSquare, Send, Star, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, UserRole } from '../../../core/auth/AuthContext';
+import { FamilyRepository } from '../../family/repositories/FamilyRepository';
 import {
   FeedbackRatingOption,
   FeedbackRepository,
   FeedbackType,
   Severity,
 } from '../repositories/FeedbackRepository';
-import { FamilyRepository } from '../../family/repositories/FamilyRepository';
+import FFAvatar from '../../../shared/components/FFAvatar';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
-import FFBadge from '../../../shared/components/FFBadge';
-import FFAvatar from '../../../shared/components/FFAvatar';
-import FeedbackTypePicker from '../widgets/FeedbackTypePicker';
-import WeeklySummaryForm from '../widgets/WeeklySummaryForm';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
 
 interface ChildOption {
   id: string;
   name: string;
 }
+
+type BootstrapState =
+  | { status: 'loading'; children: ChildOption[]; severityOptions: FeedbackRatingOption[]; error: null }
+  | { status: 'ready'; children: ChildOption[]; severityOptions: FeedbackRatingOption[]; error: null }
+  | { status: 'error'; children: ChildOption[]; severityOptions: FeedbackRatingOption[]; error: string };
+
+type BootstrapAction =
+  | { type: 'LOAD_START' }
+  | { type: 'LOAD_SUCCESS'; payload: { children: ChildOption[]; severityOptions: FeedbackRatingOption[] } }
+  | { type: 'LOAD_ERROR'; error: string };
+
+const bootstrapReducer = (state: BootstrapState, action: BootstrapAction): BootstrapState => {
+  switch (action.type) {
+    case 'LOAD_START':
+      return { ...state, status: 'loading', error: null };
+    case 'LOAD_SUCCESS':
+      return { status: 'ready', ...action.payload, error: null };
+    case 'LOAD_ERROR':
+      return { ...state, status: 'error', error: action.error };
+    default:
+      return state;
+  }
+};
+
+const feedbackTypeMeta: Array<{
+  type: FeedbackType;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}> = [
+  {
+    type: 'Appreciation',
+    label: 'Appreciation',
+    description: 'Celebrate a strong effort or positive classroom moment.',
+    icon: <Award className="h-5 w-5" />,
+  },
+  {
+    type: 'Observation',
+    label: 'Observation',
+    description: 'Share a regular classroom note for the family.',
+    icon: <List className="h-5 w-5" />,
+  },
+  {
+    type: 'Homework',
+    label: 'Homework',
+    description: 'Document follow-up work or preparation for home.',
+    icon: <BookOpen className="h-5 w-5" />,
+  },
+  {
+    type: 'Complaint',
+    label: 'Complaint',
+    description: 'Flag a classroom concern that needs attention.',
+    icon: <AlertCircle className="h-5 w-5" />,
+  },
+  {
+    type: 'Urgent',
+    label: 'Urgent',
+    description: 'Escalate an issue that needs quick family action.',
+    icon: <AlertCircle className="h-5 w-5" />,
+  },
+  {
+    type: 'WeeklySummary',
+    label: 'Weekly summary',
+    description: 'Wrap up attendance, homework, and the week’s progress.',
+    icon: <Calendar className="h-5 w-5" />,
+  },
+];
 
 const mapRatingToSeverity = (code: string): Severity => {
   switch (code.toLowerCase()) {
@@ -38,345 +105,366 @@ const FeedbackSubmissionScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [step, setStep] = useState(1);
+  const [bootstrapState, dispatch] = useReducer(bootstrapReducer, {
+    status: 'loading',
+    children: [],
+    severityOptions: [],
+    error: null,
+  });
   const [selectedType, setSelectedType] = useState<FeedbackType | null>(null);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
-  const [children, setChildren] = useState<ChildOption[]>([]);
   const [severity, setSeverity] = useState<Severity>('Low');
-  const [severityOptions, setSeverityOptions] = useState<FeedbackRatingOption[]>([]);
   const [message, setMessage] = useState('');
   const [weeklyData, setWeeklyData] = useState({
     attendanceRate: '',
     homeworkRate: '',
     standout: '',
-    focusArea: ''
+    focusArea: '',
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const [isBootstrapping, setIsBootstrapping] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchChildren = async () => {
-      if (!user?.familyId) return;
+    const loadBootstrap = async () => {
+      if (!user?.familyId) {
+        dispatch({ type: 'LOAD_ERROR', error: 'Teacher family context is missing for feedback.' });
+        return;
+      }
+
+      dispatch({ type: 'LOAD_START' });
+
       try {
         const [members, ratings] = await Promise.all([
           FamilyRepository.getMembers(user.familyId),
           FeedbackRepository.getFeedbackRatings(),
         ]);
-        setChildren(
-          members
-            .filter((m) => m.role === UserRole.CHILD)
-            .map((m) => ({ id: m.id, name: m.name })),
-        );
-        setSeverityOptions(ratings);
-      } catch (error) {
-        console.error('Failed to fetch children', error);
-        setError('Feedback setup failed. Verify child assignments and feedback ratings, then retry.');
-      } finally {
-        setIsBootstrapping(false);
+
+        dispatch({
+          type: 'LOAD_SUCCESS',
+          payload: {
+            children: members
+              .filter((member) => member.role === UserRole.CHILD)
+              .map((member) => ({ id: member.id, name: member.name })),
+            severityOptions: ratings,
+          },
+        });
+      } catch {
+        dispatch({
+          type: 'LOAD_ERROR',
+          error: 'Feedback setup could not be loaded. Try again.',
+        });
       }
     };
-    fetchChildren();
+
+    void loadBootstrap();
   }, [user?.familyId]);
 
+  const isFriday = new Date().getDay() === 5;
+  const disabledTypes = useMemo<FeedbackType[]>(
+    () => (isFriday ? [] : ['WeeklySummary']),
+    [isFriday],
+  );
+  const selectedChild = bootstrapState.children.find((child) => child.id === selectedChildId) ?? null;
+
   const handleSubmit = async () => {
-    if (!user?.familyId || !selectedChildId || !selectedType) return;
-    
-    setIsLoading(true);
-    setError(null);
+    if (!user?.familyId || !selectedChildId || !selectedType) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
     try {
       await FeedbackRepository.submitFeedback(user.familyId, {
         childProfileId: selectedChildId,
         type: selectedType,
         severity: selectedType === 'Complaint' || selectedType === 'Urgent' ? severity : undefined,
         message: selectedType === 'WeeklySummary' ? 'Weekly Progress Report' : message,
-        weeklyData: selectedType === 'WeeklySummary' ? weeklyData : undefined
+        weeklyData: selectedType === 'WeeklySummary' ? weeklyData : undefined,
       });
-      navigate('/teacher');
-    } catch (error) {
-      console.error('Failed to submit feedback', error);
-      setError('Feedback dispatch failed. Verify the selected child, severity, and message payload, then retry.');
+
+      navigate('/teacher/feedback/history');
+    } catch {
+      setSubmitError('Feedback could not be sent. Review the details and try again.');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  const isFriday = new Date().getDay() === 5;
-  const disabledTypes: FeedbackType[] = user?.role === UserRole.ELDER 
-    ? ['Complaint', 'Observation', 'Homework', 'Urgent', 'WeeklySummary']
-    : (!isFriday ? ['WeeklySummary'] : []);
+  const weeklySummaryReady =
+    weeklyData.attendanceRate.trim() &&
+    weeklyData.homeworkRate.trim() &&
+    weeklyData.standout.trim() &&
+    weeklyData.focusArea.trim();
 
-  const getStepTitle = () => {
-    switch (step) {
-      case 1: return 'Classification Matrix';
-      case 2: return 'Subject Synchronization';
-      case 3: return 'Briefing Payload';
-      default: return 'Operational Log';
-    }
-  };
-
-  if (isBootstrapping) {
-    return <div className="p-8 text-center text-gray-400">Loading Feedback Setup...</div>;
-  }
-
-  if (!children.length) {
-    return (
-      <div className="min-h-screen bg-[#FDFCFB] flex items-center justify-center p-8">
-        <FFEmptyState
-          title="NO_ASSIGNED_CHILDREN"
-          message="No active child assignments are available for feedback submission in this family."
-          icon={<ShieldCheck size={40} />}
-        />
-      </div>
-    );
-  }
+  const submitDisabled =
+    !selectedType ||
+    !selectedChildId ||
+    (selectedType === 'WeeklySummary' ? !weeklySummaryReady : !message.trim());
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] pb-48">
-      {/* Operational Briefing Header */}
-      <header className="bg-white/95 backdrop-blur-2xl p-8 lg:p-14 border-b border-black/[0.03] sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-10">
-          <div className="flex items-center gap-10">
-            <button 
-              onClick={() => step > 1 ? setStep(step - 1) : navigate(-1)}
-              className="w-16 h-16 bg-white rounded-[24px] border border-black/5 text-gray-300 hover:text-primary transition-all shadow-sm flex items-center justify-center group active:scale-90"
-            >
-              <ArrowLeft size={28} className="group-hover:-translate-x-1 transition-transform" />
-            </button>
-            <div>
-              <div className="flex items-center gap-4 mb-2">
-                <FFBadge variant="accent" size="sm" className="font-black px-4 py-1.5 uppercase italic tracking-widest leading-none">OPERATIONAL_BRIEFING</FFBadge>
-                <div className="flex items-center gap-3">
-                   <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic leading-none whitespace-nowrap">MISSION_STATUS: ACTIVE_DISPATCH</p>
-                </div>
-              </div>
-              <h1 className="text-4xl md:text-7xl font-display font-black text-primary tracking-tighter uppercase italic leading-none">
-                {getStepTitle().split(' ')[0]} <span className="text-accent underline decoration-accent/20 decoration-8 underline-offset-8">{getStepTitle().split(' ')[1]}</span>
-              </h1>
-            </div>
-          </div>
+    <div className="min-h-screen bg-bg-cream pb-24">
+      <FFPageHeader
+        title="Send feedback"
+        subtitle="Share a clear note with the family"
+        showBack
+      />
 
-          <div className="flex flex-col items-end gap-3 min-w-[240px]">
-             <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] italic leading-none whitespace-nowrap">PROTOCOL_COMPLETION: {Math.round((step / 3) * 100)}%</p>
-             <div className="flex gap-2 w-full">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className={`h-2.5 flex-1 rounded-full transition-all duration-700 overflow-hidden bg-black/[0.03] border border-black/[0.05] p-0.5 shadow-inner`}>
-                    <motion.div 
-                      initial={false}
-                      animate={{ width: step >= i ? '100%' : '0%' }}
-                      className={`h-full rounded-full ${step === i ? 'bg-accent shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-primary'}`}
-                    />
-                  </div>
-                ))}
-             </div>
+      <main className="page-enter mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <FFCard variant="primary" className="space-y-4 p-5 sm:p-6">
+          <div className="min-w-0">
+            <p className="font-body text-xs font-bold uppercase tracking-wider text-white/70">
+              Teacher feedback
+            </p>
+            <h1 className="mt-1 text-xl font-display font-bold text-white sm:text-2xl">
+              Keep classroom communication simple
+            </h1>
+            <p className="mt-2 text-sm text-white/80">
+              Choose the note type, select the child, and send a message families can act on quickly.
+            </p>
           </div>
-        </div>
-      </header>
+        </FFCard>
 
-      <main className="max-w-5xl mx-auto p-12 lg:p-20 pt-16 space-y-24">
-        {error ? (
-          <div className="bg-alert/5 border border-alert/20 p-6 rounded-[28px] text-alert font-medium">
-            {error}
-          </div>
+        {submitError ? (
+          <FFCard variant="warm" className="p-4">
+            <p className="text-sm text-alert">{submitError}</p>
+          </FFCard>
         ) : null}
 
-        <AnimatePresence mode="wait">
-          {step === 1 && (
-            <motion.div
-              key="step1"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              className="space-y-16"
-            >
-              <div className="flex items-center gap-8 px-4 opacity-30">
-                 <p className="text-[11px] font-black uppercase tracking-[0.5em] text-primary italic whitespace-nowrap">CLASS_IDENTIFICATION_MATRIX</p>
-                 <div className="h-px flex-1 bg-primary/20" />
-              </div>
-              <FeedbackTypePicker 
-                selectedType={selectedType} 
-                onSelect={(type) => {
-                  setSelectedType(type);
-                  setStep(2);
-                }}
-                disabledTypes={disabledTypes}
-              />
-            </motion.div>
-          )}
+        <section className="space-y-3">
+          <FFSectionHeader icon={<Star />} title="Feedback type" />
 
-          {step === 2 && (
-            <motion.div
-              key="step2"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              className="space-y-16"
-            >
-              <div className="flex items-center gap-8 px-4 opacity-30">
-                 <p className="text-[11px] font-black uppercase tracking-[0.5em] text-primary italic whitespace-nowrap">TARGET_PERSONNEL_IDENTIFICATION</p>
-                 <div className="h-px flex-1 bg-primary/20" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {children.map(child => (
-                  <button
-                    key={child.id}
-                    onClick={() => {
-                      setSelectedChildId(child.id);
-                      setStep(3);
-                    }}
-                    className={`flex items-center justify-between p-10 rounded-[48px] border-2 transition-all duration-700 relative overflow-hidden group ${selectedChildId === child.id ? 'border-primary bg-primary text-white shadow-3xl shadow-primary/20 scale-[1.02]' : 'border-black/[0.03] bg-white hover:border-primary/20 shadow-sm hover:shadow-xl hover:shadow-primary/5'}`}
+          {bootstrapState.status === 'loading' && bootstrapState.children.length === 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+              <FFCardSkeleton />
+              <FFCardSkeleton />
+              <FFCardSkeleton />
+              <FFCardSkeleton />
+            </div>
+          ) : null}
+
+          {bootstrapState.status === 'error' && bootstrapState.children.length === 0 ? (
+            <FFErrorState message={bootstrapState.error} onRetry={() => window.location.reload()} />
+          ) : null}
+
+          {bootstrapState.status !== 'loading' ? (
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+              {feedbackTypeMeta.map((item) => {
+                const disabled = disabledTypes.includes(item.type);
+                const selected = selectedType === item.type;
+                return (
+                  <FFCard
+                    key={item.type}
+                    hoverable={!disabled}
+                    onClick={disabled ? undefined : () => setSelectedType(item.type)}
+                    className={`p-4 ${selected ? 'ring-2 ring-accent/40' : ''} ${disabled ? 'opacity-50' : ''}`}
                   >
-                    <div className="absolute top-0 right-0 p-10 opacity-[0.02] pointer-events-none -rotate-12 translate-x-8 translate-y-[-20%] group-hover:rotate-45 transition-transform duration-1000">
-                       <Fingerprint size={160} />
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-ff-sm bg-accent/10 text-accent">
+                        {item.icon}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-display text-sm font-semibold text-primary">{item.label}</p>
+                        <p className="mt-1 text-sm text-gray-500">{item.description}</p>
+                        {disabled ? (
+                          <p className="mt-2 text-xs text-alert">Available on Friday only</p>
+                        ) : null}
+                      </div>
                     </div>
+                  </FFCard>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
 
-                    <div className="flex items-center gap-8 relative z-10">
-                      <FFAvatar name={child.name} size="xl" className="border-4 border-white shadow-xl group-hover:scale-110 transition-transform" />
-                      <div className="text-left">
-                        <h4 className={`font-display font-black text-3xl uppercase italic tracking-tighter leading-none mb-3 ${selectedChildId === child.id ? 'text-white' : 'text-primary'}`}>{child.name}</h4>
-                        <div className="flex items-center gap-3">
-                           <div className={`w-2 h-2 rounded-full ${selectedChildId === child.id ? 'bg-accent animate-pulse' : 'bg-success'}`} />
-                           <p className={`text-[10px] font-black uppercase tracking-[0.3em] italic leading-none ${selectedChildId === child.id ? 'text-white/60' : 'text-gray-300'}`}>ID_TARGET: #{child.id.slice(0, 8).toUpperCase()}</p>
-                        </div>
+        <section className="space-y-3">
+          <FFSectionHeader icon={<Users />} title="Child" />
+
+          {bootstrapState.status === 'loading' && bootstrapState.children.length === 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+              <FFCardSkeleton />
+              <FFCardSkeleton />
+              <FFCardSkeleton />
+            </div>
+          ) : null}
+
+          {bootstrapState.status === 'error' && bootstrapState.children.length === 0 ? (
+            <FFErrorState message={bootstrapState.error} onRetry={() => window.location.reload()} />
+          ) : null}
+
+          {bootstrapState.status !== 'loading' && bootstrapState.children.length === 0 ? (
+            <FFEmptyState
+              title="No assigned children"
+              message="Feedback can be sent once teacher assignments are available for this family."
+              icon={<Users className="h-8 w-8" />}
+            />
+          ) : null}
+
+          {bootstrapState.children.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+              {bootstrapState.children.map((child) => {
+                const selected = child.id === selectedChildId;
+                return (
+                  <FFCard
+                    key={child.id}
+                    hoverable
+                    onClick={() => setSelectedChildId(child.id)}
+                    className={`p-4 ${selected ? 'ring-2 ring-primary/20 bg-[#FDF9F4]' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <FFAvatar name={child.name} size="md" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-display text-sm font-semibold text-primary">{child.name}</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {selected ? 'Selected for this note' : 'Tap to choose this child'}
+                        </p>
                       </div>
+                      {selected ? <CheckCircle2 className="h-5 w-5 text-success" /> : null}
                     </div>
-                    {selectedChildId === child.id ? (
-                      <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-white relative z-10">
-                        <Check size={32} strokeWidth={3} />
-                      </div>
-                    ) : (
-                      <div className="w-16 h-16 bg-gray-50 rounded-[24px] flex items-center justify-center text-gray-200 group-hover:text-primary transition-all relative z-10 shadow-inner">
-                        <ChevronRight size={32} />
-                      </div>
-                    )}
-                  </button>
-                ))}
+                  </FFCard>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+
+        {selectedChild && selectedType ? (
+          <FFCard variant="warm" className="space-y-2 p-4">
+            <p className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
+              Ready to send
+            </p>
+            <p className="font-display text-sm font-semibold text-primary">
+              {selectedChild.name} · {feedbackTypeMeta.find((item) => item.type === selectedType)?.label}
+            </p>
+          </FFCard>
+        ) : null}
+
+        {(selectedType === 'Complaint' || selectedType === 'Urgent') ? (
+          <section className="space-y-3">
+            <FFSectionHeader icon={<AlertCircle />} title="Severity" />
+            <div className="grid gap-3 sm:grid-cols-3 sm:gap-4">
+              {(bootstrapState.severityOptions.length > 0
+                ? bootstrapState.severityOptions
+                : [
+                    { id: 'low', label: 'Low', code: 'Low' },
+                    { id: 'medium', label: 'Medium', code: 'Medium' },
+                    { id: 'urgent', label: 'Urgent', code: 'Urgent' },
+                  ]
+              ).map((option) => {
+                const optionSeverity = mapRatingToSeverity(option.code);
+                const selected = optionSeverity === severity;
+                return (
+                  <FFButton
+                    key={option.id}
+                    type="button"
+                    variant={selected ? 'alert' : 'outline'}
+                    onClick={() => setSeverity(optionSeverity)}
+                  >
+                    {option.label}
+                  </FFButton>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        {selectedType === 'WeeklySummary' ? (
+          <section className="space-y-3">
+            <FFSectionHeader icon={<Calendar />} title="Weekly summary" />
+            <FFCard className="space-y-4 p-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
+                    Attendance rate
+                  </span>
+                  <input
+                    value={weeklyData.attendanceRate}
+                    onChange={(event) =>
+                      setWeeklyData((current) => ({ ...current, attendanceRate: event.target.value }))
+                    }
+                    className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                    placeholder="100%"
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
+                    Homework rate
+                  </span>
+                  <input
+                    value={weeklyData.homeworkRate}
+                    onChange={(event) =>
+                      setWeeklyData((current) => ({ ...current, homeworkRate: event.target.value }))
+                    }
+                    className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                    placeholder="95%"
+                  />
+                </label>
               </div>
-            </motion.div>
-          )}
+              <label className="block space-y-2">
+                <span className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
+                  Standout moment
+                </span>
+                <textarea
+                  value={weeklyData.standout}
+                  onChange={(event) =>
+                    setWeeklyData((current) => ({ ...current, standout: event.target.value }))
+                  }
+                  className="min-h-[120px] w-full rounded-ff border border-black/5 bg-white px-4 py-3 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                  placeholder="Highlight one strong effort from the week."
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
+                  Focus area
+                </span>
+                <textarea
+                  value={weeklyData.focusArea}
+                  onChange={(event) =>
+                    setWeeklyData((current) => ({ ...current, focusArea: event.target.value }))
+                  }
+                  className="min-h-[120px] w-full rounded-ff border border-black/5 bg-white px-4 py-3 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                  placeholder="Explain what the family should support next week."
+                />
+              </label>
+            </FFCard>
+          </section>
+        ) : (
+          <section className="space-y-3">
+            <FFSectionHeader icon={<MessageSquare />} title="Message" />
+            <FFCard className="space-y-4 p-4">
+              <textarea
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                className="min-h-[160px] w-full rounded-ff border border-black/5 bg-white px-4 py-3 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                placeholder="Write a short, clear message for the family."
+              />
+              <p className="text-sm text-gray-500">
+                Keep the note practical and easy to act on in under a minute.
+              </p>
+            </FFCard>
+          </section>
+        )}
 
-          {step === 3 && (
-            <motion.div
-              key="step3"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              className="space-y-16"
-            >
-              <FFCard className="bg-white border-none shadow-3xl shadow-black/[0.01] p-12 rounded-[64px] relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-12 opacity-[0.02] pointer-events-none -rotate-12 translate-x-12 translate-y-[-20%]">
-                   <Monitor size={280} />
-                </div>
-                <div className="relative z-10 lg:flex items-center justify-between gap-12">
-                   <div className="flex items-center gap-10 mb-10 lg:mb-0">
-                      <FFAvatar name={children.find(c => c.id === selectedChildId)?.name || 'C'} size="2xl" className="border-4 border-white shadow-2xl" />
-                      <div>
-                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] italic mb-3">ACTIVE_SUBJECT_LOCK</p>
-                        <h3 className="font-display font-black text-primary text-5xl italic uppercase tracking-tighter leading-none mb-4">{children.find(c => c.id === selectedChildId)?.name}</h3>
-                        <div className="flex items-center gap-3">
-                           <FFBadge variant="accent" className="bg-accent/10 border-none px-6 py-2 text-[10px] uppercase font-black tracking-widest italic rounded-xl">{selectedType?.replace(/([A-Z])/g, ' $1').trim()}</FFBadge>
-                           <div className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
-                        </div>
-                      </div>
-                   </div>
-                   <div className="text-right">
-                      <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] italic mb-2 leading-none">REGISTRY_STATUS</p>
-                      <p className="text-primary font-display font-black text-3xl italic uppercase leading-none">AWAITING_PAYLOAD</p>
-                   </div>
-                </div>
-              </FFCard>
-
-              {selectedType === 'WeeklySummary' ? (
-                <WeeklySummaryForm data={weeklyData} onChange={setWeeklyData} />
-              ) : (
-                <div className="space-y-16">
-                  {(selectedType === 'Complaint' || selectedType === 'Urgent') && (
-                    <div className="space-y-8 px-4">
-                      <div className="flex items-center gap-4">
-                         <div className="w-2 h-2 rounded-full bg-alert animate-ping" />
-                         <label className="text-[11px] font-black uppercase tracking-[0.5em] text-primary italic">ESCALATION_SEVERITY_LEVEL</label>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {(severityOptions.length > 0
-                          ? severityOptions
-                          : [
-                              { id: 'severity-low', label: 'Low', code: 'Low' },
-                              { id: 'severity-medium', label: 'Medium', code: 'Medium' },
-                              { id: 'severity-urgent', label: 'Urgent', code: 'Urgent' },
-                            ]).map((option) => {
-                          const optionSeverity = mapRatingToSeverity(option.code);
-                          return (
-                          <button
-                            key={option.id}
-                            onClick={() => setSeverity(optionSeverity)}
-                            className={`h-20 rounded-[28px] font-black text-[12px] uppercase tracking-[0.4em] transition-all border-2 italic ${severity === optionSeverity ? 'bg-alert text-white border-alert shadow-3xl shadow-alert/30' : 'bg-white border-black/[0.03] text-gray-300 hover:border-alert/20 hover:text-alert'}`}
-                          >
-                            {option.label}
-                          </button>
-                        )})}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-8 px-4">
-                    <div className="flex items-center gap-4">
-                       <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                       <label className="text-[11px] font-black uppercase tracking-[0.5em] text-primary italic leading-none">OBSERVATION_BRIEFING_TRANSCRIPT</label>
-                    </div>
-                    <div className="relative group/text">
-                      <textarea
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        placeholder="Detail qualitative observations for central review..."
-                        className="w-full bg-white border border-black/[0.03] rounded-[56px] px-12 py-12 font-medium text-primary focus:outline-none focus:border-primary/20 shadow-inner min-h-[300px] placeholder:text-gray-200 text-xl italic"
-                      />
-                      <div className="absolute right-12 bottom-12 p-5 bg-gray-50 rounded-[24px] text-gray-300 group-hover/text:bg-primary/5 group-hover/text:text-primary transition-all shadow-inner border border-black/[0.03]">
-                         <MessageSquare size={32} strokeWidth={1.5} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {severity === 'Urgent' && (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="p-12 bg-alert/5 rounded-[48px] border border-alert/20 flex gap-8 items-center shadow-3xl shadow-alert/10 relative overflow-hidden group"
-                    >
-                      <div className="absolute top-0 right-0 p-8 opacity-[0.05] pointer-events-none rotate-12 translate-x-4 translate-y-[-20%] group-hover:rotate-45 transition-transform duration-1000">
-                         <AlertTriangle size={160} />
-                      </div>
-                      <div className="w-20 h-20 bg-alert text-white rounded-[24px] flex items-center justify-center shrink-0 animate-pulse shadow-xl shadow-alert/20">
-                        <AlertTriangle size={40} />
-                      </div>
-                      <div>
-                        <p className="text-[13px] text-alert font-black uppercase tracking-[0.3em] leading-relaxed italic mb-2">CRITICAL_THREAT_DETECTION</p>
-                        <p className="text-sm text-alert/60 font-medium italic">Execute protocol will trigger immediate HIGH-FREQUENCY alerts to all verified family guardians.</p>
-                      </div>
-                    </motion.div>
-                  )}
-                </div>
-              )}
-
-              <footer className="pt-20 border-t border-black/[0.03] flex flex-col items-center gap-12">
-                 <FFButton 
-                   className="w-full h-24 rounded-[48px] text-[12px] font-black uppercase tracking-[0.5em] shadow-3xl shadow-primary/30 group active:scale-95 italic transition-all" 
-                   icon={<Send size={32} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
-                   isLoading={isLoading}
-                   onClick={handleSubmit}
-                   disabled={selectedType === 'WeeklySummary' ? (!weeklyData.attendanceRate || !weeklyData.homeworkRate) : !message}
-                 >
-                   EXECUTE_FEEDBACK_BROADCAST
-                 </FFButton>
-                 
-                 <div className="space-y-4 text-center opacity-40">
-                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.8em] italic leading-relaxed whitespace-nowrap">STATION_ENGINE // Observation Network v4.2.1</p>
-                    <p className="text-[9px] text-gray-300 font-black uppercase tracking-[0.4em] italic">Signals transmitted via encrypted core gateway</p>
-                 </div>
-              </footer>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="space-y-3">
+          <FFButton
+            className="w-full"
+            icon={<Send className="h-4 w-4" />}
+            isLoading={isSubmitting}
+            onClick={() => void handleSubmit()}
+            disabled={submitDisabled}
+          >
+            Send feedback
+          </FFButton>
+          <FFButton
+            variant="outline"
+            className="w-full"
+            icon={<CheckCircle2 className="h-4 w-4" />}
+            onClick={() => navigate('/teacher/feedback/history')}
+          >
+            Review feedback history
+          </FFButton>
+        </div>
       </main>
     </div>
   );

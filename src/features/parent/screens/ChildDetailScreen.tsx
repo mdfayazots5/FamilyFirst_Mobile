@@ -1,611 +1,443 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ArrowLeft, 
-  Calendar, 
-  CheckCircle2, 
-  Clock, 
-  MessageSquare, 
-  Plus, 
-  Heart, 
-  TrendingDown, 
-  Star,
-  ChevronRight,
-  Camera,
-  AlertCircle,
-  MoreVertical,
-  Flame,
-  TrendingUp,
-  Activity,
-  Zap,
+import React, { useEffect, useReducer, useState } from 'react';
+import {
+  BookOpen,
+  CheckCircle2,
+  Filter,
+  MessageSquare,
+  RefreshCw,
+  Sparkles,
   Target,
-  ShieldCheck,
-  Globe,
-  Radar,
-  Command,
-  Layers,
-  Fingerprint,
-  RefreshCcw,
-  ZapOff,
-  Cpu,
-  Smartphone,
-  Maximize2
+  TriangleAlert,
 } from 'lucide-react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { ChildRepository, ChildDetail, TaskCompletion, Feedback, ChildLookupOption } from '../repositories/ChildRepository';
 import FFAvatar from '../../../shared/components/FFAvatar';
-import FFCard from '../../../shared/components/FFCard';
-import FFBadge from '../../../shared/components/FFBadge';
 import FFButton from '../../../shared/components/FFButton';
-import ChildRadarChart from '../widgets/ChildRadarChart';
-import WeekMiniCalendar from '../widgets/WeekMiniCalendar';
-import FeedbackCard from '../widgets/FeedbackCard';
-import PhotoReviewSheet from '../widgets/PhotoReviewSheet';
+import FFCard from '../../../shared/components/FFCard';
+import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import FFShimmer from '../../../shared/components/FFShimmer';
+import {
+  ChildDetail,
+  ChildLookupOption,
+  ChildRepository,
+  Feedback,
+  TaskCompletion,
+} from '../repositories/ChildRepository';
 
-const normalizeLookupValue = (value: string) =>
-  value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
+type TabKey = 'tasks' | 'feedback';
 
-const mapTaskStatusToLookupCode = (status: TaskCompletion['status']) => {
-  switch (status) {
-    case 'done':
-      return 'approved';
-    case 'flagged':
-      return 'flagged';
-    case 'missed':
-      return 'missed';
+interface ChildDetailPayload {
+  child: ChildDetail;
+  tasks: TaskCompletion[];
+  feedback: Feedback[];
+  taskTypes: ChildLookupOption[];
+  taskStatuses: ChildLookupOption[];
+}
+
+type ChildDetailState =
+  | { status: 'loading'; data: ChildDetailPayload | null; error: string | null }
+  | { status: 'ready'; data: ChildDetailPayload; error: string | null }
+  | { status: 'error'; data: ChildDetailPayload | null; error: string };
+
+type ChildDetailAction =
+  | { type: 'LOAD_START'; preserve: ChildDetailPayload | null }
+  | { type: 'LOAD_SUCCESS'; payload: ChildDetailPayload }
+  | { type: 'LOAD_ERROR'; error: string }
+  | { type: 'TASK_UPDATED'; payload: TaskCompletion[] }
+  | { type: 'FEEDBACK_UPDATED'; payload: Feedback[] };
+
+const initialState: ChildDetailState = {
+  status: 'loading',
+  data: null,
+  error: null,
+};
+
+function reducer(state: ChildDetailState, action: ChildDetailAction): ChildDetailState {
+  switch (action.type) {
+    case 'LOAD_START':
+      return { status: 'loading', data: action.preserve, error: null };
+    case 'LOAD_SUCCESS':
+      return { status: 'ready', data: action.payload, error: null };
+    case 'LOAD_ERROR':
+      return { status: 'error', data: state.data, error: action.error };
+    case 'TASK_UPDATED':
+      return state.data
+        ? { ...state, data: { ...state.data, tasks: action.payload } }
+        : state;
+    case 'FEEDBACK_UPDATED':
+      return state.data
+        ? { ...state, data: { ...state.data, feedback: action.payload } }
+        : state;
     default:
-      return 'pending';
+      return state;
   }
+}
+
+const statusTone: Record<TaskCompletion['status'], string> = {
+  done: 'bg-success/10 text-success',
+  pending: 'bg-accent/15 text-primary',
+  missed: 'bg-alert/10 text-alert',
+  flagged: 'bg-alert/10 text-alert',
 };
 
 const ChildDetailScreen: React.FC = () => {
+  const navigate = useNavigate();
   const { childId } = useParams<{ childId: string }>();
   const { user } = useAuth();
-  const navigate = useNavigate();
-
-  const [activeTab, setActiveTab] = useState<'today' | 'week' | 'feedback'>('today');
-  const [child, setChild] = useState<ChildDetail | null>(null);
-  const [tasks, setTasks] = useState<TaskCompletion[]>([]);
-  const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [taskTypes, setTaskTypes] = useState<ChildLookupOption[]>([]);
-  const [taskStatuses, setTaskStatuses] = useState<ChildLookupOption[]>([]);
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const [activeTab, setActiveTab] = useState<TabKey>('tasks');
   const [selectedTaskType, setSelectedTaskType] = useState<string>('All');
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<string>('All');
-  const [lookupError, setLookupError] = useState<string | null>(null);
-  
-  const [selectedTask, setSelectedTask] = useState<TaskCompletion | null>(null);
-  const [isReviewOpen, setIsReviewOpen] = useState(false);
 
-  const loadLookups = useCallback(async () => {
-    setLookupError(null);
+  const loadScreen = async () => {
+    if (!user?.familyId || !childId) {
+      dispatch({ type: 'LOAD_ERROR', error: 'Child details are not available.' });
+      return;
+    }
+
+    dispatch({ type: 'LOAD_START', preserve: state.data });
+
     try {
-      const [liveTaskTypes, liveTaskStatuses] = await Promise.all([
+      const [child, tasks, feedback, taskTypes, taskStatuses] = await Promise.all([
+        ChildRepository.getChildDetail(user.familyId, childId),
+        ChildRepository.getTaskCompletions(user.familyId, childId),
+        ChildRepository.getFeedback(user.familyId, childId),
         ChildRepository.getTaskTypes(),
         ChildRepository.getTaskStatuses(),
       ]);
-      setTaskTypes(liveTaskTypes);
-      setTaskStatuses(liveTaskStatuses);
-    } catch (error) {
-      console.error('Failed to load child task filters', error);
-      setLookupError('Unable to load child task filters right now.');
-    }
-  }, []);
 
-  const fetchData = useCallback(async () => {
-    if (!user?.familyId || !childId) return;
-    setIsLoading(true);
-    try {
-      const [detail, taskList, feedbackList] = await Promise.all([
-        ChildRepository.getChildDetail(user.familyId, childId),
-        ChildRepository.getTaskCompletions(user.familyId, childId),
-        ChildRepository.getFeedback(user.familyId, childId)
-      ]);
-      setChild(detail);
-      setTasks(taskList);
-      setFeedbacks(feedbackList);
+      dispatch({
+        type: 'LOAD_SUCCESS',
+        payload: { child, tasks, feedback, taskTypes, taskStatuses },
+      });
     } catch (error) {
-      console.error('Failed to fetch child data', error);
-    } finally {
-      setTimeout(() => setIsLoading(false), 800);
+      console.error('Failed to load child detail screen', error);
+      dispatch({ type: 'LOAD_ERROR', error: 'Unable to load this child profile right now.' });
     }
+  };
+
+  useEffect(() => {
+    void loadScreen();
   }, [user?.familyId, childId]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const payload = state.data;
 
-  useEffect(() => {
-    void loadLookups();
-  }, [loadLookups]);
-
-  const handleApprove = async () => {
-    if (!selectedTask || !user?.familyId) return;
-    try {
-      await ChildRepository.reviewTask(user.familyId, selectedTask.id, 'done');
-      setTasks(tasks.map(t => t.id === selectedTask.id ? { ...t, status: 'done' } : t));
-      setIsReviewOpen(false);
-    } catch (error) {
-      console.error('Failed to approve task', error);
-    }
-  };
-
-  const handleFlag = async (reason: string, note: string) => {
-    if (!selectedTask || !user?.familyId) return;
-    try {
-      await ChildRepository.reviewTask(user.familyId, selectedTask.id, 'flagged', `${reason}: ${note}`);
-      setTasks(tasks.map(t => t.id === selectedTask.id ? { ...t, status: 'flagged' } : t));
-      setIsReviewOpen(false);
-    } catch (error) {
-      console.error('Failed to flag task', error);
-    }
-  };
-
-  const handleAcknowledge = async (id: string) => {
-    try {
-      await ChildRepository.acknowledgeFeedback(id, 'Acknowledged by parent');
-      setFeedbacks(feedbacks.map(f => f.id === id ? { ...f, isRead: true } : f));
-    } catch (error) {
-      console.error('Failed to acknowledge feedback', error);
-    }
-  };
-
-  const filteredTasks = tasks.filter((task) => {
-    const selectedType = taskTypes.find((option) => option.id === selectedTaskType);
-    const selectedStatus = taskStatuses.find((option) => option.id === selectedTaskStatus);
-
+  const filteredTasks = (payload?.tasks ?? []).filter((task) => {
     const matchesType =
       selectedTaskType === 'All' ||
-      (selectedType
-        ? [task.category, task.title].some((value) =>
-            normalizeLookupValue(value).includes(normalizeLookupValue(selectedType.code)) ||
-            normalizeLookupValue(value).includes(normalizeLookupValue(selectedType.label)),
-          )
-        : true);
+      task.category.toLowerCase() ===
+        (payload?.taskTypes.find((item) => item.id === selectedTaskType)?.label ?? '').toLowerCase();
 
     const matchesStatus =
       selectedTaskStatus === 'All' ||
-      (selectedStatus
-        ? normalizeLookupValue(mapTaskStatusToLookupCode(task.status)) === normalizeLookupValue(selectedStatus.code)
-        : true);
+      task.status.toLowerCase() ===
+        (payload?.taskStatuses.find((item) => item.id === selectedTaskStatus)?.code ?? '').toLowerCase();
 
     return matchesType && matchesStatus;
   });
 
-  if (isLoading && !child) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[#FDFCFB]">
-        <div className="w-24 h-24 bg-primary/5 rounded-[32px] flex items-center justify-center text-primary mb-8 relative group">
-           <div className="absolute inset-0 bg-primary/10 rounded-[32px] animate-ping opacity-20" />
-           <RefreshCcw size={40} className="animate-spin" />
-        </div>
-        <div className="text-center space-y-3">
-           <p className="text-[12px] font-black text-primary uppercase tracking-[0.5em] animate-pulse italic">SYNCHRONIZING_UNIT_TELEMETRY...</p>
-           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-60">High Priority Data Link Established</p>
-        </div>
-      </div>
-    );
-  }
+  const handleTaskReview = async (task: TaskCompletion, status: 'done' | 'flagged') => {
+    if (!user?.familyId) {
+      return;
+    }
 
-  if (!child) return null;
+    try {
+      await ChildRepository.reviewTask(user.familyId, task.id, status);
+      const nextTasks = (payload?.tasks ?? []).map((item) =>
+        item.id === task.id ? { ...item, status: status === 'done' ? 'done' : 'flagged' } : item,
+      );
+      dispatch({ type: 'TASK_UPDATED', payload: nextTasks });
+    } catch (error) {
+      console.error('Failed to review child task', error);
+    }
+  };
+
+  const handleAcknowledgeFeedback = async (feedbackItem: Feedback) => {
+    try {
+      await ChildRepository.acknowledgeFeedback(feedbackItem.id, 'Acknowledged by parent');
+      const nextFeedback = (payload?.feedback ?? []).map((item) =>
+        item.id === feedbackItem.id ? { ...item, isRead: true } : item,
+      );
+      dispatch({ type: 'FEEDBACK_UPDATED', payload: nextFeedback });
+    } catch (error) {
+      console.error('Failed to acknowledge child feedback', error);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] pb-48">
-      {/* Tactical Header */}
-      <header className="bg-white/95 backdrop-blur-2xl p-8 lg:p-14 border-b border-black/[0.03] sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-10">
-          <div className="flex items-center gap-10">
-            <div className="relative group">
-              <motion.div 
-                whileHover={{ scale: 1.05 }} 
-                className="relative cursor-pointer"
-                onClick={() => navigate(`/parent/routine/${childId}`)}
-              >
-                <div className="absolute -inset-2 bg-gradient-to-tr from-accent/30 via-accent/5 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-sm" />
-                <FFAvatar name={child.name} size="xl" className="ring-8 ring-white shadow-3xl relative z-10" />
-                <div className="absolute -bottom-2 -right-2 bg-accent text-white p-3 rounded-2xl shadow-xl border-4 border-white z-20 group-hover:scale-110 transition-transform">
-                  <Fingerprint size={24} />
-                </div>
-              </motion.div>
-              <div className="absolute -top-1 -left-1 w-6 h-6 rounded-full bg-success animate-pulse z-30 border-4 border-white shadow-lg" title="Unit Online" />
-            </div>
-            <div>
-              <div className="flex items-center gap-4 mb-2">
-                <FFBadge variant="accent" size="sm" className="font-black px-4 py-1.5 uppercase italic tracking-widest leading-none">UNIT_{childId?.substring(0, 4).toUpperCase() || 'ALPHA'}-1</FFBadge>
-                <div className="flex items-center gap-3">
-                   <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic leading-none whitespace-nowrap">OPERATIONAL_TELEMETRY_ACTIVE</p>
+    <div className="min-h-screen bg-[#F8F4EE]">
+      <FFPageHeader
+        title={payload?.child.name ?? 'Child details'}
+        subtitle="Parent progress view"
+        showBack
+        rightAction={
+          <FFButton
+            variant="ghost"
+            size="sm"
+            className="text-white hover:bg-white/10"
+            onClick={() => void loadScreen()}
+            icon={<RefreshCw size={16} />}
+          >
+            Refresh
+          </FFButton>
+        }
+      />
+
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 pb-24">
+        {state.status === 'loading' && !payload ? (
+          <div className="space-y-4">
+            <FFCard className="shadow-card p-5">
+              <div className="flex items-center gap-4">
+                <FFShimmer width={72} height={72} borderRadius="9999px" />
+                <div className="flex-1 space-y-3">
+                  <FFShimmer width="40%" height={20} />
+                  <FFShimmer width="65%" height={14} />
                 </div>
               </div>
-              <h1 className="text-4xl md:text-7xl font-display font-black text-primary tracking-tighter uppercase italic leading-none">
-                {child.name}
-              </h1>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6">
-             <div className="flex gap-2 p-2 bg-gray-50 border border-black/5 rounded-[24px] shadow-inner">
-              {[
-                { id: 'today', label: 'Timeline', icon: <Clock size={16} /> },
-                { id: 'week', label: 'Analytics', icon: <TrendingUp size={16} /> },
-                { id: 'feedback', label: 'Signals', icon: <MessageSquare size={16} /> }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-3 px-8 py-4 rounded-[18px] text-[11px] font-black uppercase tracking-widest transition-all duration-500 italic ${activeTab === tab.id ? 'bg-primary text-white shadow-2xl shadow-primary/40 scale-105' : 'text-gray-400 hover:text-primary'}`}
-                >
-                  {tab.icon} {tab.label.toUpperCase()}
-                </button>
+            </FFCard>
+            <div className="grid gap-4 md:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <FFCard key={index} className="shadow-card p-5">
+                  <FFShimmer height={18} width="55%" />
+                  <FFShimmer className="mt-4" height={34} width="35%" />
+                </FFCard>
               ))}
             </div>
-            <button 
-              onClick={() => navigate(-1)}
-              className="w-16 h-16 bg-white rounded-[24px] border border-black/5 text-gray-300 hover:text-primary transition-all shadow-sm flex items-center justify-center group active:scale-90"
-            >
-              <ArrowLeft size={28} className="group-hover:-translate-x-1 transition-transform" />
-            </button>
           </div>
-        </div>
-      </header>
+        ) : null}
 
-      <main className="max-w-7xl mx-auto p-8 lg:p-14 space-y-24 pt-16">
-        {/* Vitals Feed */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {[
-            { label: 'Uptime Streak', value: child.streak, unit: 'DAYS', color: 'text-accent', icon: <Flame size={24} fill="currentColor" />, bg: 'bg-accent/5' },
-            { label: 'Current Index', value: child.todayScore, unit: 'PTS', color: 'text-success', icon: <TrendingUp size={24} />, bg: 'bg-success/5' },
-            { label: 'Unit Credits', value: 340, unit: 'COINS', color: 'text-amber-500', icon: <Star size={24} fill="currentColor" />, bg: 'bg-amber-50' },
-            { label: 'Health Status', value: 'OPTIMAL', unit: 'SYNC', color: 'text-primary', icon: <Activity size={24} />, bg: 'bg-primary/5' }
-          ].map((stat, i) => (
-            <motion.div
-              key={i}
-              whileHover={{ y: -8 }}
-              className="h-full"
-            >
-              <FFCard className="p-10 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[48px] flex flex-col justify-between h-full relative overflow-hidden group">
-                <div className={`absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none group-hover:scale-110 transition-transform duration-1000 ${stat.color}`}>
-                   <Command size={120} strokeWidth={1} />
-                </div>
-                <div className={`w-16 h-16 rounded-[24px] flex items-center justify-center mb-10 shadow-inner group-hover:rotate-6 transition-transform duration-500 ${stat.bg} ${stat.color}`}>
-                   {stat.icon}
-                </div>
-                <div>
-                  <div className={`text-5xl font-display font-black italic tracking-tighter leading-none mb-3 ${stat.color} tabular-nums`}>{stat.value}</div>
-                  <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em] leading-none italic">{stat.label} <span className="text-gray-200 ml-2">// {stat.unit}</span></p>
-                </div>
+        {state.status === 'error' && !payload ? (
+          <FFErrorState message={state.error} onRetry={() => void loadScreen()} />
+        ) : null}
+
+        {payload ? (
+          <>
+            {state.status === 'error' ? (
+              <FFCard className="shadow-card border-alert/20 bg-alert/5 p-4">
+                <p className="font-body text-sm text-alert">{state.error}</p>
               </FFCard>
-            </motion.div>
-          ))}
-        </div>
+            ) : null}
 
-        <AnimatePresence mode="wait">
-          {activeTab === 'today' && (
-            <motion.div
-              key="today"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.6 }}
-              className="space-y-16"
-            >
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 px-4">
-                 <div className="flex items-center gap-8">
-                  <div className="w-12 h-12 bg-primary/5 rounded-[18px] flex items-center justify-center text-primary">
-                    <Clock size={24} strokeWidth={2.5} />
-                  </div>
-                  <h3 className="text-xl font-display font-black uppercase tracking-widest text-primary italic leading-none">OPERATIONAL_TIMELINE</h3>
-                  <div className="h-px w-32 bg-primary/10 hidden lg:block" />
-                </div>
+            <FFCard className="shadow-card p-5">
+              <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-4">
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic leading-none">STABILITY_ARRAY</p>
-                   <FFBadge variant="success" size="sm" className="font-black px-4 py-1.5 uppercase italic tracking-widest italic rounded-xl">INDEX: 0.94</FFBadge>
-                </div>
-              </div>
-
-              <div className="space-y-5 px-4">
-                <div className="space-y-3">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic">TASK_TYPE_FILTER</p>
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTaskType('All')}
-                      className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
-                        selectedTaskType === 'All'
-                          ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                          : 'bg-white text-gray-400 border border-black/[0.05]'
-                      }`}
-                    >
-                      All Types
-                    </button>
-                    {taskTypes.map((taskType) => (
-                      <button
-                        key={taskType.id}
-                        type="button"
-                        onClick={() => setSelectedTaskType(taskType.id)}
-                        className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
-                          selectedTaskType === taskType.id
-                            ? 'bg-accent text-primary shadow-lg shadow-accent/20'
-                            : 'bg-white text-gray-400 border border-black/[0.05]'
-                        }`}
-                      >
-                        {taskType.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic">TASK_STATUS_FILTER</p>
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTaskStatus('All')}
-                      className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
-                        selectedTaskStatus === 'All'
-                          ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                          : 'bg-white text-gray-400 border border-black/[0.05]'
-                      }`}
-                    >
-                      All Statuses
-                    </button>
-                    {taskStatuses.map((taskStatus) => (
-                      <button
-                        key={taskStatus.id}
-                        type="button"
-                        onClick={() => setSelectedTaskStatus(taskStatus.id)}
-                        className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] italic transition-all ${
-                          selectedTaskStatus === taskStatus.id
-                            ? 'bg-accent text-primary shadow-lg shadow-accent/20'
-                            : 'bg-white text-gray-400 border border-black/[0.05]'
-                        }`}
-                      >
-                        {taskStatus.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {lookupError && (
-                  <div className="flex items-center justify-between gap-4 rounded-[24px] border border-alert/10 bg-alert/5 px-5 py-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-alert italic">{lookupError}</p>
-                    <button
-                      type="button"
-                      onClick={() => void loadLookups()}
-                      className="rounded-full bg-alert px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-white italic"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid gap-10">
-                {filteredTasks.length === 0 ? (
-                  <FFCard className="p-10 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[56px]">
-                    <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em] italic">
-                      No child tasks match the selected timeline filters.
+                  <FFAvatar name={payload.child.name} size="xl" />
+                  <div>
+                    <h1 className="font-display text-2xl font-bold text-primary">{payload.child.name}</h1>
+                    <p className="mt-1 font-body text-sm text-slate-500">
+                      Daily score {payload.child.todayScore} with a {payload.child.streak}-day streak.
                     </p>
-                  </FFCard>
-                ) : filteredTasks.map((task, index) => (
-                  <motion.div
-                    key={task.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                  >
-                    <FFCard className="p-10 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[56px] group transition-all hover:bg-gray-50/50 relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-12 opacity-[0.01] pointer-events-none translate-x-12 translate-y-[-10%] group-hover:scale-105 transition-transform duration-1000">
-                         <Target size={200} strokeWidth={1} />
-                      </div>
-
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-10 relative z-10">
-                        <div className="flex items-center gap-10">
-                          <div className={`w-20 h-20 rounded-[32px] flex items-center justify-center shadow-2xl transition-all duration-700 group-hover:rotate-3 ${task.status === 'done' ? 'bg-success text-white shadow-success/20' : task.status === 'pending' ? 'bg-accent text-white shadow-accent/20' : 'bg-alert text-white shadow-alert/20'}`}>
-                            {task.status === 'done' ? <CheckCircle2 size={36} /> : task.status === 'pending' ? <Clock size={36} /> : <AlertCircle size={36} />}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-3 mb-3">
-                               <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] italic leading-none whitespace-nowrap">ID_{task.id.substring(0, 8).toUpperCase()}</p>
-                               <div className="h-0.5 w-6 bg-primary/5 rounded-full" />
-                            </div>
-                            <h4 className="text-3xl font-display font-black text-primary uppercase italic tracking-tighter group-hover:text-primary transition-colors leading-none mb-4">{task.title}</h4>
-                            <div className="flex flex-wrap items-center gap-5">
-                              <div className="flex items-center gap-2 px-3 py-1 bg-gray-50 rounded-lg text-primary/60">
-                                 <Clock size={12} />
-                                 <span className="text-[10px] font-black uppercase tracking-widest italic tabular-nums leading-none">{task.time}</span>
-                              </div>
-                              <div className="h-4 w-px bg-black/[0.05]" />
-                              <FFBadge size="sm" variant="primary" className="font-black px-3 py-1 uppercase italic tracking-[0.2em] text-[9px]">{task.category} PROTOCOL</FFBadge>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center justify-between md:justify-end gap-10">
-                          {task.photoUrl && (
-                            <button 
-                              onClick={() => {
-                                setSelectedTask(task);
-                                setIsReviewOpen(true);
-                              }}
-                              className="relative group/asset active:scale-95 transition-transform"
-                            >
-                              <div className="w-24 h-24 rounded-[36px] overflow-hidden bg-gray-50 ring-8 ring-white shadow-3xl transition-all group-hover/asset:ring-accent group-hover/asset:rotate-6 duration-700">
-                                <img src={task.photoUrl} alt="Task" className="w-full h-full object-cover group-hover/asset:scale-110 transition-transform duration-1000" referrerPolicy="no-referrer" />
-                              </div>
-                              <div className="absolute -top-3 -right-3 bg-accent text-white p-3 rounded-2xl shadow-xl border-4 border-white group-hover/asset:scale-125 transition-transform">
-                                <Maximize2 size={16} />
-                              </div>
-                            </button>
-                          )}
-                          <div className="w-16 h-16 rounded-[24px] bg-white border border-black/[0.03] flex items-center justify-center text-gray-200 shadow-sm group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all duration-500 transform group-hover:translate-x-1">
-                            <ChevronRight size={32} />
-                          </div>
-                        </div>
-                      </div>
-                    </FFCard>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab === 'week' && (
-            <motion.div
-              key="week"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.6 }}
-              className="space-y-16"
-            >
-               <div className="flex items-center gap-8 px-4">
-                  <div className="w-12 h-12 bg-primary/5 rounded-[18px] flex items-center justify-center text-primary">
-                    <TrendingUp size={24} strokeWidth={2.5} />
                   </div>
-                  <h3 className="text-xl font-display font-black uppercase tracking-widest text-primary italic leading-none">ANALYTIC_VECTORS</h3>
-                  <div className="h-px w-32 bg-primary/10 hidden lg:block" />
                 </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                <FFCard className="p-12 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[64px] group overflow-hidden relative h-fit">
-                   <div className="absolute top-0 right-0 p-12 opacity-[0.02] pointer-events-none group-hover:scale-110 group-hover:rotate-45 transition-transform duration-[3000ms]">
-                      <Radar size={300} strokeWidth={1} />
-                   </div>
-                  <div className="flex items-center justify-between mb-16 relative z-10">
-                    <div className="space-y-1">
-                       <h3 className="text-[11px] font-black uppercase tracking-[0.4em] text-primary/30 italic leading-none">PILLAR_VECTOR_MAPPING</h3>
-                       <p className="text-[10px] text-gray-400 font-bold italic opacity-60">Comparative structural analysis</p>
-                    </div>
-                    <FFBadge variant="accent" size="sm" className="font-black italic px-4 py-2 text-[11px] rounded-xl">+12% ARC</FFBadge>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                  <div className="rounded-ff-sm bg-primary/5 px-4 py-3 text-center">
+                    <p className="font-display text-xl font-bold text-primary">{payload.tasks.length}</p>
+                    <p className="font-body text-xs text-slate-500">Tasks</p>
                   </div>
-                  <div className="aspect-square relative z-10">
-                    <ChildRadarChart data={child.radarData} />
+                  <div className="rounded-ff-sm bg-accent/15 px-4 py-3 text-center">
+                    <p className="font-display text-xl font-bold text-primary">{payload.feedback.length}</p>
+                    <p className="font-body text-xs text-slate-500">Feedback items</p>
+                  </div>
+                  <div className="rounded-ff-sm bg-success/10 px-4 py-3 text-center">
+                    <p className="font-display text-xl font-bold text-primary">{payload.child.radarData.length}</p>
+                    <p className="font-body text-xs text-slate-500">Focus areas</p>
+                  </div>
+                </div>
+              </div>
+            </FFCard>
+
+            <section className="grid gap-4 md:grid-cols-3">
+              {payload.child.radarData.map((item) => (
+                <FFCard key={item.subject} className="shadow-card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-display text-lg font-semibold text-primary">{item.subject}</p>
+                      <p className="mt-1 font-body text-sm text-slate-500">
+                        {item.score} out of {item.fullMark}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-primary/5 px-3 py-1 font-body text-xs text-primary">
+                      {Math.round((item.score / item.fullMark) * 100)}%
+                    </span>
                   </div>
                 </FFCard>
+              ))}
+            </section>
 
-                <div className="space-y-10">
-                  <FFCard className="p-12 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[64px] group relative overflow-hidden">
-                     <div className="absolute top-0 right-0 p-12 opacity-[0.02] pointer-events-none group-hover:scale-105 transition-transform duration-[2000ms]">
-                        <Calendar size={200} strokeWidth={1} />
-                     </div>
-                     <h3 className="text-[11px] font-black uppercase tracking-[0.4em] text-primary/30 mb-10 italic leading-none">CHRONO-CALENDAR</h3>
-                     <div className="relative z-10">
-                        <WeekMiniCalendar />
-                     </div>
-                  </FFCard>
+            <div className="flex flex-wrap gap-3">
+              <FFButton
+                variant={activeTab === 'tasks' ? 'primary' : 'outline'}
+                onClick={() => setActiveTab('tasks')}
+              >
+                Tasks
+              </FFButton>
+              <FFButton
+                variant={activeTab === 'feedback' ? 'primary' : 'outline'}
+                onClick={() => setActiveTab('feedback')}
+              >
+                Feedback
+              </FFButton>
+              <FFButton variant="ghost" onClick={() => navigate('/parent/feedback')}>
+                Open full inbox
+              </FFButton>
+            </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <motion.div whileHover={{ scale: 1.05 }} className="h-full">
-                      <FFCard className="p-10 bg-success/5 border border-success/10 rounded-[48px] h-full flex flex-col justify-between group">
-                        <div className="flex items-center gap-4 text-success mb-6">
-                          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
-                             <Star size={20} fill="currentColor" />
-                          </div>
-                          <span className="text-[11px] font-black uppercase tracking-[0.3em] italic leading-none whitespace-nowrap">DOMINANT_VECTOR</span>
-                        </div>
-                        <p className="text-3xl font-display font-black text-primary uppercase italic tracking-tighter leading-none mb-1 group-hover:text-success transition-colors">Responsibility</p>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-60">PEAK_STABILITY</p>
-                      </FFCard>
-                    </motion.div>
-                    
-                    <motion.div whileHover={{ scale: 1.05 }} className="h-full">
-                      <FFCard className="p-10 bg-alert/5 border border-alert/10 rounded-[48px] h-full flex flex-col justify-between group">
-                        <div className="flex items-center gap-4 text-alert mb-6">
-                           <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg group-hover:-rotate-12 transition-transform">
-                              <Target size={20} />
-                           </div>
-                          <span className="text-[11px] font-black uppercase tracking-[0.3em] italic leading-none whitespace-nowrap">DRIFT_AREA</span>
-                        </div>
-                        <p className="text-3xl font-display font-black text-primary uppercase italic tracking-tighter leading-none mb-1 group-hover:text-alert transition-colors">Screen Time</p>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-60">ATTENTION_LEAK</p>
-                      </FFCard>
-                    </motion.div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
+            {activeTab === 'tasks' ? (
+              <section className="space-y-4">
+                <FFSectionHeader
+                  icon={<Filter />}
+                  title="Task progress"
+                  rightAction={
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <select
+                        value={selectedTaskType}
+                        onChange={(event) => setSelectedTaskType(event.target.value)}
+                        className="min-h-12 rounded-ff border border-black/10 bg-white px-4 font-body text-sm text-primary"
+                      >
+                        <option value="All">All categories</option>
+                        {payload.taskTypes.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={selectedTaskStatus}
+                        onChange={(event) => setSelectedTaskStatus(event.target.value)}
+                        className="min-h-12 rounded-ff border border-black/10 bg-white px-4 font-body text-sm text-primary"
+                      >
+                        <option value="All">All statuses</option>
+                        {payload.taskStatuses.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  }
+                />
 
-          {activeTab === 'feedback' && (
-            <motion.div
-              key="feedback"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.6 }}
-              className="max-w-4xl mx-auto space-y-16"
-            >
-               <div className="flex items-center gap-8 px-4">
-                  <div className="w-12 h-12 bg-primary/5 rounded-[18px] flex items-center justify-center text-primary">
-                    <MessageSquare size={24} strokeWidth={2.5} />
-                  </div>
-                  <h3 className="text-xl font-display font-black uppercase tracking-widest text-primary italic leading-none">EXTERNAL_SIGNAL_FEED</h3>
-                  <div className="h-px flex-1 bg-primary/10" />
-                </div>
-
-              <div className="space-y-10">
-                {feedbacks.length === 0 ? (
-                  <div className="bg-white p-24 rounded-[64px] border border-black/[0.03] text-center shadow-3xl shadow-black/[0.01]">
-                     <div className="w-24 h-24 bg-gray-50 rounded-[40px] flex items-center justify-center text-gray-200 mx-auto mb-10">
-                        <ZapOff size={48} />
-                     </div>
-                     <h4 className="text-2xl font-display font-black text-primary uppercase italic tracking-tighter mb-4">NO_SIGNALS_DETECTED</h4>
-                     <p className="text-gray-400 font-medium italic">Telemetry is currently quiet. No external feedback packets have been received from the field.</p>
-                  </div>
+                {filteredTasks.length === 0 ? (
+                  <FFEmptyState
+                    title="No tasks match this filter"
+                    message="Try another category or status to review your child's latest routine activity."
+                  />
                 ) : (
-                  feedbacks.map(feedback => (
-                    <FeedbackCard 
-                      key={feedback.id} 
-                      feedback={feedback} 
-                      onAcknowledge={handleAcknowledge} 
-                    />
-                  ))
+                  <div className="space-y-3">
+                    {filteredTasks.map((task) => (
+                      <FFCard key={task.id} className="shadow-card p-4">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-display text-lg font-semibold text-primary">{task.title}</p>
+                              <span className={`rounded-full px-3 py-1 font-body text-xs ${statusTone[task.status]}`}>
+                                {task.status}
+                              </span>
+                            </div>
+                            <p className="mt-2 font-body text-sm text-slate-500">
+                              {task.category} • {task.time}
+                            </p>
+                            {task.photoUrl ? (
+                              <a
+                                href={task.photoUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-3 inline-flex text-sm text-primary underline underline-offset-4"
+                              >
+                                View proof photo
+                              </a>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <FFButton
+                              variant="outline"
+                              onClick={() => void handleTaskReview(task, 'flagged')}
+                            >
+                              Flag
+                            </FFButton>
+                            <FFButton onClick={() => void handleTaskReview(task, 'done')}>
+                              Approve
+                            </FFButton>
+                          </div>
+                        </div>
+                      </FFCard>
+                    ))}
+                  </div>
                 )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </section>
+            ) : (
+              <section className="space-y-4">
+                <FFSectionHeader icon={<MessageSquare />} title="Teacher feedback" />
+                {payload.feedback.length === 0 ? (
+                  <FFEmptyState
+                    title="No feedback yet"
+                    message="Teacher messages and classroom observations will appear here."
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    {payload.feedback.map((item) => (
+                      <FFCard key={item.id} className="shadow-card p-4">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-display text-lg font-semibold text-primary">{item.teacherName}</p>
+                              <span className="rounded-full bg-primary/5 px-3 py-1 font-body text-xs text-primary">
+                                {item.type}
+                              </span>
+                              {!item.isRead ? (
+                                <span className="rounded-full bg-accent/15 px-3 py-1 font-body text-xs text-primary">
+                                  New
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-2 font-body text-sm text-slate-500">{item.message}</p>
+                            <p className="mt-2 font-body text-xs text-slate-400">
+                              {new Date(item.date).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {!item.isRead ? (
+                            <FFButton onClick={() => void handleAcknowledgeFeedback(item)}>
+                              Acknowledge
+                            </FFButton>
+                          ) : (
+                            <FFButton variant="ghost" disabled icon={<CheckCircle2 size={16} />}>
+                              Acknowledged
+                            </FFButton>
+                          )}
+                        </div>
+                      </FFCard>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
-        <footer className="text-center space-y-12 py-40 px-8 border-t border-black/[0.03]">
-           <div className="flex items-center justify-center gap-10 text-primary/10">
-              <div className="h-px w-32 bg-current" />
-              <ShieldCheck size={40} />
-              <div className="h-px w-32 bg-current" />
-           </div>
-           <div className="space-y-4">
-              <p className="text-[12px] text-gray-400 font-black uppercase tracking-[0.8em] italic leading-relaxed">STATION_ENGINE // Parent Command Oversight Dashboard v4.4.2</p>
-              <p className="text-[10px] text-gray-300 font-black uppercase tracking-[0.4em] italic opacity-40">Unauthorized access to personnel telemetry is strictly prohibited</p>
-           </div>
-        </footer>
+            <section className="grid gap-4 md:grid-cols-3">
+              <FFCard className="shadow-card p-4">
+                <FFSectionHeader icon={<Target />} title="Today focus" />
+                <p className="mt-4 font-body text-sm text-slate-500">
+                  Keep routines steady and clear any pending study or responsibility tasks by evening.
+                </p>
+              </FFCard>
+              <FFCard className="shadow-card p-4">
+                <FFSectionHeader icon={<BookOpen />} title="Study reminder" />
+                <p className="mt-4 font-body text-sm text-slate-500">
+                  Review homework proof submissions before rewards are approved for the day.
+                </p>
+              </FFCard>
+              <FFCard className="shadow-card p-4">
+                <FFSectionHeader icon={<Sparkles />} title="Parent note" />
+                <p className="mt-4 font-body text-sm text-slate-500">
+                  Use feedback acknowledgements to close the loop with teachers and children consistently.
+                </p>
+              </FFCard>
+            </section>
+          </>
+        ) : null}
       </main>
-
-      {/* High-Command FAB */}
-      <div className="fixed bottom-28 right-12 flex flex-col items-end gap-6 pointer-events-none z-40">
-        <motion.button
-          whileHover={{ scale: 1.15, y: -8, rotate: 12 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={() => navigate(`/parent/routine/${childId}`)}
-          className="pointer-events-auto w-24 h-24 bg-black text-white rounded-[40px] shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex items-center justify-center transition-all group relative overflow-hidden"
-        >
-          <div className="absolute inset-0 bg-gradient-to-tr from-primary to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-xl" />
-          <Zap size={40} fill="white" className="relative z-10 group-hover:scale-110 transition-transform" />
-          <div className="absolute -inset-2 border-2 border-white/20 rounded-[44px] group-hover:scale-110 opacity-0 group-hover:opacity-100 transition-all duration-700" />
-        </motion.button>
-      </div>
-
-      {/* Proof Validation Interface */}
-      {selectedTask && (
-        <PhotoReviewSheet
-          isOpen={isReviewOpen}
-          onClose={() => setIsReviewOpen(false)}
-          photoUrl={selectedTask.photoUrl || ''}
-          taskTitle={selectedTask.title}
-          onApprove={handleApprove}
-          onFlag={handleFlag}
-        />
-      )}
     </div>
   );
 };

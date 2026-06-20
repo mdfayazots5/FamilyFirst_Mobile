@@ -1,44 +1,91 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ArrowLeft, 
-  BookOpen, 
-  Clock, 
-  Coins, 
-  Camera, 
-  Tag, 
-  Repeat,
-  Check,
-  Library,
-  Zap,
-  Target,
-  ShieldCheck,
-  Settings,
-  Layers,
-  Sparkles,
-  Search,
-  ChevronDown
-} from 'lucide-react';
+import React, { useEffect, useMemo, useReducer, useState } from 'react';
+import { BookOpen, Calendar, Camera, CheckCircle2, Clock, Coins, Library, Repeat, Tag, Users } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { TaskRepository, TaskItem, TimeBlock, PillarTag, TaskTemplate } from '../repositories/TaskRepository';
 import { FamilyRepository } from '../../family/repositories/FamilyRepository';
+import { PillarTag, TaskItem, TaskRepository, TaskTemplate, TimeBlock } from '../repositories/TaskRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
-import FFBadge from '../../../shared/components/FFBadge';
-import TaskTemplatePicker from '../widgets/TaskTemplatePicker';
+import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
 
 const pillarTags: PillarTag[] = ['Study', 'Cleanliness', 'Discipline', 'ScreenControl', 'Responsibility'];
-const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const timeBlocks: Array<{ value: TimeBlock; label: string; detail: string }> = [
+  { value: 'Morning', label: 'Morning', detail: 'Start the day well' },
+  { value: 'Evening', label: 'Evening', detail: 'After-school routines' },
+  { value: 'Night', label: 'Night', detail: 'Wrap up before bed' },
+];
+
+type BootstrapState =
+  | {
+      status: 'loading';
+      childAge: number;
+      existingTask: TaskItem | null;
+      templates: TaskTemplate[];
+      error: null;
+    }
+  | {
+      status: 'ready';
+      childAge: number;
+      existingTask: TaskItem | null;
+      templates: TaskTemplate[];
+      error: null;
+    }
+  | {
+      status: 'error';
+      childAge: number;
+      existingTask: TaskItem | null;
+      templates: TaskTemplate[];
+      error: string;
+    };
+
+type BootstrapAction =
+  | { type: 'LOAD_START' }
+  | {
+      type: 'LOAD_SUCCESS';
+      payload: {
+        childAge: number;
+        existingTask: TaskItem | null;
+        templates: TaskTemplate[];
+      };
+    }
+  | { type: 'LOAD_ERROR'; error: string };
+
+const bootstrapReducer = (state: BootstrapState, action: BootstrapAction): BootstrapState => {
+  switch (action.type) {
+    case 'LOAD_START':
+      return { ...state, status: 'loading', error: null };
+    case 'LOAD_SUCCESS':
+      return { status: 'ready', ...action.payload, error: null };
+    case 'LOAD_ERROR':
+      return { ...state, status: 'error', error: action.error };
+    default:
+      return state;
+  }
+};
 
 const AddTaskScreen: React.FC = () => {
-  const { childId, taskId } = useParams<{ childId: string; taskId: string }>();
+  const { childId, taskId } = useParams<{ childId: string; taskId?: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const [bootstrapState, dispatch] = useReducer(bootstrapReducer, {
+    status: 'loading',
+    childAge: 10,
+    existingTask: null,
+    templates: [],
+    error: null,
+  });
+
   const [name, setName] = useState('');
-  const [timeBlock, setTimeBlock] = useState<TimeBlock>((searchParams.get('block') as TimeBlock) || 'Morning');
+  const [timeBlock, setTimeBlock] = useState<TimeBlock>(
+    (searchParams.get('block') as TimeBlock) || 'Morning',
+  );
   const [duration, setDuration] = useState(15);
   const [coinValue, setCoinValue] = useState(10);
   const [isPhotoRequired, setIsPhotoRequired] = useState(false);
@@ -46,47 +93,91 @@ const AddTaskScreen: React.FC = () => {
   const [isRecurring, setIsRecurring] = useState(true);
   const [recurringDays, setRecurringDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [activeFromDate, setActiveFromDate] = useState(new Date().toISOString().split('T')[0]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
-  const [childAge, setChildAge] = useState(10);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showTemplateSheet, setShowTemplateSheet] = useState(false);
 
   useEffect(() => {
-    const fetchInitialData = async () => {
-      if (!user?.familyId || !childId) return;
-      try {
-        const members = await FamilyRepository.getMembers(user.familyId);
-        const child = members.find(m => m.id === childId);
-        if (child) {
-          setChildAge(child.age || 10);
-        }
+    const loadBootstrap = async () => {
+      if (!user?.familyId || !childId) {
+        dispatch({ type: 'LOAD_ERROR', error: 'Child details are required before a task can be created.' });
+        return;
+      }
 
-        if (taskId) {
-          const tasks = await TaskRepository.getTasks(user.familyId, childId);
-          const task = tasks.find(t => t.id === taskId);
-          if (task) {
-            setName(task.name);
-            setTimeBlock(task.timeBlock);
-            setDuration(task.duration);
-            setCoinValue(task.coinValue);
-            setIsPhotoRequired(task.isPhotoRequired);
-            setPillarTag(task.pillarTag);
-            setIsRecurring(task.isRecurring);
-            setRecurringDays(task.recurringDays);
-            setActiveFromDate(task.activeFromDate ?? new Date().toISOString().split('T')[0]);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch initial task data', error);
+      dispatch({ type: 'LOAD_START' });
+
+      try {
+        const [members, tasks, templates] = await Promise.all([
+          FamilyRepository.getMembers(user.familyId),
+          TaskRepository.getTasks(user.familyId, childId),
+          TaskRepository.getTemplates(10),
+        ]);
+
+        const child = members.find((member) => member.id === childId);
+        const childAge = child?.age || 10;
+        const existingTask = taskId ? tasks.find((task) => task.id === taskId) ?? null : null;
+        const ageTemplates = await TaskRepository.getTemplates(childAge);
+
+        dispatch({
+          type: 'LOAD_SUCCESS',
+          payload: {
+            childAge,
+            existingTask,
+            templates: ageTemplates.length > 0 ? ageTemplates : templates,
+          },
+        });
+      } catch {
+        dispatch({ type: 'LOAD_ERROR', error: 'Task setup could not be loaded. Try again.' });
       }
     };
-    fetchInitialData();
-  }, [user?.familyId, childId, taskId]);
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user?.familyId || !childId) return;
+    void loadBootstrap();
+  }, [childId, taskId, user?.familyId]);
 
-    setIsLoading(true);
+  useEffect(() => {
+    if (bootstrapState.status !== 'ready' || !bootstrapState.existingTask) {
+      return;
+    }
+
+    const task = bootstrapState.existingTask;
+    setName(task.name);
+    setTimeBlock(task.timeBlock);
+    setDuration(task.duration);
+    setCoinValue(task.coinValue);
+    setIsPhotoRequired(task.isPhotoRequired);
+    setPillarTag(task.pillarTag);
+    setIsRecurring(task.isRecurring);
+    setRecurringDays(task.recurringDays);
+    setActiveFromDate(task.activeFromDate ?? new Date().toISOString().split('T')[0]);
+  }, [bootstrapState]);
+
+  const toggleDay = (dayValue: number) => {
+    setRecurringDays((current) =>
+      current.includes(dayValue) ? current.filter((day) => day !== dayValue) : [...current, dayValue].sort(),
+    );
+  };
+
+  const handleTemplateSelect = (template: TaskTemplate) => {
+    setName(template.name);
+    setDuration(template.defaultDuration);
+    setCoinValue(template.defaultCoinValue);
+    setPillarTag(template.pillarTag);
+    setShowTemplateSheet(false);
+  };
+
+  const filteredTemplates = useMemo(() => bootstrapState.templates.slice(0, 8), [bootstrapState.templates]);
+
+  const handleSave = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!user?.familyId || !childId) {
+      setSubmitError('Task setup is missing the required family or child context.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
     const taskData: Partial<TaskItem> = {
       childProfileId: childId,
       name,
@@ -106,148 +197,149 @@ const AddTaskScreen: React.FC = () => {
       } else {
         await TaskRepository.createTask(user.familyId, taskData);
       }
+
       navigate(-1);
-    } catch (error) {
-      console.error('Failed to save task', error);
+    } catch {
+      setSubmitError('Task could not be saved. Review the form and try again.');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  const toggleDay = (dayIndex: number) => {
-    const apiDay = dayIndex + 1;
-    setRecurringDays(prev => 
-      prev.includes(apiDay) ? prev.filter(d => d !== apiDay) : [...prev, apiDay]
-    );
-  };
-
-  const handleTemplateSelect = (template: TaskTemplate) => {
-    setName(template.name);
-    setDuration(template.defaultDuration);
-    setCoinValue(template.defaultCoinValue);
-    setPillarTag(template.pillarTag);
-    setIsTemplatePickerOpen(false);
-  };
-
   return (
-    <div className="min-h-screen bg-[#FDFCFB] pb-32">
-      <header className="bg-white/80 backdrop-blur-md p-8 lg:p-14 border-b border-black/[0.03] sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-8">
-          <div className="flex items-center gap-8">
-            <div className="w-20 h-20 bg-primary/5 rounded-[32px] flex items-center justify-center text-primary shadow-inner">
-              <Layers size={32} />
-            </div>
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <FFBadge variant="primary" size="sm" className="font-black">ASSET PROVISIONING</FFBadge>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Deployment: Unit_Primary</p>
-              </div>
-              <h1 className="text-4xl md:text-6xl font-display font-black text-primary tracking-tighter uppercase italic">
-                {taskId ? 'Modify Asset' : 'New Assignment'}
-              </h1>
-            </div>
-          </div>
-
-          <div className="flex gap-4">
-            {!taskId && (
-              <FFButton 
-                variant="outline"
-                size="sm"
-                onClick={() => setIsTemplatePickerOpen(true)}
-                className="h-14 rounded-2xl border-black/5 bg-white shadow-sm px-8 uppercase tracking-widest text-[10px] font-black"
-                icon={<Library size={18} />}
-              >
-                TEMPLATE_VAULT
-              </FFButton>
-            )}
-            <button 
-              onClick={() => navigate(-1)}
-              className="w-14 h-14 bg-white rounded-2xl border border-black/5 text-gray-300 hover:text-primary transition-all shadow-sm flex items-center justify-center"
+    <div className="min-h-screen bg-bg-cream pb-24">
+      <FFPageHeader
+        title={taskId ? 'Edit task' : 'Add task'}
+        subtitle="Build a clear routine for one child"
+        showBack
+        rightAction={
+          !taskId ? (
+            <FFButton
+              variant="ghost"
+              size="sm"
+              icon={<Library className="h-4 w-4" />}
+              onClick={() => setShowTemplateSheet(true)}
             >
-              <ArrowLeft size={24} />
-            </button>
+              Templates
+            </FFButton>
+          ) : undefined
+        }
+      />
+
+      <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <FFCard variant="primary" className="space-y-4 p-5 sm:p-6">
+          <div className="min-w-0">
+            <p className="font-body text-xs font-bold uppercase tracking-wider text-white/70">
+              Task setup
+            </p>
+            <h1 className="mt-1 text-xl font-display font-bold text-white sm:text-2xl">
+              {taskId ? 'Update a family routine' : 'Create a new family routine'}
+            </h1>
+            <p className="mt-2 text-sm text-white/80">
+              Keep the task simple, specific, and easy for a child to finish without confusion.
+            </p>
           </div>
-        </div>
-      </header>
+        </FFCard>
 
-      <main className="max-w-4xl mx-auto p-8 lg:p-14">
-        <form onSubmit={handleSave} className="space-y-12">
-          {/* Core Identification */}
-          <section className="space-y-8">
-             <div className="flex items-center gap-4">
-              <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/30">MODULE_IDENTIFICATION</h3>
-              <div className="h-px flex-1 bg-primary/10" />
-            </div>
+        {submitError ? (
+          <FFCard variant="warm" className="p-4">
+            <p className="text-sm text-alert">{submitError}</p>
+          </FFCard>
+        ) : null}
 
-            <FFCard className="p-10 border-none shadow-2xl shadow-black/[0.01] bg-white rounded-[48px]">
-              <div className="space-y-10">
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">Assignment Objective</label>
-                  <div className="relative group">
-                    <BookOpen className="absolute left-6 top-1/2 -translate-y-1/2 text-primary/20 group-focus-within:text-primary transition-colors" size={24} />
+        {bootstrapState.status === 'loading' ? (
+          <div className="space-y-3">
+            <FFCardSkeleton />
+            <FFCardSkeleton />
+            <FFCardSkeleton />
+          </div>
+        ) : null}
+
+        {bootstrapState.status === 'error' ? (
+          <FFErrorState message={bootstrapState.error} onRetry={() => window.location.reload()} />
+        ) : null}
+
+        {bootstrapState.status === 'ready' ? (
+          <form onSubmit={handleSave} className="space-y-6">
+            <section className="space-y-3">
+              <FFSectionHeader icon={<BookOpen />} title="Task details" />
+              <FFCard className="space-y-4 p-4">
+                <label className="block space-y-2">
+                  <span className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
+                    Task name
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                    placeholder="Brush teeth"
+                  />
+                </label>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block space-y-2">
+                    <span className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
+                      Time block
+                    </span>
+                    <select
+                      value={timeBlock}
+                      onChange={(event) => setTimeBlock(event.target.value as TimeBlock)}
+                      className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                    >
+                      {timeBlocks.map((block) => (
+                        <option key={block.value} value={block.value}>
+                          {block.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-sm text-gray-500">
+                      {timeBlocks.find((block) => block.value === timeBlock)?.detail}
+                    </p>
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
+                      Start date
+                    </span>
                     <input
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-gray-50/50 border border-black/[0.03] rounded-[32px] pl-16 pr-8 py-8 font-display font-black text-2xl text-primary focus:outline-none focus:ring-4 focus:ring-primary/5 placeholder:text-gray-200 transition-all italic uppercase tracking-tighter"
-                      placeholder="ENTER_PROTOCOL_NAME..."
+                      type="date"
+                      value={activeFromDate}
+                      onChange={(event) => setActiveFromDate(event.target.value)}
+                      className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
                     />
-                  </div>
+                  </label>
                 </div>
+              </FFCard>
+            </section>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">Operational Window</label>
-                    <div className="relative">
-                       <select
-                        value={timeBlock}
-                        onChange={(e) => setTimeBlock(e.target.value as TimeBlock)}
-                        className="w-full bg-gray-50/50 border border-black/[0.03] rounded-[24px] px-8 py-6 font-display font-black text-primary text-xl uppercase italic focus:outline-none appearance-none cursor-pointer"
-                      >
-                        <option value="Morning">MORNING_OPS</option>
-                        <option value="Evening">EVENING_OPS</option>
-                        <option value="Night">NOCTURNAL_OPS</option>
-                      </select>
-                      <ChevronDown size={20} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">Expected Duration (MIN)</label>
-                    <div className="relative group">
-                      <Clock className="absolute left-6 top-1/2 -translate-y-1/2 text-primary/20 group-focus-within:text-primary" size={20} />
-                      <input
-                        type="number"
-                        required
-                        value={duration}
-                        onChange={(e) => setDuration(parseInt(e.target.value))}
-                        className="w-full bg-gray-50/50 border border-black/[0.03] rounded-[24px] pl-16 pr-8 py-6 font-display font-black text-xl text-primary focus:outline-none focus:ring-4 focus:ring-primary/5"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </FFCard>
-          </section>
+            <section className="space-y-3">
+              <FFSectionHeader icon={<Clock />} title="Effort and reward" />
+              <FFCard className="space-y-4 p-4">
+                <label className="block space-y-2">
+                  <span className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
+                    Duration
+                  </span>
+                  <input
+                    type="number"
+                    min={5}
+                    max={120}
+                    value={duration}
+                    onChange={(event) => setDuration(parseInt(event.target.value || '0', 10))}
+                    className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                  />
+                </label>
 
-          {/* Incentive & Verification */}
-          <section className="space-y-8">
-             <div className="flex items-center gap-4">
-              <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/30">INCENTIVE_VERIFICATION</h3>
-              <div className="h-px flex-1 bg-primary/10" />
-            </div>
-
-            <FFCard className="p-10 border-none shadow-2xl shadow-black/[0.01] bg-white rounded-[48px] space-y-12">
-               <div className="space-y-8">
-                  <div className="flex justify-between items-end">
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">RESOURCE_ALLOCATION</label>
-                       <p className="text-sm text-gray-300 font-medium">Credits issued upon synchronization.</p>
-                    </div>
-                    <div className="flex items-center gap-3 px-8 py-4 bg-amber-50 rounded-[28px] text-amber-600 border border-amber-100 shadow-xl shadow-amber-500/5">
-                      <Coins size={24} fill="currentColor" />
-                      <span className="text-3xl font-display font-black italic">{coinValue}</span>
-                    </div>
+                <label className="block space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
+                      Coin value
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-3 py-1 text-[10px] font-body font-bold uppercase tracking-wider text-accent">
+                      <Coins className="h-3 w-3" />
+                      {coinValue} coins
+                    </span>
                   </div>
                   <input
                     type="range"
@@ -255,159 +347,199 @@ const AddTaskScreen: React.FC = () => {
                     max="200"
                     step="5"
                     value={coinValue}
-                    onChange={(e) => setCoinValue(parseInt(e.target.value))}
-                    className="w-full h-3 bg-gray-100 rounded-full appearance-none cursor-pointer accent-primary"
+                    onChange={(event) => setCoinValue(parseInt(event.target.value, 10))}
+                    className="w-full accent-primary"
                   />
-               </div>
+                </label>
 
-               <div className="flex items-center justify-between p-10 bg-gray-50/50 rounded-[40px] border border-black/[0.02] group hover:border-primary/20 transition-all">
-                  <div className="flex items-center gap-8">
-                    <div className="w-20 h-20 bg-white rounded-[28px] flex items-center justify-center text-primary shadow-xl shadow-black/[0.02] border border-black/[0.01]">
-                      <Camera size={28} />
-                    </div>
-                    <div>
-                      <h4 className="text-xl font-display font-black text-primary uppercase italic tracking-tighter">Visual Log Requirement</h4>
-                      <p className="text-sm text-gray-400 font-medium mt-1">Binary proof required via optical sensor.</p>
-                    </div>
+                <div className="flex items-center justify-between gap-4 rounded-ff-sm bg-[#FDF9F4] p-4">
+                  <div className="min-w-0">
+                    <p className="font-display text-sm font-semibold text-primary">Photo proof</p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Require a photo when the task needs visible confirmation.
+                    </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsPhotoRequired(!isPhotoRequired)}
-                    className={`w-20 h-10 rounded-[20px] transition-all relative p-1.5 ${isPhotoRequired ? 'bg-primary shadow-lg shadow-primary/20' : 'bg-gray-200'}`}
+                    onClick={() => setIsPhotoRequired((current) => !current)}
+                    className={`flex min-h-12 min-w-12 items-center rounded-full p-1 transition-colors ${
+                      isPhotoRequired ? 'bg-primary' : 'bg-black/10'
+                    }`}
+                    aria-label="Toggle photo proof"
                   >
-                    <motion.div 
-                      animate={{ x: isPhotoRequired ? 40 : 0 }}
-                      className="w-7 h-7 bg-white rounded-[14px] shadow-sm flex items-center justify-center"
-                    >
-                      <div className={`w-1.5 h-1.5 rounded-full ${isPhotoRequired ? 'bg-primary' : 'bg-gray-300'}`} />
-                    </motion.div>
+                    <span
+                      className={`h-10 w-10 rounded-full bg-white transition-transform ${
+                        isPhotoRequired ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
                   </button>
-               </div>
-            </FFCard>
-          </section>
+                </div>
+              </FFCard>
+            </section>
 
-          {/* Classification & Schedule */}
-          <section className="space-y-8">
-             <div className="flex items-center gap-4">
-              <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/30">SYSTEM_CLASSIFICATION</h3>
-              <div className="h-px flex-1 bg-primary/10" />
-            </div>
-
-            <FFCard className="p-10 border-none shadow-2xl shadow-black/[0.01] bg-white rounded-[48px] space-y-12">
-               <div className="space-y-6">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">Pillar Directive</label>
-                  <div className="flex flex-wrap gap-3">
-                    {pillarTags.map(tag => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => setPillarTag(tag)}
-                        className={`px-8 h-14 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${pillarTag === tag ? 'bg-primary border-primary text-white shadow-xl shadow-primary/20 scale-105' : 'bg-white border-black/[0.03] text-gray-400 hover:bg-gray-50'}`}
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-               </div>
-
-               <div className="pt-10 border-t border-black/[0.03]">
-                  <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-primary/5 rounded-2xl flex items-center justify-center text-primary">
-                         <Repeat size={20} />
-                      </div>
-                      <h4 className="text-xl font-display font-black text-primary uppercase italic tracking-tighter">Recurring Sequence</h4>
-                    </div>
-                    <button
+            <section className="space-y-3">
+              <FFSectionHeader icon={<Tag />} title="Focus area" />
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+                {pillarTags.map((tag) => {
+                  const selected = pillarTag === tag;
+                  return (
+                    <FFButton
+                      key={tag}
                       type="button"
-                      onClick={() => setIsRecurring(!isRecurring)}
-                      className={`w-16 h-8 rounded-full transition-all relative ${isRecurring ? 'bg-primary' : 'bg-gray-200'}`}
+                      variant={selected ? 'primary' : 'outline'}
+                      onClick={() => setPillarTag(tag)}
                     >
-                      <motion.div 
-                        animate={{ x: isRecurring ? 32 : 4 }}
-                        className="absolute top-1 w-6 h-6 bg-white rounded-full shadow-md"
-                      />
-                    </button>
+                      {tag}
+                    </FFButton>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <FFSectionHeader icon={<Repeat />} title="Schedule" />
+              <FFCard className="space-y-4 p-4">
+                <div className="flex items-center justify-between gap-4 rounded-ff-sm bg-[#FDF9F4] p-4">
+                  <div className="min-w-0">
+                    <p className="font-display text-sm font-semibold text-primary">Repeat each week</p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Turn this on for routines that should stay on the calendar.
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsRecurring((current) => !current)}
+                    className={`flex min-h-12 min-w-12 items-center rounded-full p-1 transition-colors ${
+                      isRecurring ? 'bg-primary' : 'bg-black/10'
+                    }`}
+                    aria-label="Toggle recurring task"
+                  >
+                    <span
+                      className={`h-10 w-10 rounded-full bg-white transition-transform ${
+                        isRecurring ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
 
-                  <AnimatePresence>
-                    {isRecurring && (
-                      <motion.div 
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="flex justify-between gap-2 overflow-x-auto no-scrollbar py-2"
-                      >
-                        {days.map((day, i) => {
-                          const apiDay = i + 1;
-                          const isActive = recurringDays.includes(apiDay);
-                          return (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => toggleDay(i)}
-                              className={`w-14 h-14 lg:w-20 lg:h-20 flex-shrink-0 rounded-2xl font-display font-black text-[10px] tracking-widest transition-all border-2 ${isActive ? 'bg-primary border-primary text-white shadow-xl shadow-primary/20 scale-105' : 'bg-white border-black/[0.03] text-gray-200'}`}
-                            >
-                              {day}
-                            </button>
-                          );
-                        })}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-               </div>
+                {isRecurring ? (
+                  <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
+                    {weekdayLabels.map((label, index) => {
+                      const dayValue = index + 1;
+                      const selected = recurringDays.includes(dayValue);
+                      return (
+                        <FFButton
+                          key={label}
+                          type="button"
+                          variant={selected ? 'accent' : 'outline'}
+                          onClick={() => toggleDay(dayValue)}
+                        >
+                          {label}
+                        </FFButton>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </FFCard>
+            </section>
+
+            <FFCard variant="warm" className="space-y-3 p-4">
+              <FFSectionHeader icon={<Users />} title="Template notes" />
+              {filteredTemplates.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+                  {filteredTemplates.map((template) => (
+                    <FFCard
+                      key={template.id}
+                      hoverable
+                      onClick={() => handleTemplateSelect(template)}
+                      className="p-4"
+                    >
+                      <p className="font-display text-sm font-semibold text-primary">{template.name}</p>
+                      <p className="mt-1 text-sm text-gray-500">
+                        {template.defaultDuration} min · {template.defaultCoinValue} coins
+                      </p>
+                    </FFCard>
+                  ))}
+                </div>
+              ) : (
+                <FFEmptyState
+                  title="No templates available"
+                  message="Create a task manually for now. Templates can still be added later."
+                  icon={<Library className="h-8 w-8" />}
+                />
+              )}
             </FFCard>
-          </section>
 
-          <div className="pt-8">
-            <FFButton 
-              type="submit" 
-              className="w-full h-24 rounded-[40px] text-xl font-black uppercase tracking-[0.3em] italic shadow-2xl shadow-primary/20" 
-              isLoading={isLoading}
-              icon={<ShieldCheck size={28} />}
-            >
-              FINALIZE_ASSIGNMENT
-            </FFButton>
-          </div>
-        </form>
+            <div className="space-y-3">
+              <FFButton
+                type="submit"
+                className="w-full"
+                icon={<CheckCircle2 className="h-4 w-4" />}
+                isLoading={isSubmitting}
+              >
+                {taskId ? 'Save task' : 'Create task'}
+              </FFButton>
 
-        <footer className="text-center space-y-4 py-20">
-           <div className="flex items-center justify-center gap-4 text-primary/10">
-              <div className="h-px w-12 bg-current" />
-              <Target size={20} />
-              <div className="h-px w-12 bg-current" />
-           </div>
-           <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.5em]">PROTOCOL_ENGINE // FamilyFirst v1.0.0</p>
-        </footer>
+              <FFButton
+                type="button"
+                variant="outline"
+                className="w-full"
+                icon={<Calendar className="h-4 w-4" />}
+                onClick={() => navigate(-1)}
+              >
+                Back to routine
+              </FFButton>
+            </div>
+          </form>
+        ) : null}
       </main>
 
-      {/* Template Picker Overlay */}
-      <AnimatePresence>
-        {isTemplatePickerOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsTemplatePickerOpen(false)}
-              className="fixed inset-0 bg-primary/10 z-50 backdrop-blur-3xl transition-all"
-            />
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 40, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 h-[92vh] z-50 overflow-hidden rounded-t-[64px] shadow-2xl bg-white"
-            >
-              <TaskTemplatePicker 
-                ageGroup={childAge} 
-                onSelect={handleTemplateSelect} 
-                onClose={() => setIsTemplatePickerOpen(false)} 
-              />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {showTemplateSheet ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-50 bg-primary/40"
+            onClick={() => setShowTemplateSheet(false)}
+            aria-label="Close template list"
+          />
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-white p-4 shadow-elevated sm:p-6">
+            <div className="mx-auto max-w-4xl space-y-4">
+              <FFSectionHeader icon={<Library />} title={`Task templates · Age ${bootstrapState.childAge}`} />
+              {filteredTemplates.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+                  {filteredTemplates.map((template) => (
+                    <FFCard
+                      key={template.id}
+                      hoverable
+                      onClick={() => handleTemplateSelect(template)}
+                      className="p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-display text-sm font-semibold text-primary">{template.name}</p>
+                          <p className="mt-1 text-sm text-gray-500">
+                            {template.category} · {template.defaultDuration} min
+                          </p>
+                        </div>
+                        <span className="text-2xl">{template.icon}</span>
+                      </div>
+                    </FFCard>
+                  ))}
+                </div>
+              ) : (
+                <FFEmptyState
+                  title="No templates available"
+                  message="Try creating the task manually for this child."
+                  icon={<Library className="h-8 w-8" />}
+                />
+              )}
+              <FFButton variant="outline" className="w-full" onClick={() => setShowTemplateSheet(false)}>
+                Close
+              </FFButton>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 };

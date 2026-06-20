@@ -1,30 +1,69 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ArrowLeft, 
-  Mic, 
-  Send, 
-  X, 
+import React, { useEffect, useReducer, useState } from 'react';
+import {
   CheckCircle2,
-  Square,
-  Play,
-  Trash2,
   Heart,
-  Star
+  Mic,
+  Play,
+  RefreshCw,
+  Send,
+  Square,
+  Trash2,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { ElderRepository, GrandchildStatus } from '../repositories/ElderRepository';
+import FFAvatar from '../../../shared/components/FFAvatar';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
-import FFAvatar from '../../../shared/components/FFAvatar';
+import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import FFShimmer from '../../../shared/components/FFShimmer';
+import { ElderRepository, GrandchildStatus } from '../repositories/ElderRepository';
+
+type ChildLookupState =
+  | { status: 'loading'; data: GrandchildStatus | null; error: string | null }
+  | { status: 'ready'; data: GrandchildStatus; error: string | null }
+  | { status: 'error'; data: GrandchildStatus | null; error: string };
+
+type ChildLookupAction =
+  | { type: 'LOAD_START'; preserve: GrandchildStatus | null }
+  | { type: 'LOAD_SUCCESS'; payload: GrandchildStatus }
+  | { type: 'LOAD_ERROR'; error: string };
+
+const initialState: ChildLookupState = {
+  status: 'loading',
+  data: null,
+  error: null,
+};
+
+function reducer(state: ChildLookupState, action: ChildLookupAction): ChildLookupState {
+  switch (action.type) {
+    case 'LOAD_START':
+      return { status: 'loading', data: action.preserve, error: null };
+    case 'LOAD_SUCCESS':
+      return { status: 'ready', data: action.payload, error: null };
+    case 'LOAD_ERROR':
+      return { status: 'error', data: state.data, error: action.error };
+    default:
+      return state;
+  }
+}
+
+const stickers = [
+  { emoji: '🙏', label: 'Blessings' },
+  { emoji: '❤️', label: 'Love' },
+  { emoji: '🌟', label: 'Star' },
+  { emoji: '👏', label: 'Bravo' },
+  { emoji: '🎂', label: 'Birthday' },
+  { emoji: '🎉', label: 'Celebrate' },
+];
 
 const ElderSendAppreciationScreen: React.FC = () => {
   const { childId } = useParams<{ childId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-
-  const [child, setChild] = useState<GrandchildStatus | null>(null);
+  const [state, dispatch] = useReducer(reducer, initialState);
   const [message, setMessage] = useState('');
   const [selectedSticker, setSelectedSticker] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -32,46 +71,58 @@ const ElderSendAppreciationScreen: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // Elder font size setting
-  const fontSizeScale = localStorage.getItem('elderFontSize') || '1.3';
-  const scale = parseFloat(fontSizeScale);
+  const loadChild = async () => {
+    if (!user?.familyId || !childId) {
+      dispatch({ type: 'LOAD_ERROR', error: 'Grandchild details are not available right now.' });
+      return;
+    }
+
+    dispatch({ type: 'LOAD_START', preserve: state.data });
+
+    try {
+      const children = await ElderRepository.getGrandchildren(user.familyId);
+      const child = children.find((item) => item.id === childId);
+
+      if (!child) {
+        dispatch({ type: 'LOAD_ERROR', error: 'Grandchild not found.' });
+        return;
+      }
+
+      dispatch({ type: 'LOAD_SUCCESS', payload: child });
+    } catch (error) {
+      console.error('Failed to load appreciation target', error);
+      dispatch({ type: 'LOAD_ERROR', error: 'Unable to load this appreciation screen right now.' });
+    }
+  };
 
   useEffect(() => {
-    const fetchChild = async () => {
-      if (!user?.familyId || !childId) return;
-      const children = await ElderRepository.getGrandchildren(user.familyId);
-      const target = children.find(c => c.id === childId);
-      setChild(target || null);
-    };
-    fetchChild();
+    void loadChild();
   }, [user?.familyId, childId]);
 
-  const stickers = [
-    { emoji: '🙏', label: 'Blessings' },
-    { emoji: '❤️', label: 'Love' },
-    { emoji: '🌟', label: 'Star' },
-    { emoji: '👏', label: 'Bravo' },
-    { emoji: '🎂', label: 'Birthday' },
-    { emoji: '🎉', label: 'Party' },
-  ];
+  const child = state.data;
 
   const handleSend = async () => {
-    if (!user?.familyId || !childId) return;
+    if (!user?.familyId || !childId || !child) {
+      return;
+    }
+
     setIsSending(true);
+
     try {
       await ElderRepository.sendAppreciation(user.familyId, {
         childProfileId: childId,
-        childName: child?.name || '',
+        childName: child.name,
         authorId: user.id,
         authorName: user.name || 'Elder',
-        message: message || (selectedSticker ? `Sending you ${selectedSticker}!` : 'Thinking of you!'),
+        message: message || (selectedSticker ? `Sending you ${selectedSticker}` : 'Thinking of you today.'),
         sticker: selectedSticker || undefined,
-        audioUrl: audioUrl || undefined
+        audioUrl: audioUrl || undefined,
       });
+
       setIsSuccess(true);
-      setTimeout(() => navigate('/elder'), 2000);
+      setTimeout(() => navigate('/elder'), 1500);
     } catch (error) {
-      console.error('Failed to send appreciation', error);
+      console.error('Failed to send elder appreciation', error);
     } finally {
       setIsSending(false);
     }
@@ -79,204 +130,168 @@ const ElderSendAppreciationScreen: React.FC = () => {
 
   const startRecording = () => {
     setIsRecording(true);
-    // Simulate recording
     setTimeout(() => {
       setIsRecording(false);
       setAudioUrl('demo_audio_url');
     }, 3000);
   };
 
-  if (!child) return null;
-
   return (
-    <div className="min-h-screen bg-bg-cream pb-32" style={{ fontSize: `${16 * scale}px` }}>
-      <header className="p-8 lg:p-14">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-6">
-            <div className="relative">
-              <FFAvatar name={child.name} size="xl" className="border-4 border-white shadow-2xl" />
-              <div className="absolute -bottom-2 -right-2 bg-accent text-white p-2 rounded-xl shadow-lg border-2 border-white">
-                 <Heart size={20} fill="currentColor" />
-              </div>
-            </div>
-            <div>
-              <h1 className="font-display font-black text-primary tracking-tight leading-tight" style={{ fontSize: `${36 * scale}px` }}>
-                Bless <span className="text-accent">{child.name}</span>
-              </h1>
-              <div className="flex items-center gap-2 mt-1">
-                <Star size={14} className="text-gray-400" />
-                <p className="font-bold text-gray-400 uppercase tracking-[0.2em]" style={{ fontSize: `${10 * scale}px` }}>
-                  Legacy Appreciation Protocol
-                </p>
-              </div>
-            </div>
-          </div>
-          <button 
-            onClick={() => navigate(-1)}
-            className="p-4 bg-white rounded-3xl border border-black/[0.03] text-gray-300 hover:text-primary transition-all shadow-sm group"
+    <div className="min-h-screen bg-[#F8F4EE]">
+      <FFPageHeader
+        title={child ? `Send to ${child.name}` : 'Send appreciation'}
+        subtitle="A warm note for your grandchild"
+        showBack
+        rightAction={
+          <FFButton
+            variant="ghost"
+            size="sm"
+            className="text-white hover:bg-white/10"
+            onClick={() => void loadChild()}
+            icon={<RefreshCw size={16} />}
           >
-            <ArrowLeft size={32} className="group-hover:-translate-x-1 transition-transform" />
-          </button>
-        </div>
-      </header>
+            Refresh
+          </FFButton>
+        }
+      />
 
-      <main className="px-8 lg:px-14 space-y-12 pb-20 max-w-4xl mx-auto">
-        {/* Sticker Picker */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-4 px-2">
-            <h3 className="font-bold uppercase tracking-[0.3em] text-gray-400" style={{ fontSize: `${14 * scale}px` }}>
-              Sacred Symbols
-            </h3>
-            <div className="h-0.5 flex-1 bg-black/[0.03] rounded-full" />
-          </div>
-          <div className="grid grid-cols-3 gap-6">
-            {stickers.map(sticker => (
-              <motion.button
-                key={sticker.emoji}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setSelectedSticker(sticker.emoji)}
-                className={`p-10 rounded-[48px] text-6xl transition-all border-4 relative overflow-hidden group/s ${
-                  selectedSticker === sticker.emoji 
-                    ? 'bg-accent border-primary shadow-2xl shadow-accent/40' 
-                    : 'bg-white border-black/[0.02] shadow-sm hover:border-accent/30'
-                }`}
-              >
-                {selectedSticker === sticker.emoji && (
-                  <motion.div 
-                    layoutId="active-bg"
-                    className="absolute inset-0 bg-white/10" 
-                  />
-                )}
-                <span className="relative z-10 group-hover/s:scale-110 transition-transform block">{sticker.emoji}</span>
-              </motion.button>
-            ))}
-          </div>
-        </section>
-
-        {/* Voice Note */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-4 px-2">
-            <h3 className="font-bold uppercase tracking-[0.3em] text-gray-400" style={{ fontSize: `${14 * scale}px` }}>
-              Vocal Blessing
-            </h3>
-            <div className="h-0.5 flex-1 bg-black/[0.03] rounded-full" />
-          </div>
-          <FFCard className="p-12 flex flex-col items-center text-center space-y-8 rounded-[64px] border-black/[0.02] bg-white hover:shadow-2xl transition-all group overflow-hidden relative">
-            <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-            
-            {audioUrl ? (
-              <div className="w-full flex items-center gap-6 p-6 bg-primary/5 rounded-[32px] border border-primary/5">
-                <motion.button 
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="w-16 h-16 bg-primary text-white rounded-full flex items-center justify-center shadow-lg"
-                >
-                  <Play size={28} fill="currentColor" />
-                </motion.button>
-                <div className="flex-1 h-3 bg-primary/20 rounded-full overflow-hidden shadow-inner">
-                  <motion.div 
-                    initial={{ x: '-100%' }}
-                    animate={{ x: '0%' }}
-                    transition={{ duration: 3, repeat: Infinity }}
-                    className="w-full h-full bg-primary" 
-                  />
-                </div>
-                <button onClick={() => setAudioUrl(null)} className="text-alert/40 hover:text-alert p-3 transition-colors">
-                  <Trash2 size={28} />
-                </button>
+      <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 pb-24">
+        {state.status === 'loading' && !child ? (
+          <FFCard className="p-5 shadow-card">
+            <div className="flex items-center gap-4">
+              <FFShimmer width={64} height={64} borderRadius="9999px" />
+              <div className="flex-1 space-y-3">
+                <FFShimmer width="45%" height={18} />
+                <FFShimmer width="70%" height={14} />
               </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <AnimatePresence>
-                    {isRecording && (
-                      <motion.div
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1.5, opacity: 0.1 }}
-                        exit={{ scale: 2, opacity: 0 }}
-                        transition={{ repeat: Infinity, duration: 1 }}
-                        className="absolute inset-0 bg-alert rounded-full"
-                      />
-                    )}
-                  </AnimatePresence>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={isRecording ? () => setIsRecording(false) : startRecording}
-                    className={`w-32 h-32 rounded-full flex items-center justify-center shadow-2xl transition-all relative z-10 ${
-                      isRecording ? 'bg-alert text-white scale-110 shadow-alert/30' : 'bg-primary text-white shadow-primary/30'
-                    }`}
-                  >
-                    {isRecording ? <Square size={48} fill="currentColor" /> : <Mic size={48} strokeWidth={1.5} />}
-                  </motion.button>
-                </div>
-                <div>
-                  <p className="font-display font-bold text-primary mb-2" style={{ fontSize: `${24 * scale}px` }}>
-                    {isRecording ? 'Listening for your wisdom...' : 'Share your voice'}
-                  </p>
-                  <p className="text-[12px] font-bold text-gray-300 uppercase tracking-widest">
-                    {isRecording ? 'Protocol Active' : 'Hold to capture message'}
-                  </p>
-                </div>
-              </>
-            )}
+            </div>
           </FFCard>
-        </section>
+        ) : null}
 
-        {/* Text Message */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-4 px-2">
-            <h3 className="font-bold uppercase tracking-[0.3em] text-gray-400" style={{ fontSize: `${14 * scale}px` }}>
-              Written Blessing
-            </h3>
-            <div className="h-0.5 flex-1 bg-black/[0.03] rounded-full" />
-          </div>
-          <div className="relative">
-            <textarea
-              rows={4}
-              placeholder="Inscribe your thoughts here..."
-              className="w-full p-10 bg-white border-2 border-black/[0.03] rounded-[64px] focus:outline-none focus:border-accent/30 transition-all font-medium shadow-sm hover:shadow-xl placeholder:text-gray-200"
-              style={{ fontSize: `${22 * scale}px` }}
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-            />
-          </div>
-        </section>
+        {state.status === 'error' && !child ? (
+          <FFErrorState message={state.error} onRetry={() => void loadChild()} />
+        ) : null}
 
-        <FFButton 
-          className="w-full py-8 rounded-[48px] shadow-2xl shadow-primary/30 group" 
-          size="lg"
-          icon={<Send size={32} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
-          isLoading={isSending}
-          onClick={handleSend}
-          style={{ fontSize: `${22 * scale}px` }}
-        >
-          Dispatch to {child.name}
-        </FFButton>
+        {child ? (
+          <>
+            {state.status === 'error' ? (
+              <FFCard className="border-alert/20 bg-alert/5 p-4 shadow-card">
+                <p className="font-body text-sm text-alert">{state.error}</p>
+              </FFCard>
+            ) : null}
+
+            <FFCard className="p-5 shadow-card">
+              <div className="flex items-center gap-4">
+                <FFAvatar name={child.name} size="xl" />
+                <div>
+                  <h1 className="font-display text-2xl font-bold text-primary">{child.name}</h1>
+                  <p className="mt-1 font-body text-sm text-slate-500">
+                    Send a loving message, blessing, or celebration note.
+                  </p>
+                </div>
+              </div>
+            </FFCard>
+
+            <section className="space-y-4">
+              <FFSectionHeader icon={<Heart />} title="Choose a sticker" />
+              <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+                {stickers.map((sticker) => (
+                  <button
+                    key={sticker.emoji}
+                    type="button"
+                    onClick={() => setSelectedSticker(sticker.emoji)}
+                    className={`rounded-ff border p-4 text-3xl transition-colors ${
+                      selectedSticker === sticker.emoji
+                        ? 'border-accent bg-accent/10'
+                        : 'border-black/5 bg-white'
+                    }`}
+                    aria-label={sticker.label}
+                  >
+                    {sticker.emoji}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <FFSectionHeader icon={<Mic />} title="Voice note" />
+              <FFCard className="p-5 shadow-card">
+                {audioUrl ? (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-white"
+                    >
+                      <Play size={18} />
+                    </button>
+                    <div className="h-3 flex-1 rounded-full bg-slate-100" />
+                    <button
+                      type="button"
+                      onClick={() => setAudioUrl(null)}
+                      className="flex h-12 w-12 items-center justify-center rounded-full bg-alert/10 text-alert"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-4 text-center">
+                    <button
+                      type="button"
+                      onClick={isRecording ? () => setIsRecording(false) : startRecording}
+                      className={`flex h-24 w-24 items-center justify-center rounded-full ${
+                        isRecording ? 'bg-alert text-white' : 'bg-primary text-white'
+                      }`}
+                    >
+                      {isRecording ? <Square size={28} /> : <Mic size={28} />}
+                    </button>
+                    <p className="font-body text-sm text-slate-500">
+                      {isRecording ? 'Recording your message...' : 'Tap to record a short voice blessing.'}
+                    </p>
+                  </div>
+                )}
+              </FFCard>
+            </section>
+
+            <section className="space-y-4">
+              <FFSectionHeader icon={<Send />} title="Write a note" />
+              <FFCard className="p-5 shadow-card">
+                <textarea
+                  rows={5}
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  placeholder="I am proud of you. Keep going with your kind heart and steady effort."
+                  className="min-h-40 w-full rounded-xl border border-black/10 bg-white px-4 py-3 font-body text-sm text-primary outline-none focus:border-primary"
+                />
+              </FFCard>
+            </section>
+
+            <FFButton className="w-full" isLoading={isSending} onClick={() => void handleSend()} icon={<Send size={16} />}>
+              Send appreciation
+            </FFButton>
+          </>
+        ) : null}
+
+        {state.status === 'ready' && !child ? (
+          <FFEmptyState
+            title="Grandchild not found"
+            message="This child may no longer be available from the elder dashboard."
+          />
+        ) : null}
       </main>
 
-      {/* Success Overlay */}
-      <AnimatePresence>
-        {isSuccess && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="fixed inset-0 bg-primary z-50 flex flex-col items-center justify-center text-white p-8 text-center"
-          >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', damping: 12 }}
-              className="w-32 h-32 bg-white/20 rounded-[40px] flex items-center justify-center mb-8"
-            >
-              <CheckCircle2 size={80} />
-            </motion.div>
-            <h2 className="font-display font-bold mb-4" style={{ fontSize: `${32 * scale}px` }}>Sent with Love!</h2>
-            <p className="font-medium opacity-80" style={{ fontSize: `${18 * scale}px` }}>{child.name} will see your message on the Appreciation Wall.</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isSuccess ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/80 p-4">
+          <FFCard className="max-w-md p-6 text-center shadow-card">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-success">
+              <CheckCircle2 size={32} />
+            </div>
+            <h2 className="mt-4 font-display text-2xl font-bold text-primary">Sent with love</h2>
+            <p className="mt-2 font-body text-sm text-slate-500">
+              Your appreciation has been shared with {child?.name}.
+            </p>
+          </FFCard>
+        </div>
+      ) : null}
     </div>
   );
 };

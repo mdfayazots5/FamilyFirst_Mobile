@@ -1,283 +1,340 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { 
-  ArrowLeft, 
-  Edit2, 
-  Trash2, 
-  Clock, 
-  MapPin, 
-  Users, 
-  Bell, 
-  Repeat,
+import React, { useEffect, useReducer, useState } from 'react';
+import {
+  Bell,
   Calendar as CalendarIcon,
-  AlertCircle
+  Clock,
+  Edit2,
+  MapPin,
+  Trash2,
+  Users,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth, UserRole } from '../../../core/auth/AuthContext';
-import { CalendarRepository, CalendarEvent } from '../repositories/CalendarRepository';
-import { getEventColor } from '../widgets/CalendarEventTile';
+import { CalendarEvent, CalendarRepository } from '../repositories/CalendarRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
-import FFBadge from '../../../shared/components/FFBadge';
+import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
+
+type DetailState =
+  | { status: 'loading'; event: CalendarEvent | null; error: null }
+  | { status: 'ready'; event: CalendarEvent; error: null }
+  | { status: 'error'; event: CalendarEvent | null; error: string };
+
+type DetailAction =
+  | { type: 'LOAD_START' }
+  | { type: 'LOAD_SUCCESS'; payload: CalendarEvent }
+  | { type: 'LOAD_ERROR'; error: string };
+
+const detailReducer = (state: DetailState, action: DetailAction): DetailState => {
+  switch (action.type) {
+    case 'LOAD_START':
+      return { ...state, status: 'loading', error: null };
+    case 'LOAD_SUCCESS':
+      return { status: 'ready', event: action.payload, error: null };
+    case 'LOAD_ERROR':
+      return { status: 'error', event: state.event, error: action.error };
+    default:
+      return state;
+  }
+};
+
+const formatEventTypeLabel = (value: CalendarEvent['type']) =>
+  value
+    .replace(/([A-Z])/g, ' $1')
+    .trim()
+    .replace('Doctor Appointment', 'Doctor visit')
+    .replace('Family Travel', 'Family plan');
+
+const formatReminderLabel = (value: string) =>
+  value
+    .replace('min', ' min')
+    .replace('hr', ' hr')
+    .replace('day', ' day')
+    .replace('days', ' days');
+
+const formatDateTime = (value: string, isAllDay: boolean) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  if (isAllDay) {
+    return parsed.toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+
+  return parsed.toLocaleString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
 const EventDetailScreen: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-
-  const [event, setEvent] = useState<CalendarEvent | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [state, dispatch] = useReducer(detailReducer, {
+    status: 'loading',
+    event: null,
+    error: null,
+  });
+  const [reloadToken, reloadDetail] = useReducer((value: number) => value + 1, 0);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchEvent = async () => {
-      if (!user?.familyId || !eventId) return;
+    const loadEvent = async () => {
+      if (!user?.familyId || !eventId) {
+        dispatch({
+          type: 'LOAD_ERROR',
+          error: 'Calendar details are not available until a family account is selected.',
+        });
+        return;
+      }
+
+      dispatch({ type: 'LOAD_START' });
+
       try {
         const events = await CalendarRepository.getEvents(user.familyId, '', '');
-        const detail = events.find(e => e.id === eventId);
-        setEvent(detail || null);
-      } catch (error) {
-        console.error('Failed to fetch event detail', error);
-      } finally {
-        setIsLoading(false);
+        const event = events.find((item) => item.id === eventId);
+
+        if (!event) {
+          dispatch({ type: 'LOAD_ERROR', error: 'This event could not be found.' });
+          return;
+        }
+
+        dispatch({ type: 'LOAD_SUCCESS', payload: event });
+      } catch {
+        dispatch({
+          type: 'LOAD_ERROR',
+          error: 'The event details could not be loaded right now. Please try again.',
+        });
       }
     };
-    fetchEvent();
-  }, [user?.familyId, eventId]);
+
+    void loadEvent();
+  }, [eventId, reloadToken, user?.familyId]);
 
   const handleDelete = async () => {
-    if (!user?.familyId || !eventId) return;
-    if (!window.confirm('Are you sure you want to delete this event?')) return;
-    
+    if (!user?.familyId || !eventId) {
+      return;
+    }
+
     setIsDeleting(true);
+    setDeleteError(null);
+
     try {
       await CalendarRepository.deleteEvent(user.familyId, eventId);
       navigate('/calendar');
-    } catch (error) {
-      console.error('Failed to delete event', error);
+    } catch {
+      setDeleteError('This event could not be removed right now. Please try again.');
     } finally {
       setIsDeleting(false);
     }
   };
 
-  if (isLoading) return <div className="p-6 text-center text-gray-400">Loading event...</div>;
-  if (!event) return <div className="p-6 text-center text-gray-400">Event not found.</div>;
+  const canManage =
+    user?.role === UserRole.FAMILY_ADMIN ||
+    user?.role === UserRole.PARENT ||
+    user?.role === UserRole.TEACHER;
 
-  const config = getEventColor(event.type);
-  const startDate = new Date(event.startDateTime);
-  const endDate = new Date(event.endDateTime);
+  if (state.status === 'loading' && !state.event) {
+    return (
+      <div className="min-h-screen bg-bg-cream pb-24">
+        <FFPageHeader title="Event Details" subtitle="Loading plan" showBack />
+        <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <FFCardSkeleton />
+          <FFCardSkeleton />
+          <FFCardSkeleton />
+        </main>
+      </div>
+    );
+  }
+
+  if (state.status === 'error' && !state.event) {
+    return (
+      <div className="min-h-screen bg-bg-cream pb-24">
+        <FFPageHeader title="Event Details" subtitle="Shared family plan" showBack />
+        <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <FFErrorState message={state.error} onRetry={() => reloadDetail()} />
+        </main>
+      </div>
+    );
+  }
+
+  const event = state.event;
+
+  if (!event) {
+    return (
+      <div className="min-h-screen bg-bg-cream pb-24">
+        <FFPageHeader title="Event Details" subtitle="Shared family plan" showBack />
+        <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <FFEmptyState
+            title="Event not found"
+            message="This calendar item is no longer available."
+            actionLabel="Back to calendar"
+            onAction={() => navigate('/calendar')}
+            icon={<CalendarIcon className="h-8 w-8" />}
+          />
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] pb-48">
-      <header className="bg-white/95 backdrop-blur-2xl p-8 lg:p-14 border-b border-black/[0.03] sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-10">
-          <div className="flex items-center gap-10">
-            <button 
-              onClick={() => navigate(-1)}
-              className="w-16 h-16 bg-white rounded-[24px] border border-black/5 text-gray-300 hover:text-primary transition-all shadow-sm flex items-center justify-center group active:scale-90"
+    <div className="min-h-screen bg-bg-cream pb-24">
+      <FFPageHeader
+        title="Event Details"
+        subtitle="Shared family plan"
+        showBack
+        rightAction={
+          canManage ? (
+            <FFButton
+              variant="ghost"
+              size="sm"
+              icon={<Edit2 className="h-4 w-4" />}
+              onClick={() => navigate(`/calendar/edit/${event.id}`)}
             >
-              <ArrowLeft size={28} className="group-hover:-translate-x-1 transition-transform" />
-            </button>
-            <div>
-              <div className="flex items-center gap-4 mb-2">
-                <FFBadge variant="accent" size="sm" className="font-black px-4 py-1.5 uppercase italic tracking-widest leading-none">MISSION_DEBRIEF</FFBadge>
-                <div className="flex items-center gap-3">
-                   <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic leading-none whitespace-nowrap">COORDINATION_LOG_v1.2.0</p>
-                </div>
-              </div>
-              <h1 className="text-4xl md:text-7xl font-display font-black text-primary tracking-tighter uppercase italic leading-none">
-                Operation Details
-              </h1>
-            </div>
-          </div>
+              Edit
+            </FFButton>
+          ) : undefined
+        }
+      />
 
-          {user?.role === UserRole.PARENT && (
-            <div className="flex items-center gap-6">
-              <button 
-                onClick={() => navigate(`/calendar/edit/${event.id}`)}
-                className="h-16 px-8 bg-primary/5 text-primary rounded-[24px] hover:bg-primary hover:text-white transition-all font-black text-[10px] uppercase tracking-widest italic flex items-center gap-4"
-              >
-                <Edit2 size={20} /> EDIT_PARAMETERS
-              </button>
-              <button 
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="w-16 h-16 bg-alert/5 text-alert rounded-[24px] hover:bg-alert hover:text-white transition-all disabled:opacity-50 flex items-center justify-center group"
-              >
-                <Trash2 size={24} className="group-hover:rotate-12 transition-transform" />
-              </button>
-            </div>
-          )}
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto p-8 lg:p-14 pt-16 space-y-24">
-        <FFCard className={`p-12 lg:p-20 text-center space-y-8 border-4 shadow-3xl shadow-black/[0.01] rounded-[64px] relative overflow-hidden group ${config.border} ${config.bg}`}>
-          <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none group-hover:scale-110 transition-transform duration-1000">
-             {React.cloneElement(config.icon as React.ReactElement, { size: 240 })}
-          </div>
-          
-          <div className={`w-32 h-32 bg-white rounded-[40px] flex items-center justify-center mx-auto shadow-3xl shadow-black/[0.02] border border-black/[0.01] relative z-10 transition-transform group-hover:rotate-12 ${config.text}`}>
-            {React.cloneElement(config.icon as React.ReactElement, { size: 64 })}
-          </div>
-          <div className="relative z-10">
-            <h2 className="text-5xl lg:text-7xl font-display font-black text-primary leading-none uppercase italic tracking-tighter mb-6">{event.title}</h2>
-            <div className="flex items-center justify-center gap-4">
-              <FFBadge variant="primary" size="lg" className="font-black px-6 py-2 uppercase italic tracking-widest italic rounded-xl">{event.type.replace(/([A-Z])/g, '_$1').toUpperCase()}</FFBadge>
-              {event.isRecurring && <FFBadge variant="accent" size="lg" className="font-black px-6 py-2 uppercase italic tracking-widest italic rounded-xl">RECURRING_SYNC</FFBadge>}
-            </div>
+      <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <FFCard variant="primary" className="space-y-4 p-5 sm:p-6">
+          <div className="space-y-3">
+            <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[10px] font-body font-bold tracking-wider text-white">
+              {formatEventTypeLabel(event.type)}
+            </span>
+            <h1 className="text-xl font-display font-bold text-white sm:text-2xl">{event.title}</h1>
+            <p className="text-sm text-white/80">{formatDateTime(event.startDateTime, event.isAllDay)}</p>
           </div>
         </FFCard>
 
-        <section className="space-y-12">
-          <div className="flex items-center gap-8 px-4">
-            <div className="w-12 h-12 bg-primary/5 rounded-[18px] flex items-center justify-center text-primary">
-               <CalendarIcon size={24} strokeWidth={2.5} />
-            </div>
-            <h3 className="text-xl font-display font-black uppercase tracking-widest text-primary italic leading-none">TEMPORAL_LOCUS</h3>
-            <div className="h-px flex-1 bg-primary/10" />
-          </div>
-          
-          <FFCard className="p-12 sm:p-16 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[56px] space-y-12 divide-y divide-black/[0.03]">
-            <div className="flex items-start gap-10 pb-12">
-              <div className="w-20 h-20 bg-gray-50 rounded-[28px] flex items-center justify-center text-primary shrink-0 shadow-inner group transition-colors hover:bg-primary/5">
-                <Clock size={32} className="group-hover:rotate-12 transition-transform" />
-              </div>
-              <div className="pt-2">
-                <p className="text-3xl font-display font-black text-primary uppercase italic tracking-tighter leading-tight mb-2">
-                  {startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()}
+        {deleteError ? (
+          <FFCard variant="warm" className="p-4 shadow-card">
+            <p className="text-sm text-alert">{deleteError}</p>
+          </FFCard>
+        ) : null}
+
+        <section className="space-y-3">
+          <FFSectionHeader icon={<Clock />} title="Schedule" />
+          <FFCard className="space-y-4 p-4 shadow-card">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-ff-sm bg-primary/5 p-4">
+                <p className="text-sm font-body font-semibold text-primary">Starts</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {formatDateTime(event.startDateTime, event.isAllDay)}
                 </p>
-                <div className="flex items-center gap-4">
-                   <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-                   <p className="text-[11px] text-gray-400 font-black uppercase tracking-[0.4em] italic leading-none">
-                     {event.isAllDay ? 'PROTOCOL_ALL_DAY' : `T_UNIT [ ${startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ]`}
-                   </p>
-                </div>
+              </div>
+              <div className="rounded-ff-sm bg-primary/5 p-4">
+                <p className="text-sm font-body font-semibold text-primary">Ends</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {event.isAllDay ? 'All day' : formatDateTime(event.endDateTime, false)}
+                </p>
               </div>
             </div>
 
-            {event.location && (
-              <div className="flex items-start gap-10 pt-12">
-                <div className="w-20 h-20 bg-gray-50 rounded-[28px] flex items-center justify-center text-red-400 shrink-0 shadow-inner group transition-colors hover:bg-red-50">
-                  <MapPin size={32} className="group-hover:translate-y-[-4px] transition-transform" />
-                </div>
-                <div className="pt-2">
-                  <p className="text-3xl font-display font-black text-primary uppercase italic tracking-tighter leading-tight mb-2">{event.location.toUpperCase()}</p>
-                  <p className="text-[11px] text-gray-400 font-black uppercase tracking-[0.4em] italic leading-none">COORDINATE_VECTOR</p>
-                </div>
+            {event.isRecurring ? (
+              <div className="rounded-ff-sm bg-primary/5 p-4">
+                <p className="text-sm font-body font-semibold text-primary">Repeats</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {event.recurrenceRule || 'This event follows a saved repeat pattern.'}
+                </p>
               </div>
-            )}
+            ) : null}
           </FFCard>
         </section>
 
-        {event.description && (
-          <section className="space-y-12">
-            <div className="flex items-center gap-8 px-4">
-              <div className="w-12 h-12 bg-primary/5 rounded-[18px] flex items-center justify-center text-primary">
-                 <AlertCircle size={24} strokeWidth={2.5} />
+        <section className="space-y-3">
+          <FFSectionHeader icon={<Users />} title="Visibility and Reminders" />
+          <FFCard className="space-y-4 p-4 shadow-card">
+            <div>
+              <p className="text-sm font-body font-semibold text-primary">Visible to</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {event.visibilityScope.map((role) => (
+                  <span
+                    key={role}
+                    className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-body font-bold tracking-wider text-primary"
+                  >
+                    {role}
+                  </span>
+                ))}
               </div>
-              <h3 className="text-xl font-display font-black uppercase tracking-widest text-primary italic leading-none">BRIEFING_NOTES</h3>
-              <div className="h-px flex-1 bg-primary/10" />
             </div>
-            <FFCard className="p-12 lg:p-16 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[56px] relative overflow-hidden group">
-               <div className="absolute right-0 bottom-0 p-12 opacity-[0.02] pointer-events-none group-hover:scale-110 transition-transform duration-[3000ms]">
-                  <AlertCircle size={180} />
-               </div>
-               <p className="text-2xl text-primary font-display font-medium italic leading-relaxed relative z-10 first-letter:text-4xl first-letter:font-black first-letter:text-accent">
-                {event.description}
-               </p>
+
+            <div>
+              <p className="text-sm font-body font-semibold text-primary">Reminders</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {event.reminders.length > 0 ? (
+                  event.reminders.map((reminder) => (
+                    <span
+                      key={reminder}
+                      className="rounded-full border border-accent/20 bg-accent/10 px-2.5 py-1 text-[10px] font-body font-bold tracking-wider text-accent"
+                    >
+                      {formatReminderLabel(reminder)}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No reminders are set for this event.</p>
+                )}
+              </div>
+            </div>
+          </FFCard>
+        </section>
+
+        {event.location ? (
+          <section className="space-y-3">
+            <FFSectionHeader icon={<MapPin />} title="Location" />
+            <FFCard className="p-4 shadow-card">
+              <p className="text-sm text-gray-600">{event.location}</p>
             </FFCard>
           </section>
-        )}
+        ) : null}
 
-        <section className="space-y-12">
-          <div className="flex items-center gap-8 px-4">
-            <div className="w-12 h-12 bg-primary/5 rounded-[18px] flex items-center justify-center text-primary">
-               <Bell size={24} strokeWidth={2.5} />
-            </div>
-            <h3 className="text-xl font-display font-black uppercase tracking-widest text-primary italic leading-none">SIGNAL_PROTOCOLS</h3>
-            <div className="h-px flex-1 bg-primary/10" />
-          </div>
-          <FFCard className="p-12 border-none shadow-3xl shadow-black/[0.01] bg-white rounded-[56px] divide-y divide-black/5">
-            <div className="py-8 first:pt-0 flex items-center justify-between group">
-              <div className="flex items-center gap-6">
-                <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 group-hover:text-primary transition-colors hover:rotate-6 transition-transform">
-                  <Users size={24} />
-                </div>
-                <div>
-                   <span className="text-2xl font-display font-black text-primary uppercase italic tracking-tighter">Visibility</span>
-                   <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] italic">GRID_DISTRIBUTION_ARRAY</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                {event.visibilityScope.map(role => (
-                  <FFBadge key={role} variant="gray" className="font-black px-4 py-1.5 uppercase italic tracking-widest leading-none rounded-lg">{role}</FFBadge>
-                ))}
-              </div>
-            </div>
+        {event.description ? (
+          <section className="space-y-3">
+            <FFSectionHeader icon={<Bell />} title="Notes" />
+            <FFCard className="p-4 shadow-card">
+              <p className="text-sm text-gray-600">{event.description}</p>
+            </FFCard>
+          </section>
+        ) : null}
 
-            <div className="py-8 flex items-center justify-between group">
-              <div className="flex items-center gap-6">
-                <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 group-hover:text-accent transition-colors hover:rotate-6 transition-transform">
-                  <Bell size={24} />
-                </div>
-                <div>
-                   <span className="text-2xl font-display font-black text-primary uppercase italic tracking-tighter">Reminders</span>
-                   <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] italic">SYNC_ALERT_INTERVALS</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                {event.reminders.map(rem => (
-                  <FFBadge key={rem} variant="accent" className="font-black px-4 py-1.5 uppercase italic tracking-widest leading-none rounded-lg italic">{rem.toUpperCase()}</FFBadge>
-                ))}
-              </div>
-            </div>
+        <div className="space-y-3">
+          <FFButton
+            variant="outline"
+            className="w-full"
+            icon={<CalendarIcon className="h-4 w-4" />}
+            onClick={() => navigate('/calendar')}
+          >
+            Back to calendar
+          </FFButton>
 
-            {event.isRecurring && (
-              <div className="py-8 last:pb-0 flex items-center justify-between group">
-                <div className="flex items-center gap-6">
-                  <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 group-hover:text-primary transition-colors hover:rotate-6 transition-transform">
-                    <Repeat size={24} />
-                  </div>
-                  <div>
-                    <span className="text-2xl font-display font-black text-primary uppercase italic tracking-tighter leading-none mb-1">Recurrence</span>
-                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] italic leading-none">AUTONOMO_SYNC_PATTERN</p>
-                  </div>
-                </div>
-                <span className="text-2xl font-display font-black text-primary uppercase tracking-[0.2em] italic tabular-nums">
-                  {event.recurrenceRule?.toUpperCase() || 'WEEKLY_SYNC'}
-                </span>
-              </div>
-            )}
-          </FFCard>
-        </section>
-
-        {event.type === 'Birthday' && (
-          <div className="p-10 bg-amber-50/50 rounded-[40px] border border-amber-100 flex gap-8 items-start relative overflow-hidden group">
-            <div className="absolute right-0 bottom-0 opacity-[0.03] translate-x-4 translate-y-4 group-hover:scale-125 transition-transform duration-1000">
-               <AlertCircle size={100} />
-            </div>
-            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-amber-500 shadow-xl shrink-0">
-               <AlertCircle size={28} />
-            </div>
-            <div className="space-y-4 relative z-10">
-              <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.4em] italic leading-none">SYSTEM_LOCKED_RESOURCE</p>
-              <p className="text-lg text-amber-900 font-display font-medium italic leading-relaxed">
-                This is a system-generated birthday event. It cannot be edited or deleted to preserve station chronological integrity.
-              </p>
-            </div>
-          </div>
-        )}
-
-        <footer className="text-center space-y-12 py-40 px-8 border-t border-black/[0.03]">
-           <div className="flex items-center justify-center gap-10 text-primary/10">
-              <div className="h-px w-32 bg-current" />
-              <CalendarIcon size={40} />
-              <div className="h-px w-32 bg-current" />
-           </div>
-           <p className="text-[12px] text-gray-400 font-black uppercase tracking-[0.8em] italic leading-relaxed">STATION_ENGINE // Strategic Debrief Matrix v4.4.2</p>
-        </footer>
+          {canManage ? (
+            <FFButton
+              variant="alert"
+              className="w-full"
+              icon={<Trash2 className="h-4 w-4" />}
+              isLoading={isDeleting}
+              onClick={() => void handleDelete()}
+            >
+              Delete event
+            </FFButton>
+          ) : null}
+        </div>
       </main>
     </div>
   );

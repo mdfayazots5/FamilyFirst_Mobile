@@ -1,375 +1,507 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ArrowLeft, 
-  CheckCircle2, 
-  AlertCircle, 
-  Send,
-  Info,
-  WifiOff,
-  X,
-  Clock,
-  ShieldCheck,
-  Activity,
-  Cpu,
-  Layers,
-  Fingerprint,
-  Monitor
-} from 'lucide-react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import { AlertCircle, BookOpen, CheckCircle2, ChevronRight, Clock, MessageSquare, Send, Users, WifiOff } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { 
-  AttendanceRepository, 
-  AttendanceRecord, 
+import {
+  AttendanceRecord,
+  AttendanceRepository,
   AttendanceStatus,
-  CommentTemplate,
   AttendanceStatusOption,
+  CommentTemplate,
 } from '../repositories/AttendanceRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
-import FFBadge from '../../../shared/components/FFBadge';
-import AttendanceChildRow from '../widgets/AttendanceChildRow';
-import CommentTemplateSheet from '../widgets/CommentTemplateSheet';
+import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
+
+type AttendanceLoadState =
+  | {
+      status: 'loading';
+      records: AttendanceRecord[];
+      templates: CommentTemplate[];
+      statusOptions: AttendanceStatus[];
+      customStatuses: AttendanceStatusOption[];
+      error: null;
+    }
+  | {
+      status: 'ready';
+      records: AttendanceRecord[];
+      templates: CommentTemplate[];
+      statusOptions: AttendanceStatus[];
+      customStatuses: AttendanceStatusOption[];
+      error: null;
+    }
+  | {
+      status: 'error';
+      records: AttendanceRecord[];
+      templates: CommentTemplate[];
+      statusOptions: AttendanceStatus[];
+      customStatuses: AttendanceStatusOption[];
+      error: string;
+    };
+
+type AttendanceAction =
+  | { type: 'LOAD_START' }
+  | {
+      type: 'LOAD_SUCCESS';
+      payload: {
+        records: AttendanceRecord[];
+        templates: CommentTemplate[];
+        statusOptions: AttendanceStatus[];
+        customStatuses: AttendanceStatusOption[];
+      };
+    }
+  | { type: 'LOAD_ERROR'; error: string }
+  | { type: 'SET_RECORDS'; payload: AttendanceRecord[] };
+
+const attendanceReducer = (
+  state: AttendanceLoadState,
+  action: AttendanceAction,
+): AttendanceLoadState => {
+  switch (action.type) {
+    case 'LOAD_START':
+      return { ...state, status: 'loading', error: null };
+    case 'LOAD_SUCCESS':
+      return {
+        status: 'ready',
+        records: action.payload.records,
+        templates: action.payload.templates,
+        statusOptions: action.payload.statusOptions,
+        customStatuses: action.payload.customStatuses,
+        error: null,
+      };
+    case 'LOAD_ERROR':
+      return { ...state, status: 'error', error: action.error };
+    case 'SET_RECORDS':
+      return { ...state, records: action.payload };
+    default:
+      return state;
+  }
+};
+
+const FALLBACK_STATUSES: AttendanceStatus[] = ['Present', 'Absent', 'Late', 'LeftEarly'];
+
+const statusTone: Record<AttendanceStatus, string> = {
+  Present: 'bg-success/10 text-success',
+  Absent: 'bg-alert/10 text-alert',
+  Late: 'bg-accent/10 text-accent',
+  LeftEarly: 'bg-primary/10 text-primary',
+};
+
+const nextStatus = (current: AttendanceStatus, available: AttendanceStatus[]) => {
+  const sequence = available.length > 0 ? available : FALLBACK_STATUSES;
+  const index = sequence.indexOf(current);
+  return sequence[(index + 1) % sequence.length];
+};
 
 const AttendanceMarkingScreen: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const [templates, setTemplates] = useState<CommentTemplate[]>([]);
-  const [statusOptions, setStatusOptions] = useState<AttendanceStatus[]>([]);
-  const [customStatusOptions, setCustomStatusOptions] = useState<AttendanceStatusOption[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadState, dispatch] = useReducer(attendanceReducer, {
+    status: 'loading',
+    records: [],
+    templates: [],
+    statusOptions: [],
+    customStatuses: [],
+    error: null,
+  });
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  
-  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
-  const [isCommentSheetOpen, setIsCommentSheetOpen] = useState(false);
-  const [isConfirmSheetOpen, setIsConfirmSheetOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [commentRecordId, setCommentRecordId] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showConfirmSheet, setShowConfirmSheet] = useState(false);
 
   useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    const goOnline = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
     };
   }, []);
 
-  const fetchData = useCallback(async () => {
-    if (!user?.familyId || !sessionId) return;
+  const loadAttendance = useCallback(async () => {
+    if (!user?.familyId || !sessionId) {
+      dispatch({ type: 'LOAD_ERROR', error: 'Session details are missing for attendance.' });
+      return;
+    }
+
+    dispatch({ type: 'LOAD_START' });
+
     try {
-      const [recordList, templateList, attendanceStatuses, customAttendanceStatuses] = await Promise.all([
+      const [records, templates, masterStatuses, customStatuses] = await Promise.all([
         AttendanceRepository.getSessionRecords(user.familyId, sessionId),
         AttendanceRepository.getCommentTemplates(user.familyId),
         AttendanceRepository.getAttendanceStatuses(),
         AttendanceRepository.getCustomAttendanceStatuses(),
       ]);
-      setRecords(recordList);
-      setTemplates(templateList);
-      setStatusOptions(
-        attendanceStatuses
-          .map((status) => status.code as AttendanceStatus)
-          .filter((status): status is AttendanceStatus =>
-            ['Present', 'Absent', 'Late', 'LeftEarly'].includes(status),
-          )
-      );
-      setCustomStatusOptions(customAttendanceStatuses);
-    } catch (error) {
-      console.error('Failed to fetch attendance data', error);
-    } finally {
-      setIsLoading(false);
+
+      const statusOptions = masterStatuses
+        .map((item) => item.code as AttendanceStatus)
+        .filter((status): status is AttendanceStatus => FALLBACK_STATUSES.includes(status));
+
+      dispatch({
+        type: 'LOAD_SUCCESS',
+        payload: {
+          records,
+          templates,
+          statusOptions,
+          customStatuses,
+        },
+      });
+    } catch {
+      dispatch({ type: 'LOAD_ERROR', error: 'Attendance records could not be loaded. Try again.' });
     }
-  }, [user?.familyId, sessionId]);
+  }, [sessionId, user?.familyId]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    void loadAttendance();
+  }, [loadAttendance]);
 
-  const toggleStatus = (recordId: string) => {
-    if (statusOptions.length === 0) {
+  const stats = useMemo(
+    () => ({
+      present: loadState.records.filter((record) => record.status === 'Present').length,
+      absent: loadState.records.filter((record) => record.status === 'Absent').length,
+      late: loadState.records.filter((record) => record.status === 'Late').length,
+      leftEarly: loadState.records.filter((record) => record.status === 'LeftEarly').length,
+    }),
+    [loadState.records],
+  );
+
+  const selectedRecord = loadState.records.find((record) => record.id === commentRecordId) ?? null;
+
+  const updateRecord = (recordId: string, updater: (record: AttendanceRecord) => AttendanceRecord) => {
+    dispatch({
+      type: 'SET_RECORDS',
+      payload: loadState.records.map((record) => (record.id === recordId ? updater(record) : record)),
+    });
+  };
+
+  const openCommentEditor = (record: AttendanceRecord) => {
+    setCommentRecordId(record.id);
+    setCommentDraft(record.comment ?? '');
+  };
+
+  const saveComment = () => {
+    if (!commentRecordId) {
       return;
     }
 
-    const statusCycle = statusOptions;
-    setRecords(prev => prev.map(rec => {
-      if (rec.id === recordId) {
-        const currentIndex = statusCycle.indexOf(rec.status);
-        const nextIndex = (currentIndex + 1) % statusCycle.length;
-        return { ...rec, status: statusCycle[nextIndex] };
-      }
-      return rec;
+    updateRecord(commentRecordId, (record) => ({
+      ...record,
+      comment: commentDraft.trim() || undefined,
     }));
-  };
-
-  const saveComment = (comment: string) => {
-    if (!selectedRecordId) return;
-    setRecords(prev => prev.map(rec => 
-      rec.id === selectedRecordId ? { ...rec, comment } : rec
-    ));
-    setSelectedRecordId(null);
+    setCommentRecordId(null);
+    setCommentDraft('');
   };
 
   const handleSubmit = async () => {
-    if (!sessionId || !user?.familyId) return;
+    if (!sessionId || !user?.familyId) {
+      return;
+    }
+
     setIsSubmitting(true);
+    setSubmitError(null);
+    setSubmitMessage(null);
+
     try {
       if (isOffline) {
-        // Simulate offline storage
-        localStorage.setItem(`offline_attendance_${sessionId}`, JSON.stringify(records));
-        alert('Offline: Attendance saved locally. It will sync when you are back online.');
+        localStorage.setItem(`offline_attendance_${sessionId}`, JSON.stringify(loadState.records));
+        setSubmitMessage('Attendance was saved on this device and will need to be submitted when you are online.');
       } else {
-        await AttendanceRepository.submitAttendance(user.familyId, sessionId, records);
+        await AttendanceRepository.submitAttendance(user.familyId, sessionId, loadState.records);
+        navigate('/teacher');
+        return;
       }
-      navigate('/teacher');
-    } catch (error) {
-      console.error('Failed to submit attendance', error);
+    } catch {
+      setSubmitError('Attendance could not be submitted. Please review the records and try again.');
     } finally {
       setIsSubmitting(false);
-      setIsConfirmSheetOpen(false);
+      setShowConfirmSheet(false);
     }
   };
 
-  const stats = {
-    present: records.filter(r => r.status === 'Present').length,
-    absent: records.filter(r => r.status === 'Absent').length,
-    late: records.filter(r => r.status === 'Late').length,
-    leftEarly: records.filter(r => r.status === 'LeftEarly').length,
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#FDFCFB] flex flex-col items-center justify-center p-12 text-center space-y-8">
-        <motion.div 
-           animate={{ rotate: 360 }}
-           transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-           className="w-24 h-24 rounded-[32px] bg-primary/5 flex items-center justify-center text-primary shadow-inner"
-        >
-           <Activity size={40} />
-        </motion.div>
-        <p className="text-[12px] font-black uppercase tracking-[0.5em] text-primary/40 italic animate-pulse">CORE_REGISTRY_LOAD_v4...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-[#FDFCFB] pb-48">
-      {/* Precision Evaluation Header */}
-      <header className="bg-white/95 backdrop-blur-2xl p-8 lg:p-14 border-b border-black/[0.03] sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-10">
-          <div className="flex items-center gap-10">
-            <button 
-              onClick={() => navigate(-1)}
-              className="w-16 h-16 bg-white rounded-[24px] border border-black/5 text-gray-300 hover:text-primary transition-all shadow-sm flex items-center justify-center group active:scale-90"
-            >
-              <ArrowLeft size={28} className="group-hover:-translate-x-1 transition-transform" />
-            </button>
-            <div>
-              <div className="flex items-center gap-4 mb-2">
-                <FFBadge variant="accent" size="sm" className="font-black px-4 py-1.5 uppercase italic tracking-widest leading-none">PERSONNEL_EVALUATION</FFBadge>
-                <div className="flex items-center gap-3">
-                   <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic leading-none whitespace-nowrap">REGISTRY_PROTOCOL_ACTIVE</p>
-                </div>
-              </div>
-              <h1 className="text-4xl md:text-7xl font-display font-black text-primary tracking-tighter uppercase italic leading-none whitespace-nowrap">
-                Attendance <span className="text-accent underline decoration-accent/20 decoration-8 underline-offset-8">LOG</span>
-              </h1>
-            </div>
-          </div>
+    <div className="min-h-screen bg-bg-cream pb-32">
+      <FFPageHeader
+        title="Mark attendance"
+        subtitle="Update each assigned child before submitting"
+        showBack
+      />
 
-          <div className="flex flex-wrap gap-4">
+      <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <FFCard variant="primary" className="space-y-4 p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-body text-xs font-bold uppercase tracking-wider text-white/70">
+                Attendance
+              </p>
+              <h1 className="mt-1 text-xl font-display font-bold text-white sm:text-2xl">
+                Fast classroom check-in
+              </h1>
+              <p className="mt-2 text-sm text-white/80">
+                Move through the list quickly, add notes when needed, and submit once all students are reviewed.
+              </p>
+            </div>
+            <span className="rounded-full bg-white/10 px-3 py-2 text-right">
+              <p className="font-numbers text-2xl text-white">{loadState.records.length}</p>
+              <p className="text-[10px] font-body font-semibold uppercase tracking-wider text-white/70">
+                Students
+              </p>
+            </span>
+          </div>
+        </FFCard>
+
+        {isOffline ? (
+          <FFCard variant="warm" className="p-4">
+            <div className="flex items-start gap-3">
+              <WifiOff className="mt-0.5 h-5 w-5 flex-shrink-0 text-alert" />
+              <div>
+                <p className="font-display text-sm font-semibold text-primary">Offline mode</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  You can keep editing the list, but online submission is required to sync with the family.
+                </p>
+              </div>
+            </div>
+          </FFCard>
+        ) : null}
+
+        {submitMessage ? (
+          <FFCard variant="warm" className="p-4">
+            <p className="text-sm text-success">{submitMessage}</p>
+          </FFCard>
+        ) : null}
+
+        {submitError ? (
+          <FFCard variant="warm" className="p-4">
+            <p className="text-sm text-alert">{submitError}</p>
+          </FFCard>
+        ) : null}
+
+        <section className="space-y-3">
+          <FFSectionHeader icon={<Users />} title="Summary" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
             {[
-              { label: 'PRESENT_TARGETS', count: stats.present, color: 'success' },
-              { label: 'ABSENT_SIGNALS', count: stats.absent, color: 'alert' },
-              { label: 'EXCEPTION_MATRIX', count: stats.late + stats.leftEarly, color: 'accent' }
-            ].map((stat, i) => (
-              <FFCard key={i} className="px-6 py-4 bg-white border-black/[0.03] rounded-3xl shadow-sm flex items-center gap-5 hover:translate-y--1 transition-all">
-                <div className={`w-3 h-3 rounded-full bg-${stat.color} ${stat.color === 'success' ? 'animate-pulse' : ''} shadow-[0_0_12px_rgba(0,0,0,0.1)]`} />
-                <div className="flex flex-col">
-                  <span className="text-3xl font-display font-black text-primary italic leading-none mb-1">{stat.count}</span>
-                  <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest leading-none whitespace-nowrap">{stat.label}</span>
-                </div>
+              { label: 'Present', value: stats.present, tone: 'bg-success/10 text-success' },
+              { label: 'Absent', value: stats.absent, tone: 'bg-alert/10 text-alert' },
+              { label: 'Late', value: stats.late, tone: 'bg-accent/10 text-accent' },
+              { label: 'Left early', value: stats.leftEarly, tone: 'bg-primary/10 text-primary' },
+            ].map((item) => (
+              <FFCard key={item.label} className="p-4">
+                <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-body font-bold uppercase tracking-wider ${item.tone}`}>
+                  {item.label}
+                </span>
+                <p className="mt-3 font-numbers text-2xl text-primary">{item.value}</p>
               </FFCard>
             ))}
           </div>
-        </div>
+        </section>
 
-        {isOffline && (
-          <motion.div 
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            className="flex items-center gap-3 px-8 py-4 bg-alert text-white rounded-[24px] mt-8 shadow-2xl shadow-alert/20"
-          >
-            <WifiOff size={18} className="animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-[0.4em] italic leading-none">LOCAL_CACHE_MODE_ACTIVE // SYNC_PENDING_PROTOCOL</span>
-          </motion.div>
-        )}
-
-        {customStatusOptions.length > 0 && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            className="mt-8 rounded-[24px] border border-accent/10 bg-accent/5 px-6 py-5"
-          >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-accent/70 italic leading-none">CUSTOM_STATUS_CONFIG</p>
-                <p className="mt-2 text-sm font-bold text-primary">
-                  Family-specific attendance labels are configured and visible here, but final submission still uses the core attendance protocol statuses.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {customStatusOptions.map((status) => (
-                  <span
-                    key={status.id}
-                    className="rounded-full border border-black/5 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-primary shadow-sm"
-                  >
-                    {status.name}
-                  </span>
-                ))}
-              </div>
+        {loadState.customStatuses.length > 0 ? (
+          <FFCard variant="warm" className="space-y-3 p-4">
+            <FFSectionHeader icon={<BookOpen />} title="Custom labels" />
+            <div className="flex flex-wrap gap-2">
+              {loadState.customStatuses.map((status) => (
+                <span
+                  key={status.id}
+                  className="rounded-full border border-black/5 bg-white px-3 py-1 text-[10px] font-body font-bold uppercase tracking-wider text-primary"
+                >
+                  {status.name}
+                </span>
+              ))}
             </div>
-          </motion.div>
-        )}
-      </header>
+          </FFCard>
+        ) : null}
 
-      <main className="max-w-4xl mx-auto p-8 lg:p-14 space-y-8">
-        {/* Personnel Registry */}
-        <div className="flex items-center gap-4 px-4 opacity-30">
-           <p className="text-[11px] font-black uppercase tracking-[0.5em] text-primary italic whitespace-nowrap">PERSONNEL_REGISTRY_v4.2</p>
-           <div className="h-px flex-1 bg-primary/20" />
-        </div>
-        
-        <div className="space-y-6">
-          {records.map((record) => (
-            <AttendanceChildRow
-              key={record.id}
-              name={record.childName}
-              avatarUrl={record.avatarUrl}
-              status={record.status}
-              comment={record.comment}
-              onStatusToggle={() => toggleStatus(record.id)}
-              onCommentClick={() => {
-                setSelectedRecordId(record.id);
-                setIsCommentSheetOpen(true);
-              }}
+        <section className="space-y-3">
+          <FFSectionHeader icon={<CheckCircle2 />} title="Student list" />
+
+          {loadState.status === 'loading' && loadState.records.length === 0 ? (
+            <div className="space-y-3">
+              <FFCardSkeleton />
+              <FFCardSkeleton />
+              <FFCardSkeleton />
+            </div>
+          ) : null}
+
+          {loadState.status === 'error' && loadState.records.length === 0 ? (
+            <FFErrorState message={loadState.error} onRetry={() => void loadAttendance()} />
+          ) : null}
+
+          {loadState.status !== 'loading' && loadState.records.length === 0 ? (
+            <FFEmptyState
+              title="No attendance records"
+              message="Assigned children will appear here once the session is ready for marking."
+              onAction={() => navigate('/teacher')}
+              actionLabel="Back to sessions"
+              icon={<Users className="h-8 w-8" />}
             />
-          ))}
-        </div>
+          ) : null}
+
+          {loadState.records.length > 0 ? (
+            <div className="space-y-3">
+              {loadState.records.map((record) => (
+                <FFCard key={record.id} className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display text-sm font-semibold text-primary">
+                        {record.childName}
+                      </p>
+                      <p className="mt-1 text-sm text-gray-500">
+                        {record.comment ? record.comment : 'No note added yet'}
+                      </p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-body font-bold uppercase tracking-wider ${statusTone[record.status]}`}>
+                      {record.status}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                    <FFButton
+                      variant="outline"
+                      className="flex-1"
+                      icon={<Clock className="h-4 w-4" />}
+                      onClick={() =>
+                        updateRecord(record.id, (item) => ({
+                          ...item,
+                          status: nextStatus(
+                            item.status,
+                            loadState.statusOptions.length > 0
+                              ? loadState.statusOptions
+                              : FALLBACK_STATUSES,
+                          ),
+                        }))
+                      }
+                    >
+                      Cycle status
+                    </FFButton>
+                    <FFButton
+                      variant="ghost"
+                      className="flex-1"
+                      icon={<MessageSquare className="h-4 w-4" />}
+                      onClick={() => openCommentEditor(record)}
+                    >
+                      Add note
+                    </FFButton>
+                  </div>
+                </FFCard>
+              ))}
+            </div>
+          ) : null}
+        </section>
       </main>
 
-      {/* Floating Tactical Formalization Cabinet */}
-      <div className="fixed bottom-0 left-0 right-0 p-8 lg:p-14 bg-white/80 backdrop-blur-2xl border-t border-black/[0.03] z-50">
-        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
-           <div className="hidden md:block">
-              <p className="text-[11px] font-black text-gray-300 uppercase tracking-[0.4em] italic mb-1">FINAL_SYNC_EXPECTED</p>
-              <h4 className="text-primary font-display font-black text-xl italic uppercase tracking-tighter">{records.length} PERSONNEL_REPORTS</h4>
-           </div>
-           <FFButton 
-             className="w-full md:w-auto h-20 px-16 rounded-[36px] text-[12px] font-black uppercase tracking-[0.5em] shadow-3xl shadow-primary/30 group active:scale-95 italic transition-all" 
-             icon={<Send size={24} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
-             onClick={() => setIsConfirmSheetOpen(true)}
-             disabled={statusOptions.length === 0}
-           >
-             FORMALIZE_RECORDS
-           </FFButton>
-        </div>
-      </div>
-
-      {/* Comment Sheet */}
-      <CommentTemplateSheet
-        isOpen={isCommentSheetOpen}
-        onClose={() => setIsCommentSheetOpen(false)}
-        templates={templates}
-        onSave={saveComment}
-        initialComment={records.find(r => r.id === selectedRecordId)?.comment}
-      />
-
-      {/* Tactical Confirmation Modal */}
-      <AnimatePresence>
-        {isConfirmSheetOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsConfirmSheetOpen(false)}
-              className="fixed inset-0 bg-primary/60 z-[60] backdrop-blur-md"
-            />
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[54px] z-[70] p-12 lg:p-20 shadow-[-20px_0_60px_rgba(0,0,0,0.2)]"
+      {loadState.records.length > 0 ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+          <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-display text-sm font-semibold text-primary">
+                {loadState.records.length} students ready
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
+                Review the list before sending attendance for this session.
+              </p>
+            </div>
+            <FFButton
+              className="w-full sm:w-auto"
+              icon={<Send className="h-4 w-4" />}
+              onClick={() => setShowConfirmSheet(true)}
+              disabled={loadState.statusOptions.length === 0 && loadState.status === 'ready' && loadState.records.length > 0 ? false : false}
             >
-              <div className="max-w-2xl mx-auto space-y-12">
-                <div className="flex items-center gap-10">
-                   <div className="w-24 h-24 bg-primary text-white rounded-[40px] flex items-center justify-center shadow-3xl shadow-primary/30">
-                      <ShieldCheck size={48} strokeWidth={1} />
-                   </div>
-                   <div>
-                      <h3 className="text-4xl lg:text-5xl font-display font-black text-primary uppercase italic tracking-tighter leading-none mb-3">Protocol Sync</h3>
-                      <p className="text-[12px] font-black text-gray-400 uppercase tracking-[0.4em] italic">CONFIRM_FORMALIZATION_COMMAND</p>
-                   </div>
-                </div>
+              Submit attendance
+            </FFButton>
+          </div>
+        </div>
+      ) : null}
 
-                <div className="bg-gray-50 p-10 rounded-[40px] border border-black/[0.03] space-y-8">
-                   <p className="text-2xl font-display font-medium text-gray-500 italic leading-relaxed">
-                     You are about to transmit the <span className="text-primary font-black underline decoration-primary/20 decoration-8 underline-offset-8">FORMALIZED REGISTRY</span> for this session.
-                   </p>
-                   <div className="grid grid-cols-3 gap-6">
-                      <div className="space-y-2">
-                         <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic leading-none">PRESENT</p>
-                         <p className="text-3xl font-display font-black text-success italic leading-none">{stats.present}</p>
-                      </div>
-                      <div className="space-y-2">
-                         <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic leading-none">ABSENT</p>
-                         <p className="text-3xl font-display font-black text-alert italic leading-none">{stats.absent}</p>
-                      </div>
-                      <div className="space-y-2">
-                         <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic leading-none">EXCEPT.</p>
-                         <p className="text-3xl font-display font-black text-accent italic leading-none">{stats.late + stats.leftEarly}</p>
-                      </div>
-                   </div>
-                </div>
-
-                <div className="flex flex-col md:flex-row gap-6">
-                  <FFButton 
-                    variant="outline" 
-                    className="flex-1 h-20 rounded-[32px] text-[11px] font-black uppercase tracking-[0.4em] italic shadow-inner" 
-                    onClick={() => setIsConfirmSheetOpen(false)}
+      {commentRecordId && selectedRecord ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-50 bg-primary/40"
+            onClick={() => setCommentRecordId(null)}
+            aria-label="Close note editor"
+          />
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-white p-4 shadow-elevated sm:p-6">
+            <div className="mx-auto max-w-3xl space-y-4">
+              <FFSectionHeader icon={<MessageSquare />} title={`Note for ${selectedRecord.childName}`} />
+              <div className="space-y-2">
+                {loadState.templates.slice(0, 4).map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => setCommentDraft(template.text)}
+                    className="w-full rounded-xl border border-black/5 bg-[#FDF9F4] px-4 py-3 text-left text-sm text-primary transition-colors hover:border-primary/10"
                   >
-                    ABORT_COMMAND
-                  </FFButton>
-                  <FFButton 
-                    className="flex-1 h-20 rounded-[32px] text-[11px] font-black uppercase tracking-[0.4em] italic shadow-3xl shadow-primary/30" 
-                    isLoading={isSubmitting}
-                    onClick={handleSubmit}
-                  >
-                    YES_TRANSMIT
-                  </FFButton>
-                </div>
+                    {template.text}
+                  </button>
+                ))}
               </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+              <textarea
+                value={commentDraft}
+                onChange={(event) => setCommentDraft(event.target.value)}
+                placeholder="Add a short note for the family."
+                className="min-h-[120px] w-full rounded-ff border border-black/5 bg-white px-4 py-3 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+              />
+              <div className="flex gap-3">
+                <FFButton variant="outline" className="flex-1" onClick={() => setCommentRecordId(null)}>
+                  Cancel
+                </FFButton>
+                <FFButton className="flex-1" onClick={saveComment}>
+                  Save note
+                </FFButton>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
 
-      <footer className="text-center space-y-12 py-40 px-8 border-t border-black/[0.03]">
-           <div className="flex items-center justify-center gap-10 text-primary/10">
-              <div className="h-px w-32 bg-current" />
-              <ShieldCheck size={40} />
-              <div className="h-px w-32 bg-current" />
-           </div>
-           <div className="space-y-4">
-              <p className="text-[12px] text-gray-400 font-black uppercase tracking-[0.8em] italic leading-relaxed">STATION_ENGINE // Tactical Evaluation Unit v4.1.0</p>
-              <p className="text-[10px] text-gray-300 font-black uppercase tracking-[0.4em] italic opacity-40">All evaluation signals are finalized via authoritative central protocol</p>
-           </div>
-      </footer>
+      {showConfirmSheet ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-50 bg-primary/40"
+            onClick={() => setShowConfirmSheet(false)}
+            aria-label="Close attendance confirmation"
+          />
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-white p-4 shadow-elevated sm:p-6">
+            <div className="mx-auto max-w-3xl space-y-4">
+              <FFSectionHeader icon={<AlertCircle />} title="Ready to submit" />
+              <FFCard variant="warm" className="space-y-3 p-4">
+                <p className="text-sm text-gray-600">
+                  Present: {stats.present} · Absent: {stats.absent} · Late: {stats.late} · Left early: {stats.leftEarly}
+                </p>
+                {isOffline ? (
+                  <p className="text-sm text-alert">
+                    You are offline. Saving here will store the attendance locally only.
+                  </p>
+                ) : null}
+              </FFCard>
+              <div className="flex gap-3">
+                <FFButton variant="outline" className="flex-1" onClick={() => setShowConfirmSheet(false)}>
+                  Review again
+                </FFButton>
+                <FFButton
+                  className="flex-1"
+                  isLoading={isSubmitting}
+                  onClick={() => void handleSubmit()}
+                >
+                  Confirm submit
+                </FFButton>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 };
