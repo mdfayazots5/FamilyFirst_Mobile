@@ -1,170 +1,169 @@
 import React from 'react';
-import { motion } from 'motion/react';
-import { 
-  User, 
-  Bell, 
-  Shield, 
-  CreditCard, 
-  LogOut, 
-  ChevronRight,
-  ArrowLeft,
-  Settings
+import {
+  Bell,
+  CreditCard,
+  LogOut,
+  Settings,
+  Shield,
+  User,
+  Users,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import FFCard from '../../../shared/components/FFCard';
+import { UserRole } from '../../../core/auth/UserRole';
+import { AppConfig } from '../../../core/config/appConfig';
 import FFAvatar from '../../../shared/components/FFAvatar';
 import FFBadge from '../../../shared/components/FFBadge';
+import FFButton from '../../../shared/components/FFButton';
+import FFCard from '../../../shared/components/FFCard';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 
-import { AppConfig } from '../../../core/config/appConfig';
+const formatRole = (role?: UserRole) => {
+  if (!role) {
+    return 'Family member';
+  }
+
+  return role
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+};
 
 const ProfileScreen: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
   const getSettingsPath = () => {
     switch (user?.role) {
-      case 'CHILD': return '/child/settings';
-      case 'PARENT': return '/parent/settings';
-      case 'TEACHER': return '/teacher/settings';
-      case 'ELDER': return '/elder/settings';
-      default: return '/notifications/preferences';
+      case UserRole.CHILD:
+        return '/child/settings';
+      case UserRole.PARENT:
+        return '/parent/settings';
+      case UserRole.TEACHER:
+        return '/teacher/settings';
+      case UserRole.ELDER:
+        return '/elder/settings';
+      default:
+        return '/notifications/preferences';
     }
   };
 
   const menuItems = [
-    { 
-      id: 'settings', 
-      label: 'App Settings', 
-      desc: 'Language, PIN, and preferences', 
-      icon: <Settings size={20} />, 
+    {
+      id: 'settings',
+      label: 'Settings',
+      description: 'Update language, PIN, and account preferences.',
+      icon: <Settings className="h-4 w-4" />,
       path: getSettingsPath(),
-      color: 'bg-primary/5 text-primary'
     },
-    { 
-      id: 'notifications', 
-      label: 'Notifications', 
-      desc: 'Alerts, quiet hours, and digests', 
-      icon: <Bell size={20} />, 
+    {
+      id: 'notifications',
+      label: 'Notifications',
+      description: 'Manage alerts, quiet hours, and digest timing.',
+      icon: <Bell className="h-4 w-4" />,
       path: '/notifications/preferences',
-      color: 'bg-indigo-50 text-indigo-500'
     },
-    ...(AppConfig.features.subscriptionEnabled ? [{ 
-      id: 'subscription', 
-      label: 'Subscription', 
-      desc: 'Manage your family plan', 
-      icon: <CreditCard size={20} />, 
-      path: '/profile/subscription',
-      color: 'bg-amber-50 text-amber-500'
-    }] : []),
+    ...(AppConfig.features.subscriptionEnabled
+      ? [
+          {
+            id: 'subscription',
+            label: 'Subscription',
+            description: 'Review the family plan options available in this app.',
+            icon: <CreditCard className="h-4 w-4" />,
+            path: '/profile/subscription',
+          },
+        ]
+      : []),
   ];
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] pb-32">
-      <header className="p-12 md:p-20 space-y-12 flex flex-col items-center relative overflow-hidden">
-        {/* Background Accents */}
-        <div className="absolute top-0 left-0 w-full h-40 bg-primary/[0.02] -skew-y-3 origin-top-left pointer-events-none" />
-        <div className="absolute top-20 right-10 w-64 h-64 bg-accent/[0.03] rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-bg-cream pb-24">
+      <FFPageHeader title="Profile" subtitle="Account and family preferences" showBack />
 
-        <div className="relative group">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="p-3 rounded-[36px] bg-white shadow-3xl shadow-primary/5 border border-black/[0.03] relative z-10"
-          >
-            <FFAvatar name={user?.name || 'User'} size="xl" className="ring-8 ring-gray-50 shadow-inner group-hover:scale-105 transition-transform duration-700" />
-          </motion.div>
-          
-          <motion.button 
-            initial={{ scale: 0, rotate: -45 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ delay: 0.4, type: "spring" }}
-            onClick={() => navigate(getSettingsPath())}
-            className="absolute -bottom-2 -right-2 w-14 h-14 bg-primary text-white rounded-[20px] shadow-2xl border-4 border-white hover:bg-accent hover:rotate-90 transition-all flex items-center justify-center z-20"
-          >
-            <Settings size={24} />
-          </motion.button>
-        </div>
-
-        <div className="text-center space-y-6 relative z-10">
-          <div className="space-y-4">
-             <h1 className="text-5xl md:text-7xl font-display font-black text-primary tracking-tighter uppercase italic leading-none">{user?.name}</h1>
-             <div className="flex items-center justify-center gap-4">
-               <FFBadge variant="primary" size="sm" className="font-black px-6 py-2 uppercase italic tracking-widest text-[12px] rounded-xl bg-primary/5 border-none outline-dashed outline-1 outline-primary/20">
-                 {user?.role.replace('_', ' ')}
-               </FFBadge>
-               <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-             </div>
+      <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <FFCard variant="primary" className="p-5 sm:p-6">
+          <div className="flex items-start gap-4">
+            <FFAvatar name={user?.name || 'Family Member'} size="lg" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-display font-bold text-white sm:text-2xl">
+                  {user?.name || 'Family member'}
+                </h1>
+                <FFBadge variant="accent" size="sm">
+                  {formatRole(user?.role)}
+                </FFBadge>
+              </div>
+              <p className="mt-2 text-sm text-white/80">
+                Keep your account details, notification choices, and family settings in one place.
+              </p>
+            </div>
           </div>
-          <div className="h-px w-20 bg-primary/10 mx-auto" />
-          <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.6em] italic leading-none">CORE_IDENTITY_MATRIX_ACTIVE</p>
-        </div>
-      </header>
+        </FFCard>
 
-      <main className="max-w-3xl mx-auto px-8 space-y-16">
-        <section className="space-y-6">
-           <div className="flex items-center gap-6 px-4">
-              <Shield size={16} className="text-primary/20" />
-              <h3 className="text-[11px] font-black text-primary/30 uppercase tracking-[0.4em] italic">INTERFACE_PROTOCOLS</h3>
-              <div className="h-px flex-1 bg-primary/5" />
-           </div>
+        <section className="space-y-3">
+          <FFSectionHeader icon={<User />} title="Account" />
+          <FFCard className="space-y-4 p-4 shadow-card">
+            <div className="flex items-center justify-between gap-3 rounded-ff-sm bg-primary/5 p-4">
+              <div>
+                <p className="text-sm font-body font-semibold text-primary">Signed in as</p>
+                <p className="mt-1 text-sm text-gray-500">{formatRole(user?.role)}</p>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-ff-sm bg-white text-primary">
+                <Shield className="h-5 w-5" />
+              </div>
+            </div>
 
-           <div className="grid grid-cols-1 gap-6">
-            {menuItems.map((item, idx) => (
-              <motion.div
+            {user?.familyId ? (
+              <div className="flex items-center justify-between gap-3 rounded-ff-sm bg-primary/5 p-4">
+                <div>
+                  <p className="text-sm font-body font-semibold text-primary">Family access</p>
+                  <p className="mt-1 text-sm text-gray-500">Connected to your current family account.</p>
+                </div>
+                <div className="flex h-12 w-12 items-center justify-center rounded-ff-sm bg-white text-primary">
+                  <Users className="h-5 w-5" />
+                </div>
+              </div>
+            ) : null}
+          </FFCard>
+        </section>
+
+        <section className="space-y-3">
+          <FFSectionHeader icon={<Settings />} title="Shortcuts" />
+          <div className="space-y-3">
+            {menuItems.map((item) => (
+              <FFCard
                 key={item.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.1 }}
+                hoverable
+                onClick={() => navigate(item.path)}
+                className="flex items-center gap-4 p-4 shadow-card"
               >
-                <FFCard 
-                  className="p-8 flex items-center justify-between cursor-pointer hover:bg-white hover:scale-[1.02] hover:shadow-3xl hover:shadow-primary/5 transition-all group overflow-hidden relative rounded-[40px] border-none bg-white/50 backdrop-blur-sm"
-                  onClick={() => navigate(item.path)}
-                >
-                  <div className="flex items-center gap-8 relative z-10">
-                    <div className={`w-18 h-18 rounded-[24px] flex items-center justify-center shadow-inner border border-black/[0.03] transition-transform group-hover:rotate-12 ${item.color}`}>
-                      {item.icon}
-                    </div>
-                    <div>
-                      <h4 className="font-display font-black text-2xl text-primary uppercase italic tracking-tighter group-hover:text-accent transition-colors leading-none mb-2">{item.label}</h4>
-                      <p className="text-[11px] text-gray-400 font-black uppercase tracking-widest italic opacity-60">{item.desc}</p>
-                    </div>
-                  </div>
-                  <div className="w-12 h-12 rounded-[18px] bg-white border border-black/[0.03] flex items-center justify-center text-gray-100 group-hover:text-accent group-hover:translate-x-1 transition-all shadow-sm">
-                    <ChevronRight size={24} className="group-hover:scale-110 transition-transform" />
-                  </div>
-                </FFCard>
-              </motion.div>
+                <div className="flex h-12 w-12 items-center justify-center rounded-ff-sm bg-primary/5 text-primary">
+                  {item.icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-display font-semibold text-primary">{item.label}</p>
+                  <p className="mt-1 text-sm text-gray-500">{item.description}</p>
+                </div>
+              </FFCard>
             ))}
           </div>
         </section>
 
-        <section className="pt-12">
-          <button
-            onClick={handleLogout}
-            className="w-full h-24 rounded-[32px] bg-alert/5 border-2 border-dashed border-alert/20 text-alert font-display font-black text-xl uppercase italic tracking-[0.2em] flex items-center justify-center gap-6 hover:bg-alert hover:text-white hover:border-solid hover:shadow-3xl hover:shadow-alert/20 transition-all active:scale-95 group"
-          >
-            <LogOut size={28} className="group-hover:-translate-x-2 transition-transform" />
-            <span>TERMINATE_SESSION</span>
-          </button>
-        </section>
+        <FFButton
+          variant="alert"
+          className="w-full"
+          icon={<LogOut className="h-4 w-4" />}
+          onClick={() => void handleLogout()}
+        >
+          Log out
+        </FFButton>
       </main>
-
-      <footer className="mt-40 text-center space-y-4 px-8 opacity-20">
-         <div className="flex items-center justify-center gap-8">
-            <div className="h-px w-20 bg-primary" />
-            <User size={24} className="text-primary" />
-            <div className="h-px w-20 bg-primary" />
-         </div>
-         <p className="text-[12px] text-primary font-black uppercase tracking-[1em] italic leading-none">Security Matrix Protocol v4.4.2</p>
-         <p className="text-[9px] text-primary font-black uppercase tracking-[0.5em] italic opacity-40 italic mt-6">All biometric and operational identity data is stored in the vault node</p>
-      </footer>
     </div>
   );
 };

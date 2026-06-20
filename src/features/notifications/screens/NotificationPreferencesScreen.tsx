@@ -1,354 +1,494 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { 
-  ArrowLeft, 
-  Bell, 
-  Moon, 
-  Clock, 
-  CheckCircle2, 
-  Save,
-  AlertCircle,
-  MessageSquare,
-  Trophy,
+import React, { useEffect, useReducer } from 'react';
+import {
+  Bell,
   Calendar,
-  ShieldCheck
+  CheckCircle2,
+  Clock,
+  MessageSquare,
+  Moon,
+  Save,
+  Trophy,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { NotificationRepository, NotificationPreferences } from '../repositories/NotificationRepository';
-import FFCard from '../../../shared/components/FFCard';
+import {
+  NotificationPreferences,
+  NotificationRepository,
+} from '../repositories/NotificationRepository';
 import FFButton from '../../../shared/components/FFButton';
-import FFBadge from '../../../shared/components/FFBadge';
+import FFCard from '../../../shared/components/FFCard';
+import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
+
+type PreferencesState =
+  | {
+      status: 'loading';
+      prefs: NotificationPreferences | null;
+      error: null;
+      isSaving: boolean;
+      saveError: null;
+      saveSuccess: boolean;
+    }
+  | {
+      status: 'ready';
+      prefs: NotificationPreferences;
+      error: null;
+      isSaving: boolean;
+      saveError: string | null;
+      saveSuccess: boolean;
+    }
+  | {
+      status: 'error';
+      prefs: NotificationPreferences | null;
+      error: string;
+      isSaving: boolean;
+      saveError: null;
+      saveSuccess: boolean;
+    };
+
+type PreferencesAction =
+  | { type: 'LOAD_START' }
+  | { type: 'LOAD_SUCCESS'; payload: NotificationPreferences }
+  | { type: 'LOAD_ERROR'; error: string }
+  | { type: 'UPDATE_PREF'; key: keyof NotificationPreferences; value: boolean | string }
+  | { type: 'SAVE_START' }
+  | { type: 'SAVE_SUCCESS'; payload: NotificationPreferences }
+  | { type: 'SAVE_ERROR'; error: string }
+  | { type: 'CLEAR_SAVE_MESSAGE' };
+
+const preferencesReducer = (
+  state: PreferencesState,
+  action: PreferencesAction,
+): PreferencesState => {
+  switch (action.type) {
+    case 'LOAD_START':
+      return {
+        ...state,
+        status: 'loading',
+        error: null,
+        saveError: null,
+        saveSuccess: false,
+      };
+    case 'LOAD_SUCCESS':
+      return {
+        status: 'ready',
+        prefs: action.payload,
+        error: null,
+        isSaving: false,
+        saveError: null,
+        saveSuccess: false,
+      };
+    case 'LOAD_ERROR':
+      return {
+        ...state,
+        status: 'error',
+        error: action.error,
+        isSaving: false,
+        saveError: null,
+        saveSuccess: false,
+      };
+    case 'UPDATE_PREF':
+      if (state.status !== 'ready') {
+        return state;
+      }
+
+      return {
+        ...state,
+        prefs: {
+          ...state.prefs,
+          [action.key]: action.value,
+        },
+        saveError: null,
+        saveSuccess: false,
+      };
+    case 'SAVE_START':
+      if (state.status !== 'ready') {
+        return state;
+      }
+
+      return {
+        ...state,
+        isSaving: true,
+        saveError: null,
+        saveSuccess: false,
+      };
+    case 'SAVE_SUCCESS':
+      return {
+        status: 'ready',
+        prefs: action.payload,
+        error: null,
+        isSaving: false,
+        saveError: null,
+        saveSuccess: true,
+      };
+    case 'SAVE_ERROR':
+      if (state.status !== 'ready') {
+        return state;
+      }
+
+      return {
+        ...state,
+        isSaving: false,
+        saveError: action.error,
+        saveSuccess: false,
+      };
+    case 'CLEAR_SAVE_MESSAGE':
+      if (state.status !== 'ready') {
+        return state;
+      }
+
+      return {
+        ...state,
+        saveError: null,
+        saveSuccess: false,
+      };
+    default:
+      return state;
+  }
+};
+
+const preferenceSections: Array<{
+  key: keyof Pick<
+    NotificationPreferences,
+    'attendanceEnabled' | 'feedbackEnabled' | 'rewardEnabled' | 'taskEnabled' | 'calendarEnabled'
+  >;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}> = [
+  {
+    key: 'attendanceEnabled',
+    title: 'Attendance alerts',
+    description: 'Receive updates when attendance is marked absent or late.',
+    icon: <Bell className="h-4 w-4" />,
+  },
+  {
+    key: 'feedbackEnabled',
+    title: 'Teacher feedback',
+    description: 'Stay informed when new remarks or observations are shared.',
+    icon: <MessageSquare className="h-4 w-4" />,
+  },
+  {
+    key: 'rewardEnabled',
+    title: 'Reward requests',
+    description: 'Get notified when a child requests a reward review.',
+    icon: <Trophy className="h-4 w-4" />,
+  },
+  {
+    key: 'taskEnabled',
+    title: 'Task reviews',
+    description: 'See when a completed task is ready for approval.',
+    icon: <CheckCircle2 className="h-4 w-4" />,
+  },
+  {
+    key: 'calendarEnabled',
+    title: 'Calendar reminders',
+    description: 'Receive reminders for events, visits, and shared family plans.',
+    icon: <Calendar className="h-4 w-4" />,
+  },
+];
 
 const NotificationPreferencesScreen: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-
-  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [state, dispatch] = useReducer(preferencesReducer, {
+    status: 'loading',
+    prefs: null,
+    error: null,
+    isSaving: false,
+    saveError: null,
+    saveSuccess: false,
+  });
+  const [reloadToken, reload] = useReducer((value: number) => value + 1, 0);
 
   useEffect(() => {
-    const fetchPrefs = async () => {
-      if (!user?.id) return;
+    const loadPreferences = async () => {
+      if (!user?.id) {
+        dispatch({
+          type: 'LOAD_ERROR',
+          error: 'Notification preferences will appear once your profile is available.',
+        });
+        return;
+      }
+
+      dispatch({ type: 'LOAD_START' });
+
       try {
-        const data = await NotificationRepository.getPreferences(user.id);
-        setPrefs(data);
-      } catch (error) {
-        console.error('Failed to fetch preferences', error);
-      } finally {
-        setIsLoading(false);
+        const prefs = await NotificationRepository.getPreferences(user.id);
+        dispatch({ type: 'LOAD_SUCCESS', payload: prefs });
+      } catch {
+        dispatch({
+          type: 'LOAD_ERROR',
+          error: 'Your notification settings could not be loaded right now. Please try again.',
+        });
       }
     };
-    fetchPrefs();
-  }, [user?.id]);
 
-  const handleToggle = (key: keyof NotificationPreferences) => {
-    if (!prefs) return;
-    setPrefs({ ...prefs, [key]: !prefs[key] });
-  };
+    void loadPreferences();
+  }, [reloadToken, user?.id]);
 
   const handleSave = async () => {
-    if (!user?.id || !prefs) return;
-    setIsSaving(true);
+    if (!user?.id || state.status !== 'ready') {
+      return;
+    }
+
+    dispatch({ type: 'SAVE_START' });
+
     try {
-      await NotificationRepository.updatePreferences(user.id, prefs);
-      navigate(-1);
-    } catch (error) {
-      console.error('Failed to update preferences', error);
-    } finally {
-      setIsSaving(false);
+      const updated = await NotificationRepository.updatePreferences(user.id, state.prefs);
+      dispatch({ type: 'SAVE_SUCCESS', payload: updated });
+    } catch {
+      dispatch({
+        type: 'SAVE_ERROR',
+        error: 'Your changes could not be saved. Please review the times and try again.',
+      });
     }
   };
 
-  if (isLoading || !prefs) return <div className="p-8 text-center text-gray-400">Loading Preferences...</div>;
+  const renderToggle = (
+    key: keyof NotificationPreferences,
+    title: string,
+    description: string,
+    icon: React.ReactNode,
+  ) => {
+    if (state.status !== 'ready') {
+      return null;
+    }
 
-  return (
-    <div className="min-h-screen bg-[#FDFCFB] pb-48">
-      <header className="bg-white/95 backdrop-blur-2xl p-8 lg:p-14 border-b border-black/[0.03] sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-10">
-          <div className="flex items-center gap-10">
-            <div className="w-24 h-24 bg-primary/5 rounded-[32px] flex items-center justify-center text-primary shadow-inner relative group overflow-hidden">
-               <div className="absolute inset-x-0 bottom-0 h-1 bg-primary/20 animate-pulse" />
-               <Bell size={40} className="relative z-10 group-hover:scale-110 transition-transform duration-500" />
-            </div>
-            <div>
-              <div className="flex items-center gap-4 mb-2">
-                <FFBadge variant="accent" size="sm" className="font-black px-4 py-1.5 uppercase italic tracking-widest leading-none">SIGNAL_INTELLIGENCE</FFBadge>
-                <div className="flex items-center gap-3">
-                   <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] italic leading-none whitespace-nowrap">PREFERENCE_CALIBRATION_v1.0.1</p>
-                </div>
-              </div>
-              <h1 className="text-4xl md:text-7xl font-display font-black text-primary tracking-tighter uppercase italic leading-none">
-                Signal Matrix
-              </h1>
-            </div>
+    const isEnabled = Boolean(state.prefs[key]);
+
+    return (
+      <FFCard key={title} className="flex items-center justify-between gap-4 p-4 shadow-card">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-ff-sm bg-primary/5 text-primary">
+            {icon}
           </div>
-
-          <div className="flex items-center gap-6">
-            <FFButton 
-              size="lg" 
-              icon={<Save size={24} />} 
-              onClick={handleSave}
-              isLoading={isSaving}
-              className="h-16 px-10 rounded-[24px] shadow-2xl shadow-primary/20 italic font-black uppercase tracking-[0.2em]"
-            >
-              COMMIT_CHANGES
-            </FFButton>
-            <button 
-              onClick={() => navigate(-1)}
-              className="w-16 h-16 bg-white rounded-[24px] border border-black/5 text-gray-300 hover:text-primary transition-all shadow-sm flex items-center justify-center group active:scale-90"
-            >
-              <ArrowLeft size={28} className="group-hover:-translate-x-1 transition-transform" />
-            </button>
+          <div className="min-w-0">
+            <p className="text-sm font-display font-semibold text-primary">{title}</p>
+            <p className="mt-1 text-sm text-gray-500">{description}</p>
           </div>
         </div>
-      </header>
+        <FFButton
+          type="button"
+          variant={isEnabled ? 'primary' : 'outline'}
+          size="sm"
+          onClick={() =>
+            dispatch({ type: 'UPDATE_PREF', key, value: !isEnabled })
+          }
+        >
+          {isEnabled ? 'On' : 'Off'}
+        </FFButton>
+      </FFCard>
+    );
+  };
 
-      <main className="max-w-4xl mx-auto p-12 lg:p-24 space-y-24 pt-16">
-        {/* Notification Types */}
-        <section className="space-y-12">
-          <div className="flex items-center gap-8 px-4">
-            <div className="w-12 h-12 bg-primary/5 rounded-[18px] flex items-center justify-center text-primary">
-               <Bell size={24} strokeWidth={2.5} />
-            </div>
-            <h3 className="text-xl font-display font-black uppercase tracking-widest text-primary italic leading-none">ALERT_DISPATCH_PROTOCOL</h3>
-            <div className="h-px flex-1 bg-primary/10" />
-          </div>
+  return (
+    <div className="min-h-screen bg-bg-cream pb-24">
+      <FFPageHeader
+        title="Notifications"
+        subtitle="Alerts, quiet hours, and digests"
+        showBack
+        rightAction={
+          state.status === 'ready' ? (
+            <FFButton
+              variant="ghost"
+              size="sm"
+              icon={<Save className="h-4 w-4" />}
+              onClick={() => void handleSave()}
+              isLoading={state.isSaving}
+            >
+              Save
+            </FFButton>
+          ) : undefined
+        }
+      />
+
+      <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <FFCard variant="primary" className="space-y-3 p-5 sm:p-6">
+          <p className="text-sm text-white/80">
+            Choose which updates matter most and set a quiet window for the hours when your family
+            needs less interruption.
+          </p>
+        </FFCard>
+
+        {state.status === 'loading' ? (
           <div className="space-y-3">
-            <PreferenceToggle 
-              icon={<AlertCircle size={20} />} 
-              label="Attendance Alerts" 
-              desc="When a child is marked absent or late"
-              isEnabled={prefs.attendanceEnabled}
-              onToggle={() => handleToggle('attendanceEnabled')}
-              color="bg-alert/10 text-alert"
-            />
-            <PreferenceToggle 
-              icon={<MessageSquare size={20} />} 
-              label="Teacher Feedback" 
-              desc="When a teacher submits a new remark"
-              isEnabled={prefs.feedbackEnabled}
-              onToggle={() => handleToggle('feedbackEnabled')}
-              color="bg-primary/10 text-primary"
-            />
-            <PreferenceToggle 
-              icon={<Trophy size={20} />} 
-              label="Reward Requests" 
-              desc="When a child wants to redeem coins"
-              isEnabled={prefs.rewardEnabled}
-              onToggle={() => handleToggle('rewardEnabled')}
-              color="bg-amber-50 text-amber-500"
-            />
-            <PreferenceToggle 
-              icon={<CheckCircle2 size={20} />} 
-              label="Task Completions" 
-              desc="When a child submits a task for review"
-              isEnabled={prefs.taskEnabled}
-              onToggle={() => handleToggle('taskEnabled')}
-              color="bg-success/10 text-success"
-            />
-            <PreferenceToggle 
-              icon={<Calendar size={20} />} 
-              label="Calendar Alerts" 
-              desc="Birthdays, reminders, and upcoming family schedules"
-              isEnabled={prefs.calendarEnabled}
-              onToggle={() => handleToggle('calendarEnabled')}
-              color="bg-blue-50 text-blue-500"
-            />
+            <FFCardSkeleton />
+            <FFCardSkeleton />
+            <FFCardSkeleton />
           </div>
-        </section>
+        ) : null}
 
-        {/* Quiet Hours */}
-        <section className="space-y-12">
-          <div className="flex items-center gap-8 px-4">
-            <div className="w-12 h-12 bg-primary/5 rounded-[18px] flex items-center justify-center text-primary">
-               <Moon size={24} strokeWidth={2.5} />
-            </div>
-            <h3 className="text-xl font-display font-black uppercase tracking-widest text-primary italic leading-none">SILENT_COMM_PROTOCOL</h3>
-            <div className="h-px flex-1 bg-primary/10" />
-          </div>
-          <FFCard className="p-10 lg:p-14 rounded-[56px] border-none shadow-3xl shadow-black/[0.01] bg-white group overflow-hidden relative">
-             <div className="absolute top-0 right-0 p-12 opacity-[0.02] pointer-events-none group-hover:scale-110 transition-transform duration-1000">
-                <Moon size={180} />
-             </div>
-            <div className="flex items-center gap-10 mb-14 relative z-10 transition-transform group-hover:translate-x-2">
-              <div className="w-20 h-20 bg-indigo-50 rounded-[32px] flex items-center justify-center text-indigo-500 shadow-inner group-hover:rotate-12 transition-transform duration-500">
-                <Moon size={36} />
+        {state.status === 'error' ? (
+          <FFErrorState message={state.error} onRetry={() => reload()} />
+        ) : null}
+
+        {state.status === 'ready' ? (
+          <>
+            {state.saveError ? (
+              <FFCard variant="warm" className="p-4 shadow-card">
+                <p className="text-sm text-alert">{state.saveError}</p>
+              </FFCard>
+            ) : null}
+
+            {state.saveSuccess ? (
+              <FFCard variant="warm" className="p-4 shadow-card">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-success">Notification preferences saved.</p>
+                  <FFButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => dispatch({ type: 'CLEAR_SAVE_MESSAGE' })}
+                  >
+                    Dismiss
+                  </FFButton>
+                </div>
+              </FFCard>
+            ) : null}
+
+            <section className="space-y-3">
+              <FFSectionHeader icon={<Bell />} title="Alert Types" />
+              <div className="space-y-3">
+                {preferenceSections.map((section) =>
+                  renderToggle(section.key, section.title, section.description, section.icon),
+                )}
               </div>
-              <div>
-                <h4 className="text-3xl font-display font-black text-primary uppercase italic tracking-tighter leading-none mb-3">Do Not Disturb</h4>
-                <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em] italic leading-none">SILENCE_NON_CRITICAL_TELEMETRY</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-8 mb-10 bg-gray-50/70 rounded-[32px] border border-black/[0.03] relative z-10">
-              <div>
-                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] italic leading-none mb-2">QUIET_HOURS_SWITCH</p>
-                <h5 className="text-xl font-display font-black text-primary uppercase italic tracking-tighter leading-none">Quiet Hours Enabled</h5>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleToggle('quietHoursEnabled')}
-                className={`w-20 h-10 rounded-full transition-all relative group/toggle ${prefs.quietHoursEnabled ? 'bg-primary shadow-glow shadow-primary/20' : 'bg-gray-100 shadow-inner'}`}
+            </section>
+
+            <section className="space-y-3">
+              <FFSectionHeader icon={<Moon />} title="Quiet Hours" />
+              <FFCard className="space-y-4 p-4 shadow-card">
+                {renderToggle(
+                  'quietHoursEnabled',
+                  'Quiet hours',
+                  'Pause non-urgent pushes overnight while keeping the setting easy to adjust.',
+                  <Moon className="h-4 w-4" />,
+                )}
+
+                {state.prefs.quietHoursEnabled ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block space-y-2">
+                      <span className="text-sm font-body font-semibold text-primary">Starts</span>
+                      <input
+                        type="time"
+                        value={state.prefs.quietHoursStart}
+                        onChange={(event) =>
+                          dispatch({
+                            type: 'UPDATE_PREF',
+                            key: 'quietHoursStart',
+                            value: event.target.value,
+                          })
+                        }
+                        className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                      />
+                    </label>
+                    <label className="block space-y-2">
+                      <span className="text-sm font-body font-semibold text-primary">Ends</span>
+                      <input
+                        type="time"
+                        value={state.prefs.quietHoursEnd}
+                        onChange={(event) =>
+                          dispatch({
+                            type: 'UPDATE_PREF',
+                            key: 'quietHoursEnd',
+                            value: event.target.value,
+                          })
+                        }
+                        className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                      />
+                    </label>
+                  </div>
+                ) : null}
+              </FFCard>
+            </section>
+
+            <section className="space-y-3">
+              <FFSectionHeader icon={<Clock />} title="Digest Times" />
+              <FFCard className="space-y-4 p-4 shadow-card">
+                {renderToggle(
+                  'weeklyDigestEnabled',
+                  'Weekly digest',
+                  'Receive a summary of attendance, tasks, and updates for the week.',
+                  <Clock className="h-4 w-4" />,
+                )}
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block space-y-2">
+                    <span className="text-sm font-body font-semibold text-primary">
+                      Morning digest
+                    </span>
+                    <input
+                      type="time"
+                      value={state.prefs.morningDigestTime}
+                      onChange={(event) =>
+                        dispatch({
+                          type: 'UPDATE_PREF',
+                          key: 'morningDigestTime',
+                          value: event.target.value,
+                        })
+                      }
+                      className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                    />
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-body font-semibold text-primary">
+                      Evening digest
+                    </span>
+                    <input
+                      type="time"
+                      value={state.prefs.eveningDigestTime}
+                      onChange={(event) =>
+                        dispatch({
+                          type: 'UPDATE_PREF',
+                          key: 'eveningDigestTime',
+                          value: event.target.value,
+                        })
+                      }
+                      className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
+                    />
+                  </label>
+                </div>
+              </FFCard>
+            </section>
+
+            <div className="space-y-3">
+              <FFButton
+                className="w-full"
+                icon={<Save className="h-4 w-4" />}
+                isLoading={state.isSaving}
+                onClick={() => void handleSave()}
               >
-                <motion.div
-                  animate={{ x: prefs.quietHoursEnabled ? 44 : 4 }}
-                  className="absolute top-1 w-8 h-8 bg-white rounded-full shadow-2xl flex items-center justify-center"
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full ${prefs.quietHoursEnabled ? 'bg-primary animate-pulse' : 'bg-gray-200'}`} />
-                </motion.div>
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-10 relative z-10">
-              <div className="space-y-4">
-                <label className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] ml-4 italic">START_T_SYNC</label>
-                <div className="relative">
-                  <input 
-                    type="time" 
-                    disabled={!prefs.quietHoursEnabled}
-                    className="w-full px-8 h-20 bg-gray-50/50 border-2 border-transparent rounded-[28px] focus:bg-white focus:border-primary/10 transition-all outline-none font-display font-black text-2xl text-primary italic tabular-nums shadow-inner"
-                    value={prefs.quietHoursStart}
-                    onChange={e => setPrefs({ ...prefs, quietHoursStart: e.target.value })}
-                  />
-                  <Clock size={20} className="absolute right-6 top-1/2 -translate-y-1/2 text-primary opacity-10" />
-                </div>
-              </div>
-              <div className="space-y-4">
-                <label className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] ml-4 italic">END_T_SYNC</label>
-                <div className="relative">
-                  <input 
-                    type="time" 
-                    disabled={!prefs.quietHoursEnabled}
-                    className="w-full px-8 h-20 bg-gray-50/50 border-2 border-transparent rounded-[28px] focus:bg-white focus:border-primary/10 transition-all outline-none font-display font-black text-2xl text-primary italic tabular-nums shadow-inner"
-                    value={prefs.quietHoursEnd}
-                    onChange={e => setPrefs({ ...prefs, quietHoursEnd: e.target.value })}
-                  />
-                  <Clock size={20} className="absolute right-6 top-1/2 -translate-y-1/2 text-primary opacity-10" />
-                </div>
-              </div>
-            </div>
-          </FFCard>
-        </section>
-
-        {/* Digests */}
-        <section className="space-y-12">
-           <div className="flex items-center gap-8 px-4">
-            <div className="w-12 h-12 bg-primary/5 rounded-[18px] flex items-center justify-center text-primary">
-               <Clock size={24} strokeWidth={2.5} />
-            </div>
-            <h3 className="text-xl font-display font-black uppercase tracking-widest text-primary italic leading-none">ANALYTIC_RECAP_SCHEDULE</h3>
-            <div className="h-px flex-1 bg-primary/10" />
-          </div>
-          <FFCard className="p-10 lg:p-14 rounded-[56px] border-none shadow-3xl shadow-black/[0.01] bg-white space-y-12">
-            <div className="flex items-center justify-between p-8 bg-gray-50/70 rounded-[32px] border border-black/[0.03]">
-              <div>
-                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em] italic leading-none mb-2">DIGEST_DELIVERY_SWITCH</p>
-                <h5 className="text-xl font-display font-black text-primary uppercase italic tracking-tighter leading-none">Weekly Digest Enabled</h5>
-              </div>
-              <button
+                Save preferences
+              </FFButton>
+              <FFButton
                 type="button"
-                onClick={() => handleToggle('weeklyDigestEnabled')}
-                className={`w-20 h-10 rounded-full transition-all relative group/toggle ${prefs.weeklyDigestEnabled ? 'bg-primary shadow-glow shadow-primary/20' : 'bg-gray-100 shadow-inner'}`}
+                variant="outline"
+                className="w-full"
+                onClick={() => navigate('/notifications')}
               >
-                <motion.div
-                  animate={{ x: prefs.weeklyDigestEnabled ? 44 : 4 }}
-                  className="absolute top-1 w-8 h-8 bg-white rounded-full shadow-2xl flex items-center justify-center"
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full ${prefs.weeklyDigestEnabled ? 'bg-primary animate-pulse' : 'bg-gray-200'}`} />
-                </motion.div>
-              </button>
+                View notification history
+              </FFButton>
             </div>
-            <div className="flex items-center justify-between group">
-              <div className="flex items-center gap-8">
-                <div className="w-16 h-16 bg-amber-50 rounded-[24px] flex items-center justify-center text-amber-500 shadow-inner group-hover:rotate-12 transition-transform duration-500">
-                  <Clock size={28} />
-                </div>
-                <div>
-                  <h4 className="text-2xl font-display font-black text-primary uppercase italic tracking-tighter leading-none mb-2">Morning Digest</h4>
-                  <p className="text-[10px] text-gray-300 font-black uppercase tracking-[0.3em] italic leading-none">STRATEGIC_DAILY_OBJECTIVES</p>
-                </div>
-              </div>
-              <div className="relative">
-                <input 
-                  type="time" 
-                  className="w-48 px-8 h-16 bg-gray-50 border border-black/[0.03] rounded-2xl font-display font-black text-primary uppercase italic transition-all outline-none focus:bg-white focus:border-amber-400 tabular-nums shadow-inner"
-                  value={prefs.morningDigestTime}
-                  onChange={e => setPrefs({ ...prefs, morningDigestTime: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="h-px bg-black/[0.03]" />
-            <div className="flex items-center justify-between group">
-              <div className="flex items-center gap-8">
-                <div className="w-16 h-16 bg-blue-50 rounded-[24px] flex items-center justify-center text-blue-500 shadow-inner group-hover:-rotate-12 transition-transform duration-500">
-                  <Clock size={28} />
-                </div>
-                <div>
-                  <h4 className="text-2xl font-display font-black text-primary uppercase italic tracking-tighter leading-none mb-2">Evening Digest</h4>
-                  <p className="text-[10px] text-gray-300 font-black uppercase tracking-[0.3em] italic leading-none">OPERATIONAL_WIN_METRICS</p>
-                </div>
-              </div>
-              <div className="relative">
-                <input 
-                  type="time" 
-                  className="w-48 px-8 h-16 bg-gray-50 border border-black/[0.03] rounded-2xl font-display font-black text-primary uppercase italic transition-all outline-none focus:bg-white focus:border-blue-400 tabular-nums shadow-inner"
-                  value={prefs.eveningDigestTime}
-                  onChange={e => setPrefs({ ...prefs, eveningDigestTime: e.target.value })}
-                />
-              </div>
-            </div>
-          </FFCard>
-        </section>
+          </>
+        ) : null}
 
-         <footer className="text-center space-y-12 py-40 px-8 border-t border-black/[0.03]">
-           <div className="flex items-center justify-center gap-10 text-primary/10">
-              <div className="h-px w-32 bg-current" />
-              <ShieldCheck size={40} />
-              <div className="h-px w-32 bg-current" />
-           </div>
-           <div className="space-y-4">
-              <p className="text-[12px] text-gray-400 font-black uppercase tracking-[0.8em] italic leading-relaxed">STATION_ENGINE // Signal Preference Array v4.4.2</p>
-              <p className="text-[10px] text-gray-300 font-black uppercase tracking-[0.4em] italic opacity-40">Unauthorized modification of telemetry schedules is logged and monitored</p>
-           </div>
-        </footer>
+        {state.status === 'ready' && !state.prefs ? (
+          <FFEmptyState
+            title="Preferences unavailable"
+            message="Notification settings are not ready yet."
+            actionLabel="Try again"
+            onAction={() => reload()}
+            icon={<Bell className="h-8 w-8" />}
+          />
+        ) : null}
       </main>
     </div>
   );
 };
-
-interface PreferenceToggleProps {
-  icon: React.ReactNode;
-  label: string;
-  desc: string;
-  isEnabled: boolean;
-  onToggle: () => void;
-  color: string;
-}
-
-const PreferenceToggle: React.FC<PreferenceToggleProps> = ({ icon, label, desc, isEnabled, onToggle, color }) => (
-  <FFCard className="p-8 flex items-center justify-between bg-white border-none shadow-3xl shadow-black/[0.01] rounded-[40px] group hover:bg-primary/5 transition-all relative overflow-hidden">
-    <div className="flex items-center gap-8 relative z-10">
-      <div className={`w-16 h-16 rounded-[24px] flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500 ${color}`}>
-        {icon}
-      </div>
-      <div>
-        <h4 className="text-2xl font-display font-black text-primary uppercase italic tracking-tighter leading-none mb-2">{label}</h4>
-        <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] italic leading-none">{desc}</p>
-      </div>
-    </div>
-    <button 
-      onClick={onToggle}
-      className={`w-20 h-10 rounded-full transition-all relative group/toggle ${isEnabled ? 'bg-primary shadow-glow shadow-primary/20' : 'bg-gray-100 shadow-inner'}`}
-    >
-      <motion.div 
-        animate={{ x: isEnabled ? 44 : 4 }}
-        className="absolute top-1 w-8 h-8 bg-white rounded-full shadow-2xl flex items-center justify-center"
-      >
-        <div className={`w-1.5 h-1.5 rounded-full ${isEnabled ? 'bg-primary animate-pulse' : 'bg-gray-200'}`} />
-      </motion.div>
-    </button>
-  </FFCard>
-);
 
 export default NotificationPreferencesScreen;

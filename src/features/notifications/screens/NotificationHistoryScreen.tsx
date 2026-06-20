@@ -1,184 +1,342 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ArrowLeft, 
-  CheckCheck, 
-  Settings, 
-  Inbox
-} from 'lucide-react';
+import React, { useEffect, useMemo, useReducer, useState } from 'react';
+import { Bell, CheckCheck, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { NotificationRepository, AppNotification, NotificationTypeOption } from '../repositories/NotificationRepository';
-import NotificationTile from '../widgets/NotificationTile';
+import {
+  AppNotification,
+  NotificationRepository,
+  NotificationTypeOption,
+} from '../repositories/NotificationRepository';
+import FFButton from '../../../shared/components/FFButton';
+import FFCard from '../../../shared/components/FFCard';
+import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
+
+type HistoryState =
+  | {
+      status: 'loading';
+      notifications: AppNotification[];
+      typeOptions: NotificationTypeOption[];
+      error: null;
+    }
+  | {
+      status: 'ready';
+      notifications: AppNotification[];
+      typeOptions: NotificationTypeOption[];
+      error: null;
+    }
+  | {
+      status: 'error';
+      notifications: AppNotification[];
+      typeOptions: NotificationTypeOption[];
+      error: string;
+    };
+
+type HistoryAction =
+  | { type: 'LOAD_START' }
+  | {
+      type: 'LOAD_SUCCESS';
+      payload: { notifications: AppNotification[]; typeOptions: NotificationTypeOption[] };
+    }
+  | { type: 'LOAD_ERROR'; error: string }
+  | { type: 'MARK_READ'; notificationId: string }
+  | { type: 'MARK_ALL_READ' };
+
+const historyReducer = (state: HistoryState, action: HistoryAction): HistoryState => {
+  switch (action.type) {
+    case 'LOAD_START':
+      return { ...state, status: 'loading', error: null };
+    case 'LOAD_SUCCESS':
+      return { status: 'ready', ...action.payload, error: null };
+    case 'LOAD_ERROR':
+      return { status: 'error', notifications: state.notifications, typeOptions: state.typeOptions, error: action.error };
+    case 'MARK_READ':
+      return {
+        ...state,
+        notifications: state.notifications.map((notification) =>
+          notification.id === action.notificationId ? { ...notification, isRead: true } : notification,
+        ),
+      };
+    case 'MARK_ALL_READ':
+      return {
+        ...state,
+        notifications: state.notifications.map((notification) => ({ ...notification, isRead: true })),
+      };
+    default:
+      return state;
+  }
+};
+
+const formatTime = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const now = new Date();
+  const differenceInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+  if (differenceInHours < 1) {
+    return 'Just now';
+  }
+
+  if (differenceInHours < 24) {
+    return `${differenceInHours}h ago`;
+  }
+
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+const formatTypeLabel = (value: string) => value.replace(/([A-Z])/g, ' $1').trim();
 
 const NotificationHistoryScreen: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState<'All' | 'Unread'>('All');
-  const [typeOptions, setTypeOptions] = useState<NotificationTypeOption[]>([]);
-  const [typeFilter, setTypeFilter] = useState<string>('All');
-
-  const fetchNotifications = useCallback(async () => {
-    if (!user?.id) return;
-    setIsLoading(true);
-    try {
-      const [data, liveTypeOptions] = await Promise.all([
-        NotificationRepository.getNotifications(user.id),
-        NotificationRepository.getNotificationTypes(),
-      ]);
-      setNotifications(data);
-      setTypeOptions(liveTypeOptions);
-    } catch (error) {
-      console.error('Failed to fetch notifications', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.id]);
+  const [state, dispatch] = useReducer(historyReducer, {
+    status: 'loading',
+    notifications: [],
+    typeOptions: [],
+    error: null,
+  });
+  const [reloadToken, reload] = useReducer((value: number) => value + 1, 0);
+  const [readFilter, setReadFilter] = useState<'All' | 'Unread'>('All');
+  const [typeFilter, setTypeFilter] = useState('All');
 
   useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+    const loadHistory = async () => {
+      if (!user?.id) {
+        dispatch({
+          type: 'LOAD_ERROR',
+          error: 'Notification history will appear once your account is available.',
+        });
+        return;
+      }
+
+      dispatch({ type: 'LOAD_START' });
+
+      try {
+        const [notifications, typeOptions] = await Promise.all([
+          NotificationRepository.getNotifications(user.id),
+          NotificationRepository.getNotificationTypes(),
+        ]);
+
+        dispatch({ type: 'LOAD_SUCCESS', payload: { notifications, typeOptions } });
+      } catch {
+        dispatch({
+          type: 'LOAD_ERROR',
+          error: 'Notification history could not be loaded right now. Please try again.',
+        });
+      }
+    };
+
+    void loadHistory();
+  }, [reloadToken, user?.id]);
+
+  const unreadCount = useMemo(
+    () => state.notifications.filter((notification) => !notification.isRead).length,
+    [state.notifications],
+  );
+
+  const typeFilters = useMemo(
+    () => [
+      { id: 'All', label: 'All' },
+      ...state.typeOptions.map((option) => ({
+        id: option.code === 'Calendar' || option.code === 'WeeklyDigest' ? 'System' : option.code,
+        label: option.label,
+      })),
+    ].filter((option, index, items) => items.findIndex((item) => item.id === option.id) === index),
+    [state.typeOptions],
+  );
+
+  const filteredNotifications = useMemo(
+    () =>
+      state.notifications.filter((notification) => {
+        const matchesReadFilter = readFilter === 'All' || !notification.isRead;
+        const matchesTypeFilter = typeFilter === 'All' || notification.type === typeFilter;
+        return matchesReadFilter && matchesTypeFilter;
+      }),
+    [readFilter, state.notifications, typeFilter],
+  );
 
   const handleNotificationClick = async (notification: AppNotification) => {
-    if (!user?.id) return;
-    
-    // Optimistic UI update
-    setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n));
-    
+    if (!user?.id) {
+      return;
+    }
+
+    dispatch({ type: 'MARK_READ', notificationId: notification.id });
+
     try {
       if (!notification.isRead) {
         await NotificationRepository.markAsRead(user.id, notification.id);
       }
-      // Navigate to deep link
-      navigate(notification.deepLinkPath);
-    } catch (error) {
-      console.error('Failed to mark notification as read', error);
+    } catch {
+      // Keep optimistic UI; next refresh will reconcile server state.
     }
+
+    navigate(notification.deepLinkPath);
   };
 
   const handleMarkAllRead = async () => {
-    if (!user?.id) return;
-    
-    // Optimistic UI
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    
+    if (!user?.id || unreadCount === 0) {
+      return;
+    }
+
+    dispatch({ type: 'MARK_ALL_READ' });
+
     try {
       await NotificationRepository.markAllAsRead(user.id);
-    } catch (error) {
-      console.error('Failed to mark all as read', error);
+    } catch {
+      // Keep optimistic UI; next refresh will reconcile server state.
     }
   };
 
-  const filteredNotifications = notifications.filter((notification) => {
-    const matchesReadFilter = filter === 'All' || !notification.isRead;
-    const matchesTypeFilter = typeFilter === 'All' || notification.type === typeFilter;
-    return matchesReadFilter && matchesTypeFilter;
-  });
-  const unreadCount = notifications.filter(n => !n.isRead).length;
-  const availableTypeFilters = [
-    { id: 'All', label: 'All' },
-    ...typeOptions.map((option) => ({
-      id: option.code === 'Calendar' || option.code === 'WeeklyDigest' ? 'System' : option.code,
-      label: option.label,
-    })),
-  ].filter((option, index, items) => items.findIndex((item) => item.id === option.id) === index);
-
   return (
-    <div className="min-h-screen bg-bg-cream pb-32">
-      <header className="p-6 space-y-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-display font-black text-primary tracking-tight mb-1">Activity</h1>
-            <p className="text-sm text-gray-400 font-medium">{unreadCount} New items</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => navigate('/notifications/preferences')}
-              className="p-3 bg-white rounded-2xl border border-black/5 text-gray-400 hover:text-primary transition-all shadow-sm"
-            >
-              <Settings size={24} />
-            </button>
-            <button 
-              onClick={() => navigate(-1)}
-              className="p-3 bg-white rounded-2xl border border-black/5 text-gray-400 hover:text-primary transition-all shadow-sm"
-            >
-              <ArrowLeft size={24} />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex gap-1.5 p-1.5 bg-white/50 backdrop-blur-sm border border-black/[0.03] rounded-2xl shadow-sm flex-1">
-            {(['All', 'Unread'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex-1 ${
-                  filter === f ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-gray-400'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-          <button 
-            onClick={handleMarkAllRead}
-            disabled={unreadCount === 0}
-            className="flex items-center gap-2 p-3 bg-white rounded-2xl border border-black/5 text-[10px] font-black text-primary uppercase tracking-widest disabled:opacity-30 shadow-sm"
+    <div className="min-h-screen bg-bg-cream pb-24">
+      <FFPageHeader
+        title="Notifications"
+        subtitle={`${unreadCount} unread update${unreadCount === 1 ? '' : 's'}`}
+        showBack
+        rightAction={
+          <FFButton
+            variant="ghost"
+            size="sm"
+            icon={<Settings className="h-4 w-4" />}
+            onClick={() => navigate('/notifications/preferences')}
           >
-            <CheckCheck size={16} />
-            <span className="hidden sm:inline">Mark All</span>
-          </button>
-        </div>
+            Settings
+          </FFButton>
+        }
+      />
 
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {availableTypeFilters.map((typeOption) => (
-            <button
-              key={typeOption.id}
-              onClick={() => setTypeFilter(typeOption.id)}
-              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${
-                typeFilter === typeOption.id ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-gray-400 border border-black/5'
-              }`}
+      <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <FFCard variant="primary" className="space-y-3 p-5 sm:p-6">
+          <p className="text-sm text-white/80">
+            Review recent family updates, then clear the ones you have already handled.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <FFButton
+              type="button"
+              variant={readFilter === 'All' ? 'accent' : 'outline'}
+              onClick={() => setReadFilter('All')}
             >
-              {typeOption.label}
-            </button>
-          ))}
-        </div>
-      </header>
+              All
+            </FFButton>
+            <FFButton
+              type="button"
+              variant={readFilter === 'Unread' ? 'accent' : 'outline'}
+              onClick={() => setReadFilter('Unread')}
+            >
+              Unread
+            </FFButton>
+            <FFButton
+              type="button"
+              variant="ghost"
+              icon={<CheckCheck className="h-4 w-4" />}
+              onClick={() => void handleMarkAllRead()}
+              disabled={unreadCount === 0}
+            >
+              Mark all read
+            </FFButton>
+          </div>
+        </FFCard>
 
-      <main className="px-6 pb-20">
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-24 bg-white/50 animate-pulse rounded-3xl" />
-            ))}
+        {state.status === 'loading' && state.notifications.length === 0 ? (
+          <div className="space-y-3">
+            <FFCardSkeleton />
+            <FFCardSkeleton />
+            <FFCardSkeleton />
           </div>
-        ) : filteredNotifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-20 h-20 bg-white rounded-[32px] flex items-center justify-center text-gray-200 mb-6 shadow-sm">
-              <Inbox size={40} />
-            </div>
-            <h3 className="text-xl font-display font-bold text-primary">All Caught Up!</h3>
-            <p className="text-sm text-gray-400 mt-2 max-w-[200px]">
-              You have no {filter === 'Unread' ? 'unread' : ''} notifications at the moment.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <AnimatePresence mode="popLayout">
-              {filteredNotifications.map(notification => (
-                <NotificationTile 
-                  key={notification.id} 
-                  notification={notification} 
-                  onClick={handleNotificationClick}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
+        ) : null}
+
+        {state.status === 'error' && state.notifications.length === 0 ? (
+          <FFErrorState message={state.error} onRetry={() => reload()} />
+        ) : null}
+
+        {state.notifications.length > 0 ? (
+          <>
+            <section className="space-y-3">
+              <FFSectionHeader icon={<Bell />} title="Type Filter" />
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {typeFilters.map((typeOption) => (
+                  <FFButton
+                    key={typeOption.id}
+                    type="button"
+                    variant={typeFilter === typeOption.id ? 'primary' : 'outline'}
+                    size="sm"
+                    onClick={() => setTypeFilter(typeOption.id)}
+                  >
+                    {typeOption.label}
+                  </FFButton>
+                ))}
+              </div>
+            </section>
+
+            {filteredNotifications.length === 0 ? (
+              <FFEmptyState
+                title="No matching notifications"
+                message="Try a different filter to see more updates."
+                actionLabel="Clear filters"
+                onAction={() => {
+                  setReadFilter('All');
+                  setTypeFilter('All');
+                }}
+                icon={<Bell className="h-8 w-8" />}
+              />
+            ) : (
+              <section className="space-y-3">
+                <FFSectionHeader icon={<Bell />} title="Recent Updates" />
+                <div className="space-y-3">
+                  {filteredNotifications.map((notification) => (
+                    <FFCard
+                      key={notification.id}
+                      hoverable
+                      onClick={() => void handleNotificationClick(notification)}
+                      className={`p-4 shadow-card ${
+                        notification.isRead ? 'bg-white' : 'border-accent/20 bg-accent/5'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-display font-semibold text-primary">
+                              {notification.title}
+                            </p>
+                            {!notification.isRead ? (
+                              <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-body font-bold tracking-wider text-accent">
+                                New
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-sm text-gray-500">{notification.body}</p>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-body font-bold tracking-wider text-primary">
+                              {formatTypeLabel(notification.type)}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {formatTime(notification.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </FFCard>
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
+        ) : null}
+
+        {state.status !== 'loading' && state.notifications.length === 0 ? (
+          <FFEmptyState
+            title="No notifications yet"
+            message="Recent alerts, reminders, and family updates will appear here."
+            actionLabel="Open settings"
+            onAction={() => navigate('/notifications/preferences')}
+            icon={<Bell className="h-8 w-8" />}
+          />
+        ) : null}
       </main>
     </div>
   );
