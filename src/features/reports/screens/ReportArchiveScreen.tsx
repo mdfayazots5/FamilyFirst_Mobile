@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, ChevronRight, Calendar } from 'lucide-react';
+import { RefreshCw, ChevronRight, Calendar } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { ReportsRepository, DigestEntry } from '../repositories/ReportsRepository';
+import FFCard from '../../../shared/components/FFCard';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFShimmer from '../../../shared/components/FFShimmer';
+import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFErrorState from '../../../shared/components/FFErrorState';
 
 const ReportArchiveScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -32,77 +37,70 @@ const ReportArchiveScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F4EE]">
-      <div className="bg-[#1A2E4A] px-5 pt-12 pb-5">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-xl bg-white/10">
-            <ArrowLeft className="w-5 h-5 text-white" />
-          </button>
-          <div className="flex-1">
-            <h1 className="text-lg font-bold text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
-              Report Archive
-            </h1>
-            <p className="text-xs text-blue-200">Last 12 months of weekly digests</p>
-          </div>
-          <button onClick={load} className="p-2 rounded-xl bg-white/10">
+    <div className="min-h-screen bg-bg-cream">
+      <FFPageHeader
+        title="Report Archive"
+        subtitle="Last 12 months of weekly digests"
+        showBack
+        rightAction={
+          <button onClick={load} className="p-2 rounded-xl bg-white/10" aria-label="Refresh">
             <RefreshCw className={`w-4 h-4 text-white ${isLoading ? 'animate-spin' : ''}`} />
           </button>
-        </div>
-      </div>
+        }
+      />
 
       <div className="px-4 pt-4 pb-24 space-y-2">
         {isLoading ? (
-          <div className="flex justify-center py-12">
-            <RefreshCw className="w-6 h-6 text-gray-300 animate-spin" />
-          </div>
+          [...Array(6)].map((_, i) => <FFShimmer key={i} className="h-16 rounded-ff" />)
         ) : error ? (
-          <div className="text-center py-12">
-            <p className="text-sm text-red-500">{error}</p>
-            <button onClick={load} className="mt-3 text-xs text-[#1A2E4A] underline">Retry</button>
-          </div>
+          <FFErrorState message={error} onRetry={load} />
         ) : entries.length === 0 ? (
-          <div className="text-center py-12">
-            <Calendar className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-            <p className="text-sm text-gray-400">No archived digests yet.</p>
-            <p className="text-xs text-gray-300 mt-1">Weekly digests are stored every Sunday evening.</p>
-          </div>
+          <FFEmptyState
+            icon={<Calendar className="w-10 h-10 text-gray-300" />}
+            title="No archived digests yet"
+            message="Weekly digests are stored every Sunday evening."
+          />
         ) : (
           entries.map((entry, index) => (
             <button
               key={entry.weekStartDate}
               onClick={() => handleOpen(entry.weekStartDate)}
-              className="w-full flex items-center gap-4 bg-white rounded-2xl p-4 shadow-sm text-left"
+              className="w-full"
             >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                index === 0 ? 'bg-[#1A2E4A] text-white' : 'bg-gray-100 text-gray-400'
-              }`}>
-                {index === 0 ? 'New' : `W${entries.length - index}`}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[#1A2E4A] truncate">
-                  Week of {new Date(entry.weekStartDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Family Score: {entry.familyScore} · {entry.childCount} child{entry.childCount !== 1 ? 'ren' : ''}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <div className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  entry.familyScore >= 80 ? 'text-green-700 bg-green-50' :
-                  entry.familyScore >= 60 ? 'text-amber-700 bg-amber-50' :
-                  'text-red-600 bg-red-50'
+              <FFCard className="flex items-center gap-4 p-4 text-left">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-numbers text-sm font-bold flex-shrink-0 ${
+                  index === 0 ? 'bg-primary text-white' : 'bg-black/5 text-gray-400'
                 }`}>
-                  {entry.familyScore}
+                  {index === 0 ? 'New' : `W${entries.length - index}`}
                 </div>
-                <ChevronRight className="w-4 h-4 text-gray-300" />
-              </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-body text-sm font-semibold text-primary truncate">
+                    Week of {new Date(entry.weekStartDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                  <p className="font-body text-xs text-gray-400 mt-0.5">
+                    Family Score: {entry.familyScore} · {entry.childCount} child{entry.childCount !== 1 ? 'ren' : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={`font-numbers text-xs font-bold px-2 py-0.5 rounded-full ${
+                    entry.familyScore >= 80 ? 'text-success bg-success/10' :
+                    entry.familyScore >= 60 ? 'text-accent bg-accent/10' :
+                    'text-alert bg-alert/5'
+                  }`}>
+                    {entry.familyScore}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </div>
+              </FFCard>
             </button>
           ))
         )}
 
-        <p className="text-xs text-gray-300 text-center pt-4">
-          Digests older than 12 months are automatically removed.
-        </p>
+        {entries.length > 0 && (
+          <p className="font-body text-xs text-gray-300 text-center pt-4">
+            Digests older than 12 months are automatically removed.
+          </p>
+        )}
       </div>
     </div>
   );

@@ -1,15 +1,19 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, MapPin, Battery, AlertTriangle } from 'lucide-react';
+import { MapPin, Battery, AlertTriangle } from 'lucide-react';
 import { SafetyProvider, useSafety } from '../providers/SafetyProvider';
+import FFCard from '../../../shared/components/FFCard';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 
+// Hex values intentionally kept for canvas 2D API (cannot use CSS token classes)
 const ZONE_COLORS: Record<string, string> = {
-  Home:           '#22c55e',
-  School:         '#3b82f6',
-  Tuition:        '#a855f7',
-  RelativesHouse: '#f59e0b',
+  Home:           '#2D6A4F',
+  School:         '#1A2E4A',
+  Tuition:        '#C8922A',
+  RelativesHouse: '#C8922A',
   Workplace:      '#6b7280',
-  PlaceOfWorship: '#6366f1',
+  PlaceOfWorship: '#1A2E4A',
   Other:          '#9ca3af',
 };
 
@@ -20,8 +24,6 @@ const FamilyMapContent: React.FC = () => {
 
   useEffect(() => { loadMapView(); }, [loadMapView]);
 
-  // Simple canvas-based map placeholder — renders zone circles + member pins
-  // In production this would use @react-google-maps/api with real tiles
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !mapView) return;
@@ -42,7 +44,6 @@ const FamilyMapContent: React.FC = () => {
 
     if (mapView.memberPins.length === 0) return;
 
-    // Determine bounds from member locations
     const lats = mapView.memberPins.filter(p => p.lastKnownLat != null).map(p => p.lastKnownLat!);
     const lngs = mapView.memberPins.filter(p => p.lastKnownLng != null).map(p => p.lastKnownLng!);
     if (lats.length === 0) return;
@@ -55,7 +56,6 @@ const FamilyMapContent: React.FC = () => {
     const toX = (lng: number) => ((lng - minLng) / (maxLng - minLng)) * (W - 40) + 20;
     const toY = (lat: number) => H - (((lat - minLat) / (maxLat - minLat)) * (H - 40) + 20);
 
-    // Draw zone circles
     mapView.safeZones.forEach(zone => {
       const cx = toX(zone.centerLongitude);
       const cy = toY(zone.centerLatitude);
@@ -75,12 +75,11 @@ const FamilyMapContent: React.FC = () => {
       ctx.fillText(zone.zoneName, cx, cy + Math.max(r, 20) + 14);
     });
 
-    // Draw member pins
     mapView.memberPins.forEach(pin => {
       if (pin.lastKnownLat == null || pin.lastKnownLng == null) return;
       const px = toX(pin.lastKnownLng);
       const py = toY(pin.lastKnownLat);
-      const pinColor = pin.hasActiveSos ? '#dc2626' : pin.isStale ? '#9ca3af' : '#1A2E4A';
+      const pinColor = pin.hasActiveSos ? '#C1121F' : pin.isStale ? '#9ca3af' : '#1A2E4A';
 
       ctx.beginPath();
       ctx.arc(px, py, 14, 0, Math.PI * 2);
@@ -104,31 +103,23 @@ const FamilyMapContent: React.FC = () => {
   }, [mapView]);
 
   return (
-    <div className="min-h-screen bg-[#F8F4EE]">
-      <div className="bg-[#1A2E4A] px-5 pt-12 pb-5">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-xl bg-white/10">
-            <ArrowLeft className="w-5 h-5 text-white" />
+    <div className="min-h-screen bg-bg-cream">
+      <FFPageHeader
+        title="Family Map"
+        subtitle={`${mapView?.memberPins.length ?? 0} member${(mapView?.memberPins.length ?? 0) !== 1 ? 's' : ''} · ${mapView?.safeZones.length ?? 0} zones`}
+        showBack
+        rightAction={
+          <button onClick={loadMapView} className="p-2 rounded-xl bg-white/10" aria-label="Refresh">
+            <MapPin className={`w-4 h-4 text-white ${isLoading ? 'animate-pulse' : ''}`} />
           </button>
-          <div className="flex-1">
-            <h1 className="text-lg font-bold text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
-              Family Map
-            </h1>
-            <p className="text-xs text-blue-200">
-              {mapView?.memberPins.length ?? 0} member{(mapView?.memberPins.length ?? 0) !== 1 ? 's' : ''} · {mapView?.safeZones.length ?? 0} zones
-            </p>
-          </div>
-          <button onClick={loadMapView} className="p-2 rounded-xl bg-white/10">
-            <RefreshCw className={`w-4 h-4 text-white ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Canvas map */}
-      <div className="relative bg-gray-100 border-b border-gray-200" style={{ height: 320 }}>
+      <div className="relative bg-black/5 border-b border-black/5" style={{ height: 320 }}>
         {isLoading ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-            <RefreshCw className="w-8 h-8 text-gray-300 animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/5">
+            <div className="w-12 h-12 rounded-full bg-black/5 animate-pulse" />
           </div>
         ) : (
           <canvas
@@ -139,85 +130,74 @@ const FamilyMapContent: React.FC = () => {
           />
         )}
         {/* Zone legend */}
-        <div className="absolute bottom-3 right-3 bg-white/90 rounded-xl px-3 py-2 text-xs space-y-1 shadow">
+        <div className="absolute bottom-3 right-3 bg-white/90 rounded-xl px-3 py-2 text-xs space-y-1 shadow-card">
           {Object.entries(ZONE_COLORS).slice(0, 4).map(([type, color]) => (
             <div key={type} className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-              <span className="text-gray-600">{type}</span>
+              <span className="font-body text-gray-600">{type}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Member cards */}
       <div className="px-4 pt-4 pb-24 space-y-3">
-        <h2 className="text-sm font-bold text-[#1A2E4A]" style={{ fontFamily: 'Poppins, sans-serif' }}>
-          Member Locations
-        </h2>
+        <FFSectionHeader title="Member Locations" />
 
         {mapView?.memberPins.length === 0 && (
-          <div className="text-center py-8 text-gray-400 text-sm">
+          <p className="font-body text-center py-8 text-gray-400 text-sm">
             No location data. Members need to enable location sharing.
-          </div>
+          </p>
         )}
 
         {mapView?.memberPins.map(pin => (
-          <div
+          <FFCard
             key={pin.memberId}
-            className={`flex items-center gap-3 bg-white rounded-2xl p-4 shadow-sm border ${
-              pin.hasActiveSos ? 'border-red-300' : 'border-transparent'
-            }`}
+            className={`flex items-center gap-3 p-4 ${pin.hasActiveSos ? 'border border-alert/40' : ''}`}
           >
             <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${
-              pin.hasActiveSos ? 'bg-red-600 animate-pulse' :
-              pin.isStale     ? 'bg-gray-300' : 'bg-[#1A2E4A]'
+              pin.hasActiveSos ? 'bg-alert animate-pulse' :
+              pin.isStale     ? 'bg-gray-300' : 'bg-primary'
             }`}>
               {pin.memberName.charAt(0).toUpperCase()}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-[#1A2E4A]">{pin.memberName}</p>
+                <p className="font-body text-sm font-semibold text-primary">{pin.memberName}</p>
                 {pin.hasActiveSos && (
-                  <span className="flex items-center gap-0.5 text-xs text-red-600 font-bold">
+                  <span className="flex items-center gap-0.5 font-body text-xs text-alert font-bold">
                     <AlertTriangle className="w-3 h-3" />SOS
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-500 truncate mt-0.5">
+              <p className="font-body text-xs text-gray-500 truncate mt-0.5 flex items-center gap-1">
+                {pin.isStale && <AlertTriangle className="w-3 h-3 text-accent inline flex-shrink-0" />}
                 {pin.isStale
-                  ? '⚠ Location outdated (>1 hr)'
+                  ? 'Location outdated (>1 hr)'
                   : pin.currentLocationName
                     ?? (pin.lastKnownLat != null
                       ? `${pin.lastKnownLat.toFixed(4)}, ${pin.lastKnownLng?.toFixed(4)}`
                       : 'Location unknown')}
               </p>
               {pin.isInsideZone && pin.zoneType && (
-                <span className="text-xs" style={{ color: ZONE_COLORS[pin.zoneType] ?? '#6b7280' }}>
-                  Inside {pin.zoneType}
-                </span>
+                <span className="font-body text-xs text-success">Inside {pin.zoneType}</span>
               )}
             </div>
 
             <div className="text-right flex-shrink-0 space-y-1">
               {pin.batteryLevel != null && (
-                <div className={`flex items-center justify-end gap-1 text-xs ${pin.batteryLevel < 15 ? 'text-red-500' : 'text-gray-400'}`}>
+                <div className={`flex items-center justify-end gap-1 font-numbers text-xs ${pin.batteryLevel < 15 ? 'text-alert' : 'text-gray-400'}`}>
                   <Battery className="w-3 h-3" />
                   {pin.batteryLevel}%
                 </div>
               )}
               {pin.lastUpdatedAt && (
-                <p className="text-xs text-gray-400">
+                <p className="font-numbers text-xs text-gray-400">
                   {Math.round((Date.now() - new Date(pin.lastUpdatedAt).getTime()) / 60000)}m ago
                 </p>
               )}
-              {pin.lastKnownLat != null && (
-                <div className="flex items-center gap-0.5 text-xs text-gray-300">
-                  <MapPin className="w-3 h-3" />
-                </div>
-              )}
             </div>
-          </div>
+          </FFCard>
         ))}
       </div>
     </div>

@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, CheckCircle, Filter } from 'lucide-react';
+import { CheckCircle, Filter, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { SafetyRepository, LocationAlert } from '../repositories/SafetyRepository';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFCard from '../../../shared/components/FFCard';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFShimmer from '../../../shared/components/FFShimmer';
 
-const ALERT_META: Record<string, { label: string; badgeClass: string }> = {
-  ZoneArrival:           { label: 'Arrived',         badgeClass: 'text-green-700 bg-green-50 border-green-200' },
-  ZoneDeparture:         { label: 'Departed',        badgeClass: 'text-blue-700 bg-blue-50 border-blue-200' },
-  LateAlert:             { label: 'Late Alert',      badgeClass: 'text-amber-700 bg-amber-50 border-amber-200' },
-  SOS:                   { label: '🆘 SOS',          badgeClass: 'text-red-700 bg-red-50 border-red-200' },
-  BatteryWarning:        { label: 'Low Battery',     badgeClass: 'text-orange-700 bg-orange-50 border-orange-200' },
-  LocationStale:         { label: 'Stale',           badgeClass: 'text-gray-600 bg-gray-50 border-gray-200' },
-  LocationSharingPaused: { label: 'Sharing Paused',  badgeClass: 'text-gray-600 bg-gray-50 border-gray-200' },
+const ALERT_META: Record<string, { label: string; badge: string }> = {
+  ZoneArrival:           { label: 'Arrived',        badge: 'text-success bg-success/10 border-success/20' },
+  ZoneDeparture:         { label: 'Departed',       badge: 'text-primary bg-primary/10 border-primary/20' },
+  LateAlert:             { label: 'Late Alert',     badge: 'text-accent bg-accent/10 border-accent/20' },
+  SOS:                   { label: 'SOS',            badge: 'text-alert bg-alert/10 border-alert/20' },
+  BatteryWarning:        { label: 'Low Battery',    badge: 'text-accent bg-accent/10 border-accent/20' },
+  LocationStale:         { label: 'Stale',          badge: 'text-gray-500 bg-black/5 border-black/10' },
+  LocationSharingPaused: { label: 'Sharing Paused', badge: 'text-gray-500 bg-black/5 border-black/10' },
 };
 
 const FILTER_OPTIONS = ['All', 'ZoneArrival', 'ZoneDeparture', 'LateAlert', 'SOS', 'BatteryWarning'];
@@ -71,93 +74,89 @@ const LocationAlertHistoryScreen: React.FC = () => {
   const unresolvedSos = alerts.filter(a => a.alertType === 'SOS' && !a.isResolved);
 
   return (
-    <div className="min-h-screen bg-[#F8F4EE]">
-      <div className="bg-[#1A2E4A] px-5 pt-12 pb-5">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-xl bg-white/10">
-            <ArrowLeft className="w-5 h-5 text-white" />
-          </button>
-          <div className="flex-1">
-            <h1 className="text-lg font-bold text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
-              Alert History
-            </h1>
-            <p className="text-xs text-blue-200">{alerts.length} alert{alerts.length !== 1 ? 's' : ''}</p>
+    <div className="min-h-screen bg-bg-cream">
+      <FFPageHeader
+        title="Alert History"
+        subtitle={`${alerts.length} alert${alerts.length !== 1 ? 's' : ''}`}
+        showBack
+        rightAction={
+          <div className="flex items-center gap-1">
+            <button onClick={() => setShowFilters(!showFilters)} className="p-2 rounded-xl bg-white/10" aria-label="Filter">
+              <Filter className="w-4 h-4 text-white" />
+            </button>
+            <button onClick={() => load()} className="p-2 rounded-xl bg-white/10" aria-label="Refresh">
+              <RefreshCw className={`w-4 h-4 text-white ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
-          <button onClick={() => setShowFilters(!showFilters)} className="p-2 rounded-xl bg-white/10">
-            <Filter className="w-4 h-4 text-white" />
-          </button>
-          <button onClick={() => load()} className="p-2 rounded-xl bg-white/10">
-            <RefreshCw className={`w-4 h-4 text-white ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+        }
+      />
 
-        {showFilters && (
-          <div className="flex gap-2 mt-3 flex-wrap">
-            {FILTER_OPTIONS.map(opt => (
-              <button
-                key={opt}
-                onClick={() => handleFilterChange(opt)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  filterType === opt
-                    ? 'bg-[#C8922A] text-white'
-                    : 'bg-white/15 text-white'
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Filter chips — inside header extension */}
+      {showFilters && (
+        <div className="bg-primary px-4 pb-3 flex gap-2 flex-wrap">
+          {FILTER_OPTIONS.map(opt => (
+            <button
+              key={opt}
+              onClick={() => handleFilterChange(opt)}
+              className={`px-3 py-1 rounded-full font-body text-xs font-medium transition-colors ${
+                filterType === opt ? 'bg-accent text-white' : 'bg-white/15 text-white'
+              }`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="px-4 pt-4 pb-24 space-y-3">
         {/* Active SOS prompt */}
         {unresolvedSos.length > 0 && (
-          <div className="bg-red-600 text-white rounded-2xl p-4">
-            <p className="text-sm font-bold">⚠ {unresolvedSos.length} unresolved SOS alert{unresolvedSos.length > 1 ? 's' : ''}</p>
-            <p className="text-xs text-red-200 mt-1">Mark as resolved once child is confirmed safe.</p>
+          <div className="bg-alert text-white rounded-ff p-4 flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="font-display font-bold text-sm">
+                {unresolvedSos.length} unresolved SOS alert{unresolvedSos.length > 1 ? 's' : ''}
+              </p>
+              <p className="font-body text-xs text-white/70 mt-0.5">Mark as resolved once child is confirmed safe.</p>
+            </div>
           </div>
         )}
 
         {isLoading ? (
-          <div className="flex justify-center py-12">
-            <RefreshCw className="w-6 h-6 text-gray-300 animate-spin" />
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => <FFShimmer key={i} className="h-16 rounded-ff" />)}
           </div>
         ) : alerts.length === 0 ? (
           <FFEmptyState
             title="No alerts"
-            subtitle={filterType === 'All' ? 'All safe zones are quiet.' : `No ${filterType} alerts found.`}
+            message={filterType === 'All' ? 'All safe zones are quiet.' : `No ${filterType} alerts found.`}
           />
         ) : (
           alerts.map(alert => {
-            const meta = ALERT_META[alert.alertType] ?? { label: alert.alertType, badgeClass: 'text-gray-600 bg-gray-50 border-gray-200' };
+            const meta = ALERT_META[alert.alertType] ?? { label: alert.alertType, badge: 'text-gray-500 bg-black/5 border-black/10' };
             return (
-              <div
+              <FFCard
                 key={alert.alertId}
-                className={`bg-white rounded-2xl p-4 shadow-sm border ${
+                className={`p-4 ${
                   alert.alertType === 'SOS' && !alert.isResolved
-                    ? 'border-red-300'
-                    : alert.isResolved
-                      ? 'border-transparent opacity-70'
-                      : 'border-transparent'
+                    ? 'border border-alert/40'
+                    : alert.isResolved ? 'opacity-70' : ''
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full border flex-shrink-0 ${meta.badgeClass}`}>
+                  <span className={`font-body text-xs font-medium px-2 py-0.5 rounded-full border flex-shrink-0 ${meta.badge}`}>
                     {meta.label}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-[#1A2E4A]">{alert.memberName}</p>
-                    {alert.zoneName && (
-                      <p className="text-xs text-gray-500">{alert.zoneName}</p>
-                    )}
+                    <p className="font-body text-sm font-semibold text-primary">{alert.memberName}</p>
+                    {alert.zoneName && <p className="font-body text-xs text-gray-500">{alert.zoneName}</p>}
                     {alert.latitude != null && (
-                      <p className="text-xs text-gray-400">
+                      <p className="font-numbers text-xs text-gray-400">
                         {alert.latitude.toFixed(4)}, {alert.longitude?.toFixed(4)}
                       </p>
                     )}
                     {alert.isResolved && (
-                      <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                      <p className="font-body text-xs text-success mt-1 flex items-center gap-1">
                         <CheckCircle className="w-3 h-3" />
                         Resolved {alert.resolvedAt ? formatTime(alert.resolvedAt) : ''}
                         {alert.resolutionNote ? ` — ${alert.resolutionNote}` : ''}
@@ -165,19 +164,19 @@ const LocationAlertHistoryScreen: React.FC = () => {
                     )}
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="text-xs text-gray-400">{formatTime(alert.triggeredAt)}</p>
+                    <p className="font-numbers text-xs text-gray-400">{formatTime(alert.triggeredAt)}</p>
                     {!alert.isResolved && alert.alertType === 'SOS' && (
                       <button
                         onClick={() => handleResolve(alert.alertId)}
                         disabled={resolvingId === alert.alertId}
-                        className="mt-2 text-xs font-semibold text-white bg-[#1A2E4A] px-3 py-1.5 rounded-xl disabled:opacity-60"
+                        className="mt-2 font-body text-xs font-semibold text-white bg-primary px-3 py-1.5 rounded-xl disabled:opacity-60"
                       >
                         {resolvingId === alert.alertId ? '…' : 'Resolve'}
                       </button>
                     )}
                   </div>
                 </div>
-              </div>
+              </FFCard>
             );
           })
         )}
