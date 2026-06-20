@@ -1,11 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, X, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Search, X } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { VaultRepository } from '../repositories/VaultRepository';
 import type { VaultDocument } from '../repositories/VaultRepository';
 import DocumentCard from '../widgets/DocumentCard';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFShimmer from '../../../shared/components/FFShimmer';
 
 const EXPIRY_FILTERS = [
   { label: 'All', value: undefined },
@@ -42,9 +43,7 @@ const DocumentSearchScreen: React.FC = () => {
 
   const handleQueryChange = (q: string) => {
     setQuery(q);
-    if (q.length >= 2 || q.length === 0) {
-      doSearch(q, expiryFilter);
-    }
+    if (q.length >= 2 || q.length === 0) doSearch(q, expiryFilter);
   };
 
   const handleExpiryFilter = (v: string | undefined) => {
@@ -53,24 +52,28 @@ const DocumentSearchScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F4EE]">
-      {/* Header */}
-      <div className="bg-[#1A2E4A] px-5 pt-12 pb-4">
+    <div className="min-h-screen bg-bg-cream pb-24">
+      {/* Search header — embedded search bar stays in-header for UX */}
+      <div className="bg-primary px-4 pt-12 pb-4 sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-xl bg-white/10">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0"
+            aria-label="Go back"
+          >
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
-          <div className="flex-1 flex items-center gap-2 bg-white/15 rounded-xl px-3 py-2">
+          <div className="flex-1 flex items-center gap-2 bg-white/15 rounded-xl px-3 py-2.5">
             <Search className="w-4 h-4 text-white/70 flex-shrink-0" />
             <input
               autoFocus
               value={query}
               onChange={e => handleQueryChange(e.target.value)}
               placeholder="Search documents, members, tags…"
-              className="flex-1 bg-transparent text-white placeholder-white/60 text-sm focus:outline-none"
+              className="flex-1 bg-transparent font-body text-white placeholder-white/60 text-sm focus:outline-none"
             />
             {query.length > 0 && (
-              <button onClick={() => handleQueryChange('')}>
+              <button onClick={() => handleQueryChange('')} aria-label="Clear search">
                 <X className="w-4 h-4 text-white/70" />
               </button>
             )}
@@ -78,17 +81,18 @@ const DocumentSearchScreen: React.FC = () => {
         </div>
       </div>
 
-      <div className="px-4 pt-3 pb-24 space-y-4">
+      <main className="px-4 pt-3 pb-24 space-y-4">
         {/* Filters */}
         <div className="flex gap-2">
           {EXPIRY_FILTERS.map(f => (
             <button
               key={String(f.value)}
               onClick={() => handleExpiryFilter(f.value)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-                ${expiryFilter === f.value
-                  ? 'bg-[#1A2E4A] text-white'
-                  : 'bg-white text-gray-600 border border-gray-200'}`}
+              className={`px-3 py-1.5 rounded-full font-body text-xs font-semibold transition-colors ${
+                expiryFilter === f.value
+                  ? 'bg-primary text-white'
+                  : 'bg-white text-gray-500 border border-black/5'
+              }`}
             >
               {f.label}
             </button>
@@ -97,21 +101,21 @@ const DocumentSearchScreen: React.FC = () => {
 
         {/* Results */}
         {isSearching ? (
-          <div className="flex justify-center py-12">
-            <RefreshCw className="w-6 h-6 text-gray-300 animate-spin" />
+          <div className="space-y-2">
+            {[...Array(4)].map((_, i) => <FFShimmer key={i} className="h-16 rounded-ff" />)}
           </div>
         ) : !hasSearched ? (
           <div className="text-center py-12">
-            <p className="text-sm text-gray-400">Start typing to search your documents</p>
+            <p className="font-body text-sm text-gray-400">Start typing to search your documents</p>
           </div>
         ) : results.length === 0 ? (
           <FFEmptyState
             title="No documents found"
-            subtitle={`No results for "${query || 'current filters'}".`}
+            message={`No results for "${query || 'current filters'}".`}
           />
         ) : (
           <div className="space-y-2">
-            <p className="text-xs text-gray-500 px-1">{results.length} result{results.length !== 1 ? 's' : ''}</p>
+            <p className="font-body text-xs text-gray-500 px-1">{results.length} result{results.length !== 1 ? 's' : ''}</p>
             {results.map(doc => (
               <DocumentCard
                 key={doc.documentId}
@@ -121,7 +125,7 @@ const DocumentSearchScreen: React.FC = () => {
             ))}
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 };

@@ -1,125 +1,104 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ArrowLeft, 
-  Plus, 
-  Search, 
-  Edit2, 
-  Trash2, 
-  ShoppingBag,
-  Gift,
-  Star
-} from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Edit2, Trash2, ShoppingBag, Star } from 'lucide-react';
 import { AdminRepository } from '../repositories/AdminRepository';
+import type { RewardCatalogItem } from '../repositories/AdminRepository';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFBadge from '../../../shared/components/FFBadge';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFShimmer from '../../../shared/components/FFShimmer';
+import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFErrorState from '../../../shared/components/FFErrorState';
 
 const RewardCatalogScreen: React.FC = () => {
-  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [rewards, setRewards] = useState<Awaited<ReturnType<typeof AdminRepository.getRewardCatalog>>>([]);
+  const [error, setError]         = useState<string | null>(null);
+  const [rewards, setRewards]     = useState<RewardCatalogItem[]>([]);
 
-  useEffect(() => {
-    const loadCatalog = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        setRewards(await AdminRepository.getRewardCatalog());
-      } catch (loadError) {
-        console.error('Failed to load admin reward catalog', loadError);
-        setError('Reward catalog sync failed. Verify admin reward APIs and retry.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadCatalog();
+  const fetchCatalog = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setRewards(await AdminRepository.getRewardCatalog());
+    } catch {
+      setError('Could not load reward catalog. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
+  useEffect(() => { fetchCatalog(); }, [fetchCatalog]);
+
   return (
-    <div className="min-h-screen bg-bg-cream pb-32">
-      <header className="p-6 space-y-6">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <h1 className="text-3xl md:text-4xl font-display font-black text-primary tracking-tight mb-1">Catalog</h1>
-            <p className="text-sm text-gray-400 font-medium">Global reward repository</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <FFButton 
-              size="sm" 
-              onClick={() => {}} 
-              className="shadow-lg shadow-primary/20"
-              icon={<Plus size={20} />}
-            >
-              Add Item
-            </FFButton>
-            <button 
-              onClick={() => navigate(-1)}
-              className="p-3 bg-white rounded-2xl border border-black/5 text-gray-400 hover:text-primary transition-all shadow-sm"
-            >
-              <ArrowLeft size={24} />
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-bg-cream pb-24">
+      <FFPageHeader
+        title="Reward Catalog"
+        subtitle="Global reward items for families"
+        showBack
+        rightAction={
+          <FFButton size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => {}}>Add</FFButton>
+        }
+      />
 
-      <main className="px-6 space-y-8">
-      {error ? (
-        <div className="bg-alert/5 border border-alert/20 p-4 rounded-2xl text-alert font-medium">
-          {error}
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <main className="px-4 py-5 page-enter">
         {isLoading ? (
-          <div className="col-span-full text-center py-12 text-gray-400">Loading rewards...</div>
+          <div className="grid grid-cols-2 gap-3">
+            {[...Array(6)].map((_, i) => <FFShimmer key={i} className="h-40 rounded-ff" />)}
+          </div>
+        ) : error ? (
+          <FFErrorState message={error} onRetry={fetchCatalog} />
         ) : rewards.length === 0 ? (
-          <div className="col-span-full text-center py-12 text-gray-400">No reward catalog items found.</div>
+          <FFEmptyState
+            icon={<ShoppingBag className="w-8 h-8 text-gray-300" />}
+            title="No Rewards Yet"
+            message="Add reward items for families to redeem with coins."
+            actionLabel="Add First Reward"
+            onAction={() => {}}
+          />
         ) : (
-          rewards.map(reward => (
-            <FFCard key={reward.id} className="p-6 flex flex-col group">
-              <div className="flex justify-between items-start mb-4">
-                <div className="w-14 h-14 bg-white border border-black/5 rounded-2xl flex items-center justify-center text-3xl shadow-sm">
-                  {reward.icon}
-                </div>
-                <div className="flex gap-1">
-                  <button className="p-2 text-gray-300 hover:text-primary transition-colors">
-                    <Edit2 size={16} />
-                  </button>
-                  <button className="p-2 text-gray-300 hover:text-alert transition-colors">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-
-              <h3 className="text-lg font-bold text-primary mb-1">{reward.title}</h3>
-              {reward.description ? (
-                <p className="text-sm text-gray-400 mb-3">{reward.description}</p>
-              ) : null}
-              <div className="flex items-center gap-2 mb-4">
-                <FFBadge variant="outline" size="sm">{reward.category}</FFBadge>
-              </div>
-
-              <div className="mt-auto pt-4 border-t border-black/5 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-amber-50 rounded flex items-center justify-center text-amber-500">
-                    <Star size={12} fill="currentColor" />
+          <div className="grid grid-cols-2 gap-3">
+            {rewards.map(reward => (
+              <FFCard key={reward.id} className="p-4 flex flex-col">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="w-12 h-12 bg-white border border-black/5 rounded-ff-sm flex items-center justify-center text-2xl shadow-card">
+                    {reward.icon}
                   </div>
-                  <span className="text-sm font-bold text-primary">{reward.cost} Coins</span>
+                  <div className="flex gap-0.5">
+                    <button
+                      className="p-1.5 text-gray-300 hover:text-primary transition-colors"
+                      aria-label="Edit reward"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      className="p-1.5 text-gray-300 hover:text-alert transition-colors"
+                      aria-label="Delete reward"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <button className="text-[10px] font-bold text-primary uppercase tracking-widest hover:underline">
-                  Settings
-                </button>
-              </div>
-            </FFCard>
-          ))
+
+                <p className="font-display font-semibold text-sm text-primary truncate">{reward.title}</p>
+                {reward.description && (
+                  <p className="font-body text-xs text-gray-400 mt-0.5 line-clamp-2">{reward.description}</p>
+                )}
+
+                <div className="mt-auto pt-3 border-t border-black/5 flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                    <span className="font-numbers font-medium text-sm text-primary">{reward.cost}</span>
+                    <span className="font-body text-xs text-gray-400">coins</span>
+                  </div>
+                  <FFBadge variant="gray" size="sm">{reward.category}</FFBadge>
+                </div>
+              </FFCard>
+            ))}
+          </div>
         )}
-      </div>
-    </main>
-  </div>
-);
+      </main>
+    </div>
+  );
 };
 
 export default RewardCatalogScreen;

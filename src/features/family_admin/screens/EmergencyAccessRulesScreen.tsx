@@ -1,28 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Save, Plus, Trash2, Phone } from 'lucide-react';
+import { RefreshCw, Save, Plus, Trash2, Phone, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import {
   FamilyAdminL2Repository,
   EmergencyAccessRules,
   EmergencyContact,
 } from '../repositories/FamilyAdminL2Repository';
+import FFCard from '../../../shared/components/FFCard';
+import FFButton from '../../../shared/components/FFButton';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFShimmer from '../../../shared/components/FFShimmer';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 
 const ACCESS_MODES = [
-  { id: 'LoginRequired', label: 'Login Required', desc: 'Viewer must sign in to FamilyFirst.' },
-  { id: 'PinOnly',       label: 'PIN Only',        desc: 'Access via a numeric PIN — no FamilyFirst account needed.' },
-  { id: 'NoLogin',       label: 'No Login',        desc: 'Emergency folder viewable by anyone with the link. Only for Emergency Folder.' },
+  { id: 'LoginRequired', label: 'Login Required',  desc: 'Viewer must sign in to FamilyFirst.' },
+  { id: 'PinOnly',       label: 'PIN Only',         desc: 'Access via a numeric PIN — no FamilyFirst account needed.' },
+  { id: 'NoLogin',       label: 'No Login',         desc: 'Emergency folder viewable by anyone with the link. Only for Emergency Folder.' },
 ] as const;
 
 const EXPIRY_OPTIONS = [24, 48, 72, 120, 168];
 
 const EmergencyAccessRulesScreen: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
-  const [rules, setRules]       = useState<EmergencyAccessRules | null>(null);
-  const [mode, setMode]         = useState<EmergencyAccessRules['accessMode']>('LoginRequired');
-  const [expiry, setExpiry]     = useState(72);
-  const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [rules, setRules]         = useState<EmergencyAccessRules | null>(null);
+  const [mode, setMode]           = useState<EmergencyAccessRules['accessMode']>('LoginRequired');
+  const [expiry, setExpiry]       = useState(72);
+  const [contacts, setContacts]   = useState<EmergencyContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving]   = useState(false);
 
@@ -68,140 +72,143 @@ const EmergencyAccessRulesScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F4EE]">
-      <div className="bg-[#1A2E4A] px-5 pt-12 pb-5">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-xl bg-white/10">
-            <ArrowLeft className="w-5 h-5 text-white" />
-          </button>
-          <div className="flex-1">
-            <h1 className="text-lg font-bold text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
-              Emergency Access Rules
-            </h1>
-            <p className="text-xs text-blue-200">DV-07 — Emergency folder & SOS contacts</p>
-          </div>
-          <button onClick={load} className="p-2 rounded-xl bg-white/10">
-            <RefreshCw className={`w-4 h-4 text-white ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-bg-cream pb-24">
+      <FFPageHeader
+        title="Emergency Access"
+        subtitle="Emergency folder & SOS contacts"
+        showBack
+      />
 
-      <div className="px-4 pt-5 pb-32 space-y-4">
-        {/* Access mode */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-          <h2 className="text-sm font-bold text-[#1A2E4A]" style={{ fontFamily: 'Poppins, sans-serif' }}>
-            Emergency Link Access Mode
-          </h2>
-          {ACCESS_MODES.map(m => (
-            <button
-              key={m.id}
-              onClick={() => setMode(m.id)}
-              className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-colors ${
-                mode === m.id ? 'border-[#1A2E4A] bg-[#1A2E4A]/5' : 'border-gray-200'
-              }`}
-            >
-              <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 ${
-                mode === m.id ? 'border-[#1A2E4A] bg-[#1A2E4A]' : 'border-gray-300'
-              }`} />
-              <div>
-                <p className="text-sm font-semibold text-[#1A2E4A]">{m.label}</p>
-                <p className="text-xs text-gray-400">{m.desc}</p>
-              </div>
-            </button>
-          ))}
-          {mode === 'NoLogin' && (
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
-              <p className="text-xs text-amber-700">⚠ No-login mode means anyone with the link can view emergency documents. Use for Emergency Folder only.</p>
+      <main className="px-4 py-5 space-y-4 page-enter">
+
+        {isLoading ? (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => <FFShimmer key={i} className="h-32 rounded-ff" />)}
+          </div>
+        ) : (
+          <>
+            {/* Access mode */}
+            <div className="space-y-2">
+              <FFSectionHeader icon={<ShieldAlert className="w-[18px] h-[18px]" />} title="Link Access Mode" />
+              <FFCard className="p-4 space-y-2">
+                {ACCESS_MODES.map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => setMode(m.id)}
+                    className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-colors ${
+                      mode === m.id ? 'border-primary bg-primary/5' : 'border-black/5 hover:bg-black/[0.02]'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 transition-colors ${
+                      mode === m.id ? 'border-primary bg-primary' : 'border-gray-300'
+                    }`} />
+                    <div>
+                      <p className="font-body font-semibold text-sm text-primary">{m.label}</p>
+                      <p className="font-body text-xs text-gray-400 mt-0.5">{m.desc}</p>
+                    </div>
+                  </button>
+                ))}
+                {mode === 'NoLogin' && (
+                  <div className="bg-alert/5 border border-alert/10 rounded-xl p-3">
+                    <p className="font-body text-xs text-alert leading-relaxed">
+                      Anyone with the link can view emergency documents. Use for Emergency Folder only.
+                    </p>
+                  </div>
+                )}
+              </FFCard>
             </div>
-          )}
-        </div>
 
-        {/* Link expiry */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-[#1A2E4A]" style={{ fontFamily: 'Poppins, sans-serif' }}>
-              Emergency Link Expiry
-            </h2>
-            <span className="text-sm font-bold text-[#C8922A]">
-              {expiry}h {expiry >= 24 ? `(${expiry / 24}d)` : ''}
-            </span>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {EXPIRY_OPTIONS.map(h => (
-              <button
-                key={h}
-                onClick={() => setExpiry(h)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium border ${
-                  expiry === h ? 'bg-[#1A2E4A] text-white border-[#1A2E4A]' : 'bg-white text-gray-600 border-gray-200'
-                }`}
-              >
-                {h}h
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-gray-400">Maximum 7 days (168h). Links auto-revoke when content expires.</p>
-        </div>
-
-        {/* Emergency contacts */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-[#1A2E4A]" style={{ fontFamily: 'Poppins, sans-serif' }}>
-              Emergency Contacts
-            </h2>
-            {contacts.length < 3 && (
-              <button onClick={addContact} className="flex items-center gap-1 text-xs text-[#C8922A] font-medium">
-                <Plus className="w-3.5 h-3.5" /> Add
-              </button>
-            )}
-          </div>
-          <p className="text-xs text-gray-400">These contacts receive SOS alerts and can access emergency documents. Max 3.</p>
-
-          {contacts.length === 0 && (
-            <button onClick={addContact} className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-xs text-gray-400">
-              + Add first emergency contact
-            </button>
-          )}
-
-          {contacts.map((contact, i) => (
-            <div key={i} className="border border-gray-100 rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Phone className="w-3.5 h-3.5 text-gray-400" />
-                  <p className="text-xs font-medium text-gray-500">Contact {i + 1}</p>
+            {/* Link expiry */}
+            <div className="space-y-2">
+              <FFSectionHeader icon={<ShieldAlert className="w-[18px] h-[18px]" />} title="Link Expiry" />
+              <FFCard className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-body text-xs text-gray-500">Auto-revoke emergency link after</p>
+                  <span className="font-numbers font-medium text-sm text-accent">
+                    {expiry}h {expiry >= 24 ? `(${expiry / 24}d)` : ''}
+                  </span>
                 </div>
-                <button onClick={() => removeContact(i)} className="p-1 rounded-lg hover:bg-red-50">
-                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                </button>
-              </div>
-              {[
-                { field: 'name' as const, placeholder: 'Full name' },
-                { field: 'phoneNumber' as const, placeholder: '+91 98765 43210' },
-                { field: 'relationship' as const, placeholder: 'e.g. Family Doctor, Uncle' },
-              ].map(({ field, placeholder }) => (
-                <input
-                  key={field}
-                  type={field === 'phoneNumber' ? 'tel' : 'text'}
-                  value={contact[field]}
-                  onChange={e => updateContact(i, field, e.target.value)}
-                  placeholder={placeholder}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A2E4A]"
-                />
-              ))}
+                <div className="flex gap-2 flex-wrap">
+                  {EXPIRY_OPTIONS.map(h => (
+                    <button
+                      key={h}
+                      onClick={() => setExpiry(h)}
+                      className={`px-3 py-1.5 rounded-xl font-body text-xs font-semibold border transition-colors ${
+                        expiry === h ? 'bg-primary text-white border-primary' : 'bg-white text-gray-500 border-black/5'
+                      }`}
+                    >
+                      {h}h
+                    </button>
+                  ))}
+                </div>
+                <p className="font-body text-xs text-gray-400">Maximum 7 days (168h).</p>
+              </FFCard>
             </div>
-          ))}
-        </div>
-      </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-4">
-        <button
-          onClick={handleSave}
-          disabled={isSaving || isLoading}
-          className="w-full flex items-center justify-center gap-2 bg-[#1A2E4A] text-white py-3.5 rounded-2xl font-semibold text-sm disabled:opacity-50"
-        >
-          {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {isSaving ? 'Saving…' : 'Save Emergency Rules'}
-        </button>
-      </div>
+            {/* Emergency contacts */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <FFSectionHeader icon={<Phone className="w-[18px] h-[18px]" />} title="Emergency Contacts" />
+                {contacts.length < 3 && (
+                  <button onClick={addContact} className="flex items-center gap-1 font-body text-xs text-accent font-semibold py-1">
+                    <Plus className="w-3.5 h-3.5" /> Add
+                  </button>
+                )}
+              </div>
+              <p className="font-body text-xs text-gray-400 px-1">Receive SOS alerts. Max 3 contacts.</p>
+
+              {contacts.length === 0 ? (
+                <button
+                  onClick={addContact}
+                  className="w-full py-4 border-2 border-dashed border-black/10 rounded-ff font-body text-sm text-gray-400"
+                >
+                  + Add first emergency contact
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  {contacts.map((contact, i) => (
+                    <FFCard key={i} className="p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-3.5 h-3.5 text-gray-400" />
+                          <p className="font-body font-semibold text-xs text-gray-500">Contact {i + 1}</p>
+                        </div>
+                        <button onClick={() => removeContact(i)} className="p-1.5 rounded-xl hover:bg-alert/10 text-gray-300 hover:text-alert transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      {[
+                        { field: 'name' as const, placeholder: 'Full name', type: 'text' },
+                        { field: 'phoneNumber' as const, placeholder: '+91 98765 43210', type: 'tel' },
+                        { field: 'relationship' as const, placeholder: 'e.g. Family Doctor, Uncle', type: 'text' },
+                      ].map(({ field, placeholder, type }) => (
+                        <input
+                          key={field}
+                          type={type}
+                          value={contact[field]}
+                          onChange={e => updateContact(i, field, e.target.value)}
+                          placeholder={placeholder}
+                          className="w-full h-12 px-4 bg-white border border-black/5 rounded-xl font-body text-sm text-primary focus:outline-none focus:ring-1 focus:ring-primary/20 placeholder:text-gray-300"
+                        />
+                      ))}
+                    </FFCard>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <FFButton
+              icon={<Save className="w-4 h-4" />}
+              isLoading={isSaving}
+              className="w-full"
+              onClick={handleSave}
+            >
+              Save Emergency Rules
+            </FFButton>
+          </>
+        )}
+
+      </main>
     </div>
   );
 };

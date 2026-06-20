@@ -181,7 +181,7 @@ const AdminDashboardScreen: React.FC = () => {
               </div>
             </div>
           ))}
-          <button className="w-full mt-3 py-2.5 font-body text-sm text-accent font-semibold text-center">
+          <button className="w-full mt-3 py-2.5 font-body font-semibold text-sm text-accent text-center hover:opacity-80 transition-opacity">
             Load More
           </button>
         </FFCard>

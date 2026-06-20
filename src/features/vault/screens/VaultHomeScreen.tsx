@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
-  Shield, Plus, Search, AlertTriangle, Zap, RefreshCw, WifiOff,
+  Shield, Plus, Search, AlertTriangle, ShieldAlert, WifiOff,
 } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { VaultProvider, useVault } from '../providers/VaultProvider';
@@ -11,6 +11,9 @@ import CategoryTile from '../widgets/CategoryTile';
 import DocumentCard from '../widgets/DocumentCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
+import FFShimmer from '../../../shared/components/FFShimmer';
+import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
 
 const CATEGORIES = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
@@ -36,60 +39,52 @@ const VaultHomeContent: React.FC = () => {
     };
   }, []);
 
-  const countByCategory = (cat: number) => documents.filter(d => d.category === cat).length;
-  const expiringByCategory = (cat: number) =>
-    expiringDocuments.filter(d => d.category === cat).length;
+  const countByCategory    = (cat: number) => documents.filter(d => d.category === cat).length;
+  const expiringByCategory = (cat: number) => expiringDocuments.filter(d => d.category === cat).length;
 
   return (
-    <div className="min-h-screen bg-[#F8F4EE]">
+    <div className="min-h-screen bg-bg-cream pb-24">
       {/* Offline banner */}
       {isOffline && (
-        <div className="bg-amber-500 text-white px-4 py-2 flex items-center gap-2 text-sm">
-          <WifiOff className="w-4 h-4" />
+        <div className="bg-accent text-primary px-4 py-2 flex items-center gap-2 font-body text-sm font-semibold">
+          <WifiOff className="w-4 h-4 flex-shrink-0" />
           <span>You're offline. Showing last synced content.</span>
         </div>
       )}
 
-      {/* Header */}
-      <div className="bg-[#1A2E4A] px-5 pt-12 pb-6">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-[#C8922A]" />
-            <h1 className="text-xl font-bold text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
-              Document Vault
-            </h1>
-          </div>
-          <button
+      <FFPageHeader
+        title="Document Vault"
+        subtitle={user?.familyId ? "Your family's secure document store" : ''}
+        rightAction={
+          <FFButton
+            size="sm"
+            variant="accent"
+            icon={<Plus className="w-4 h-4" />}
             onClick={() => navigate('/vault/upload')}
-            className="flex items-center gap-1.5 bg-[#C8922A] text-white px-3 py-1.5 rounded-xl text-sm font-semibold"
           >
-            <Plus className="w-4 h-4" />
             Upload
-          </button>
-        </div>
-        <p className="text-blue-200 text-xs mt-1">
-          {user?.familyId ? "Your family's secure document store" : ''}
-        </p>
-      </div>
+          </FFButton>
+        }
+      />
 
-      <div className="px-4 pt-4 space-y-5 pb-24">
+      <main className="px-4 pt-4 space-y-5 pb-24 page-enter">
         {/* Emergency folder shortcut */}
         <motion.button
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           onClick={() => navigate('/vault/emergency')}
-          className="flex items-center gap-3 w-full p-4 bg-red-50 border border-red-200 rounded-2xl"
+          className="flex items-center gap-3 w-full p-4 bg-alert/5 border border-alert/20 rounded-ff"
         >
-          <div className="p-2 bg-red-100 rounded-xl">
-            <Zap className="w-5 h-5 text-red-600" />
+          <div className="p-2 bg-alert/10 rounded-xl flex-shrink-0">
+            <ShieldAlert className="w-5 h-5 text-alert" />
           </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-bold text-red-700">Emergency Folder</p>
-            <p className="text-xs text-red-500">
+          <div className="flex-1 text-left min-w-0">
+            <p className="font-display font-semibold text-sm text-alert">Emergency Folder</p>
+            <p className="font-body text-xs text-alert/70">
               {expiringDocuments.filter(d => d.isEmergencyPriority).length} priority docs · Available offline
             </p>
           </div>
-          <span className="text-red-400 text-xs font-medium">View →</span>
+          <span className="font-body text-alert/60 text-xs font-medium flex-shrink-0">View →</span>
         </motion.button>
 
         {/* Expiry alert strip */}
@@ -97,16 +92,16 @@ const VaultHomeContent: React.FC = () => {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="bg-amber-50 border border-amber-200 rounded-2xl p-4"
+            className="bg-accent/10 border border-accent/20 rounded-ff p-4"
           >
             <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600" />
-              <p className="text-sm font-semibold text-amber-800">
+              <AlertTriangle className="w-4 h-4 text-accent" />
+              <p className="font-body font-semibold text-sm text-primary flex-1">
                 {expiringDocuments.length} document{expiringDocuments.length > 1 ? 's' : ''} expiring soon
               </p>
               <button
                 onClick={() => navigate('/vault/expiry')}
-                className="ml-auto text-xs font-medium text-amber-700 underline"
+                className="font-body text-xs font-semibold text-accent"
               >
                 See all
               </button>
@@ -118,8 +113,8 @@ const VaultHomeContent: React.FC = () => {
                   onClick={() => navigate(`/vault/${doc.documentId}`)}
                   className="flex items-center gap-2 w-full text-left"
                 >
-                  <AlertTriangle className={`w-3.5 h-3.5 flex-shrink-0 ${doc.expiryStatus === 'Red' ? 'text-red-500' : 'text-amber-500'}`} />
-                  <span className="text-xs text-gray-700 truncate">{doc.documentName}</span>
+                  <AlertTriangle className={`w-3.5 h-3.5 flex-shrink-0 ${doc.expiryStatus === 'Red' ? 'text-alert' : 'text-accent'}`} />
+                  <span className="font-body text-xs text-primary truncate">{doc.documentName}</span>
                 </button>
               ))}
             </div>
@@ -129,18 +124,16 @@ const VaultHomeContent: React.FC = () => {
         {/* Search shortcut */}
         <button
           onClick={() => navigate('/vault/search')}
-          className="flex items-center gap-3 w-full px-4 py-3 bg-white rounded-2xl shadow-sm border border-gray-100"
+          className="flex items-center gap-3 w-full px-4 py-3 bg-white border border-black/5 rounded-ff shadow-card"
         >
-          <Search className="w-4 h-4 text-gray-400" />
-          <span className="text-sm text-gray-400">Search documents, members, tags…</span>
+          <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <span className="font-body text-sm text-gray-400">Search documents, members, tags…</span>
         </button>
 
         {/* Category grid */}
         <div>
-          <h2 className="text-sm font-bold text-[#1A2E4A] mb-3" style={{ fontFamily: 'Poppins, sans-serif' }}>
-            Categories
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
+          <FFSectionHeader icon={<Shield className="w-[18px] h-[18px]" />} title="Categories" />
+          <div className="grid grid-cols-2 gap-3 mt-3">
             {CATEGORIES.map(cat => (
               <CategoryTile
                 key={cat}
@@ -156,46 +149,46 @@ const VaultHomeContent: React.FC = () => {
 
         {/* Recent uploads */}
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-[#1A2E4A]" style={{ fontFamily: 'Poppins, sans-serif' }}>
-              Recent Uploads
-            </h2>
-            <button
-              onClick={() => navigate('/vault/search')}
-              className="text-xs text-[#C8922A] font-medium"
-            >
-              See all
-            </button>
+          <FFSectionHeader
+            icon={<Shield className="w-[18px] h-[18px]" />}
+            title="Recent Uploads"
+            rightAction={
+              <button onClick={() => navigate('/vault/search')} className="font-body text-xs font-semibold text-accent py-1">
+                See all
+              </button>
+            }
+          />
+          <div className="mt-3">
+            {isLoading ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => <FFShimmer key={i} className="h-16 rounded-ff" />)}
+              </div>
+            ) : error ? (
+              <div className="text-center py-8">
+                <p className="font-body text-sm text-alert mb-3">{error}</p>
+                <FFButton variant="outline" size="sm" onClick={() => loadDocuments()}>Retry</FFButton>
+              </div>
+            ) : documents.length === 0 ? (
+              <FFEmptyState
+                title="Your Document Vault is ready"
+                message="Start by uploading your family's most important document."
+                actionLabel="Upload Document"
+                onAction={() => navigate('/vault/upload')}
+              />
+            ) : (
+              <div className="space-y-2">
+                {documents.slice(0, 5).map(doc => (
+                  <DocumentCard
+                    key={doc.documentId}
+                    document={doc}
+                    onClick={() => navigate(`/vault/${doc.documentId}`)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-
-          {isLoading ? (
-            <div className="flex justify-center py-8">
-              <RefreshCw className="w-6 h-6 text-gray-300 animate-spin" />
-            </div>
-          ) : error ? (
-            <div className="text-center py-8">
-              <p className="text-sm text-red-500 mb-3">{error}</p>
-              <FFButton variant="secondary" size="sm" onClick={() => loadDocuments()}>Retry</FFButton>
-            </div>
-          ) : documents.length === 0 ? (
-            <FFEmptyState
-              title="Your Document Vault is ready"
-              subtitle="Start by uploading your family's most important document."
-              action={{ label: 'Upload Document', onClick: () => navigate('/vault/upload') }}
-            />
-          ) : (
-            <div className="space-y-2">
-              {documents.slice(0, 5).map(doc => (
-                <DocumentCard
-                  key={doc.documentId}
-                  document={doc}
-                  onClick={() => navigate(`/vault/${doc.documentId}`)}
-                />
-              ))}
-            </div>
-          )}
         </div>
-      </div>
+      </main>
     </div>
   );
 };
