@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Save, SliderHorizontal } from 'lucide-react';
+import { Save, SlidersHorizontal } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { FamilyAdminL2Repository, AlertThresholds } from '../repositories/FamilyAdminL2Repository';
 import FFCard from '../../../shared/components/FFCard';
