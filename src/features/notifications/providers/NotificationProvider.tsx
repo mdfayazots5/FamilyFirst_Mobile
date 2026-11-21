@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { NotificationRepository, AppNotification } from '../repositories/NotificationRepository';
+import { logger } from '../../../core/services/logger';
 
 interface NotificationContextType {
   notifications: AppNotification[];
@@ -29,7 +30,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const data = await NotificationRepository.getNotifications(user.id);
       setNotifications(data);
     } catch (error) {
-      console.error('Failed to fetch notifications', error);
+      logger.error('Failed to fetch notifications', error);
     } finally {
       setIsLoading(false);
     }
@@ -37,7 +38,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   useEffect(() => {
     refresh();
-    // Poll every 1 minute for new notifications in demo/live
+    // Poll every 1 minute for new notifications
     const interval = setInterval(refresh, 60000);
     return () => clearInterval(interval);
   }, [refresh]);
@@ -49,7 +50,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       await NotificationRepository.markAsRead(user.id, id);
     } catch (error) {
-      console.error('Failed to mark as read', error);
+      logger.error('Failed to mark as read', error);
     }
   };
 
@@ -60,7 +61,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       await NotificationRepository.markAllAsRead(user.id);
     } catch (error) {
-      console.error('Failed to mark all as read', error);
+      logger.error('Failed to mark all as read', error);
     }
   };
 

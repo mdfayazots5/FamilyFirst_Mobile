@@ -11,7 +11,7 @@ const AppConfigScreen: React.FC = () => {
   const [flags, setFlags]       = useState<FeatureFlag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError]         = useState<string | null>(null);
-  const [isSaving, setIsSaving]   = useState(false);
+  const [isSaving]   = useState(false);
   const [pendingCritical, setPendingCritical] = useState<string | null>(null);
 
   const fetchFlags = useCallback(async () => {

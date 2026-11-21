@@ -1,7 +1,6 @@
 import React from 'react';
 import { Users, Eye, Bell, ChevronRight, Shield, Settings, ClipboardList } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../../core/auth/AuthContext';
 import FFCard from '../../../shared/components/FFCard';
 import FFBadge from '../../../shared/components/FFBadge';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
@@ -43,7 +42,7 @@ const advancedModules = [
     label: 'Emergency Access',
     desc: 'Emergency folder & SOS contacts',
     Icon: Shield,
-    path: '/family-admin/emergency',
+    path: '/family-admin/emergency-access',
     status: 'Active',
     statusVariant: 'success' as const,
   },
@@ -61,7 +60,7 @@ const advancedModules = [
     label: 'Alert Thresholds',
     desc: 'Safety & document alert limits',
     Icon: ClipboardList,
-    path: '/family-admin/safety-thresholds',
+    path: '/family-admin/alert-thresholds',
     status: 'Active',
     statusVariant: 'success' as const,
   },
@@ -78,13 +77,12 @@ const advancedModules = [
 
 const FamilyAdminPanelScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-bg-cream pb-24">
       <FFPageHeader
         title="Family Admin"
-        subtitle={user?.familyName ?? 'Your Family'}
+        subtitle="Your Family" // [VERIFY] no auth/me field carries the family name; load it from the family repository if a subtitle name is wanted
         showBack
       />
 

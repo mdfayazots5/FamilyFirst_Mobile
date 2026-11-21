@@ -1,7 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
-import { AppConfig } from '../../../core/config/appConfig';
 import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import { requireApiData } from '../../../core/network/apiTypes';
 import { getMasters } from '../../../core/repositories/MasterDataRepository';
 
 export interface AdminDashboardStats {
@@ -11,6 +11,14 @@ export interface AdminDashboardStats {
   churnRate: number;
   newSignupsToday: number;
   revenueTrend: number; // percentage
+}
+
+/** Input for sendCampaign — what NotificationCampaignScreen sends. */
+export interface NotificationCampaignInput {
+  title: string;
+  body: string;
+  targetRole: string;
+  scheduledFor: string;
 }
 
 export interface AdminFamily {
@@ -61,6 +69,49 @@ export interface FeatureFlag {
   description: string;
   isEnabled: boolean;
 }
+
+export interface AdminAnalyticsOverview {
+  totalUsers: number;
+  totalChildren: number;
+  totalTeachers: number;
+  totalTasks: number;
+  totalTaskCompletions: number;
+  totalFeedbackEntries: number;
+  totalNotifications: number;
+}
+
+export interface AdminActivityLog {
+  id: string;
+  dotColor: string;
+  message: string;
+  time: string;
+}
+
+export interface AdminSupportTicket {
+  id: string;
+  user: string;
+  email: string;
+  subject: string;
+  status: 'open' | 'pending' | 'resolved';
+  priority: 'low' | 'medium' | 'high';
+  createdAt: string;
+  lastMessage: string;
+}
+
+export interface AdminContentItem {
+  id: string;
+  type: 'onboarding' | 'tip' | 'faq';
+  title: string;
+  content: string;
+  status: 'active' | 'draft';
+}
+
+// [VERIFY - candidate master data]
+export const ADMIN_FAMILY_STATUS_OPTIONS: readonly string[] = ['All', 'Active', 'Trial', 'Churned', 'Flagged'];
+// [VERIFY - candidate master data]
+export const ADMIN_CAMPAIGN_ROLE_OPTIONS: readonly string[] = ['All', 'Parent', 'Child', 'Teacher', 'Elder'];
+// [VERIFY - candidate master data]
+export const ADMIN_CAMPAIGN_SCHEDULE_OPTIONS: readonly string[] = ['Immediate', 'In 1 Hour', 'Tomorrow'];
 
 interface AdminPlanDto {
   PlanId?: number;
@@ -140,116 +191,69 @@ const mapRewardCatalogDto = (reward: RewardCatalogDto): RewardCatalogItem => ({
 
 export const AdminRepository = {
   getDashboardStats: async (): Promise<AdminDashboardStats> => {
-    if (AppConfig.isDemo) {
-      return {
-        totalFamilies: 47,
-        activeFamilies: 38,
-        monthlyRevenue: 8900,
-        churnRate: 4,
-        newSignupsToday: 3,
-        revenueTrend: 12
-      };
-    }
     const response = await apiClient.get<ApiResponse<AdminDashboardStats>>(MasterApiReference.Admin.Dashboard);
     return response.data.data as AdminDashboardStats;
   },
 
-  getFamilies: async (params?: any): Promise<AdminFamily[]> => {
-    if (AppConfig.isDemo) {
-      return [
-        { id: 'f1', name: 'Sharma Family', plan: 'Premium', status: 'Active', memberCount: 5, createdAt: '2025-01-10', lastActive: '2026-04-11' },
-        { id: 'f2', name: 'Verma Family', plan: 'Basic', status: 'Trial', memberCount: 3, createdAt: '2026-04-01', lastActive: '2026-04-10' },
-        { id: 'f3', name: 'Iyer Family', plan: 'Premium', status: 'Active', memberCount: 6, createdAt: '2025-06-15', lastActive: '2026-04-11' },
-        { id: 'f4', name: 'Kapoor Family', plan: 'Free', status: 'Churned', memberCount: 4, createdAt: '2024-12-20', lastActive: '2025-03-15' },
-        { id: 'f5', name: 'Reddy Family', plan: 'Premium', status: 'Flagged', memberCount: 5, createdAt: '2025-11-05', lastActive: '2026-04-09' },
-      ];
-    }
+  getAnalyticsOverview: async (): Promise<AdminAnalyticsOverview> => {
+    const response = await apiClient.get<ApiResponse<AdminAnalyticsOverview>>(MasterApiReference.Admin.Analytics);
+    return requireApiData(response.data, 'AdminRepository.getAnalyticsOverview');
+  },
+
+  getActivityLogs: async (): Promise<AdminActivityLog[]> => {
+    const dashboard = await AdminRepository.getDashboardStats();
+    return [
+      { id: 'live-signups', dotColor: 'bg-success', message: `${dashboard.newSignupsToday} new signups today`, time: 'Today' },
+      { id: 'live-active', dotColor: 'bg-primary/60', message: `${dashboard.activeFamilies} active families`, time: 'Now' },
+      { id: 'live-total', dotColor: 'bg-accent', message: `${dashboard.totalFamilies} total families`, time: 'Dashboard' },
+    ];
+  },
+
+  getSupportTickets: async (): Promise<AdminSupportTicket[]> => {
+    return [];
+  },
+
+  getContentItems: async (): Promise<AdminContentItem[]> => {
+    return [];
+  },
+
+  getFamilies: async (params?: Record<string, string | number | boolean>): Promise<AdminFamily[]> => {
     const response = await apiClient.get<ApiResponse<AdminFamily[]>>(MasterApiReference.Admin.Families, { params });
     return response.data.data ?? [];
   },
 
   getPlans: async (): Promise<SubscriptionPlan[]> => {
-    if (AppConfig.isDemo) {
-      return [
-        { id: 'p1', name: 'Free', price: 0, maxChildren: 1, features: ['Basic Tasks', '1 Child Profile'] },
-        { id: 'p2', name: 'Basic', price: 199, maxChildren: 2, features: ['Unlimited Tasks', '2 Child Profiles', 'Rewards'] },
-        { id: 'p3', name: 'Premium', price: 499, maxChildren: 5, features: ['Unlimited Everything', 'Elder App', 'Advanced Analytics'] },
-        { id: 'p4', name: 'Family Plus', price: 999, maxChildren: 10, features: ['Multi-Family Support', 'Priority Support'] },
-      ];
-    }
     const response = await apiClient.get<ApiResponse<AdminPlanDto[]>>(MasterApiReference.Admin.Plans);
     return (response.data.data ?? []).map(mapPlanDto);
   },
 
   getTaskTemplates: async (): Promise<TaskTemplate[]> => {
-    if (AppConfig.isDemo) {
-      return Array.from({ length: 15 }).map((_, i) => ({
-        id: `t${i}`,
-        taskName: ['Brush Teeth', 'Read Book', 'Clean Room', 'Math Practice', 'Water Plants'][i % 5],
-        category: ['Hygiene', 'Education', 'Chore', 'Education', 'Chore'][i % 5],
-        iconCode: 'star',
-        coinValue: (i + 1) * 5,
-        ageGroup: i % 2 === 0 ? '5-8' : '9-12'
-      }));
-    }
     const response = await apiClient.get<ApiResponse<TaskTemplate[]>>(MasterApiReference.Admin.TaskTemplates);
     return response.data.data ?? [];
   },
 
   getFeatureFlags: async (): Promise<FeatureFlag[]> => {
-    if (AppConfig.isDemo) {
-      return [
-        { id: 'f1', name: 'Maintenance Mode', description: 'Disable all user access for maintenance', isEnabled: false },
-        { id: 'f2', name: 'New Reward Shop', description: 'Enable the redesigned reward catalog', isEnabled: true },
-        { id: 'f3', name: 'Elder Voice Notes', description: 'Allow elders to record audio appreciations', isEnabled: true },
-        { id: 'f4', name: 'AI Task Suggestions', description: 'Use Gemini to suggest tasks based on age', isEnabled: false },
-        { id: 'f5', name: 'Global Leaderboard', description: 'Show family rankings globally', isEnabled: false },
-        { id: 'f6', name: 'Dark Mode', description: 'Enable dark theme support', isEnabled: true },
-        { id: 'f7', name: 'Push Notifications', description: 'Enable FCM push notifications', isEnabled: true },
-        { id: 'f8', name: 'Trial Extension', description: 'Allow parents to request trial extensions', isEnabled: true },
-      ];
-    }
     const response = await apiClient.get<ApiResponse<FeatureFlag[]>>(MasterApiReference.Admin.FeatureFlags);
     return response.data.data ?? [];
   },
 
   updateFeatureFlag: async (flagId: string, isEnabled: boolean): Promise<void> => {
-    if (AppConfig.isDemo) return;
     await apiClient.put<ApiResponse<null>>(
       resolvePath(MasterApiReference.Admin.FeatureFlag, { flagId }),
       { isEnabled },
     );
   },
 
-  sendCampaign: async (data: any): Promise<void> => {
-    if (AppConfig.isDemo) return;
+  sendCampaign: async (data: NotificationCampaignInput): Promise<void> => {
     await apiClient.post<ApiResponse<null>>(MasterApiReference.Admin.NotificationCampaign, data);
   },
 
   getRewardCatalog: async (): Promise<RewardCatalogItem[]> => {
-    if (AppConfig.isDemo) {
-      return [
-        { id: 'r1', title: 'Extra Screen Time', cost: 50, category: 'ScreenTime', icon: '📺' },
-        { id: 'r2', title: 'Pizza Night', cost: 200, category: 'FoodTreat', icon: '🍕' },
-        { id: 'r3', title: 'New Toy', cost: 500, category: 'Purchase', icon: '🧸' },
-        { id: 'r4', title: 'Bedtime Extension', cost: 30, category: 'FamilyActivity', icon: '⏰' },
-      ];
-    }
-
     const response = await apiClient.get<ApiResponse<RewardCatalogDto[]>>(MasterApiReference.Admin.RewardCatalog);
     return (response.data.data ?? []).map(mapRewardCatalogDto);
   },
 
   getPlanOptions: async (): Promise<AdminLookupOption[]> => {
-    if (AppConfig.isDemo) {
-      return [
-        { id: 'plan-free-trial', label: 'Free Trial', code: 'FreeTrial' },
-        { id: 'plan-basic', label: 'Basic', code: 'Basic' },
-        { id: 'plan-family', label: 'Family', code: 'Family' },
-        { id: 'plan-premium', label: 'Premium', code: 'Premium' },
-      ];
-    }
-
     return mapLookupItems(await getMasters('Plan'));
   },
 };

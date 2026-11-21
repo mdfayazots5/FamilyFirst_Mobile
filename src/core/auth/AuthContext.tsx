@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { SecureStorageService } from '../storage/SecureStorageService';
+import { SecureStorageService, authUserStorageKey } from '../storage/SecureStorageService';
 import { AuthRepository, AuthResponse } from '../repositories/AuthRepository';
+import { apiSessionExpiredEvent } from '../network/apiClient';
+import { logger } from '../services/logger';
 export { UserRole, normalizeRole } from './UserRole';
 import { UserRole, normalizeRole } from './UserRole';
 
@@ -8,6 +10,7 @@ interface User {
   id: string;
   role: UserRole;
   name: string;
+  phoneNumber?: string;
   familyId?: string;
   childProfileId?: string;
 }
@@ -19,7 +22,6 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  loginAsRole: (role: UserRole) => void;
   handleAuthResponse: (response: AuthResponse) => void;
   logout: () => void;
 }
@@ -58,56 +60,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     initAuth();
+
+    const syncSession = (event: StorageEvent) => {
+      if (event.key !== authUserStorageKey && event.key !== null) return;
+      const savedUser = SecureStorageService.getUser();
+      const isAuthenticated = !!(savedUser && SecureStorageService.getAccessToken());
+      setState({
+        user: isAuthenticated ? { ...savedUser, role: normalizeRole(savedUser.role) } : null,
+        isAuthenticated,
+        isAuthReady: true,
+      });
+    };
+    window.addEventListener('storage', syncSession);
+
+    // apiClient raises this when the server rejects the refresh token. Storage is already cleared there;
+    // dropping auth state lets ProtectedRoute route to /login without a full page reload.
+    const expireSession = () => setState({ user: null, isAuthenticated: false, isAuthReady: true });
+    window.addEventListener(apiSessionExpiredEvent, expireSession);
+
+    return () => {
+      window.removeEventListener('storage', syncSession);
+      window.removeEventListener(apiSessionExpiredEvent, expireSession);
+    };
   }, []);
 
   const handleAuthResponse = (response: AuthResponse) => {
+    // Normalize on the way in: an API role string the app does not map would otherwise leave an
+    // authenticated user that RoleRedirect sends to /login.
+    const user = { ...response.user, role: normalizeRole(response.user.role) };
     SecureStorageService.saveAccessToken(response.accessToken);
     SecureStorageService.saveRefreshToken(response.refreshToken);
-    SecureStorageService.saveUser(response.user);
-    
+    SecureStorageService.saveUser(user);
+
     setState({
-      user: response.user,
+      user,
       isAuthenticated: true,
       isAuthReady: true,
     });
   };
 
-  const loginAsRole = (role: UserRole) => {
-    // This is still used for the quick demo login screen
-    const mockUser: User = {
-      id: `mock_${role.toLowerCase()}`,
-      role,
-      name: `Demo ${role.charAt(0) + role.slice(1).toLowerCase().replace('_', ' ')}`,
-      familyId: 'fam_123',
-    };
-    
-    handleAuthResponse({
-      accessToken: 'demo_token',
-      refreshToken: 'demo_refresh',
-      user: mockUser
-    });
-  };
-
   const logout = async () => {
     const refreshToken = SecureStorageService.getRefreshToken();
-    if (refreshToken) {
-      try {
-        await AuthRepository.logout(refreshToken);
-      } catch (e) {
-        console.error('Logout error', e);
-      }
-    }
-    
+    const accessToken = SecureStorageService.getAccessToken();
     SecureStorageService.clearAll();
     setState({
       user: null,
       isAuthenticated: false,
       isAuthReady: true,
     });
+
+    if (refreshToken) {
+      try {
+        await AuthRepository.logout(refreshToken, accessToken ?? undefined);
+      } catch (e) {
+        logger.error('Logout error', e);
+      }
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, loginAsRole, handleAuthResponse, logout }}>
+    <AuthContext.Provider value={{ ...state, handleAuthResponse, logout }}>
       {children}
     </AuthContext.Provider>
   );

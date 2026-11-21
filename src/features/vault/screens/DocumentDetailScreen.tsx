@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Download, Share2, Trash2, Clock, Tag, Star, History, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { VaultRepository, DocumentDetail, CATEGORY_LABELS } from '../repositories/VaultRepository';
+import { VaultRepository, DocumentDetail } from '../repositories/VaultRepository';
 import ExpiryBadge from '../widgets/ExpiryBadge';
 import SecureShareModal from '../widgets/SecureShareModal';
 import FFButton from '../../../shared/components/FFButton';
@@ -12,32 +12,29 @@ import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import FFErrorState from '../../../shared/components/FFErrorState';
+import { isImageFileUrl } from '../../../core/services/fileUrlType';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 const DocumentDetailScreen: React.FC = () => {
   const navigate = useNavigate();
   const { documentId } = useParams<{ documentId: string }>();
   const { user } = useAuth();
 
-  const [doc, setDoc] = useState<DocumentDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const familyId = user?.familyId;
+  const resource = useApiResource<DocumentDetail>(
+    familyId && documentId ? () => VaultRepository.getDocument(familyId, documentId) : null,
+    [familyId, documentId],
+    'This document could not be loaded.',
+  );
+  const doc = resource.data;
+  const isLoading = resource.isLoading;
+  const loadError = !familyId || !documentId || resource.error !== null;
+  const load = resource.reload;
   const [showShareModal, setShowShareModal] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
-
-  const load = () => {
-    if (!user?.familyId || !documentId) return;
-    setIsLoading(true);
-    setLoadError(false);
-    VaultRepository.getDocument(user.familyId, documentId)
-      .then(setDoc)
-      .catch(() => setLoadError(true))
-      .finally(() => setIsLoading(false));
-  };
-
-  useEffect(() => { load(); }, [user?.familyId, documentId]);
 
   const handleDelete = async () => {
     if (!user?.familyId || !documentId || deleteConfirmText !== 'DELETE') return;
@@ -82,7 +79,7 @@ const DocumentDetailScreen: React.FC = () => {
     <div className="min-h-screen bg-bg-cream">
       <FFPageHeader
         title={doc.documentName}
-        subtitle={CATEGORY_LABELS[doc.category]}
+        subtitle={doc.categoryName}
         showBack
         rightAction={
           doc.isEmergencyPriority ? (
@@ -94,14 +91,14 @@ const DocumentDetailScreen: React.FC = () => {
       <main className="px-4 pt-4 pb-24 space-y-4 page-enter">
         {/* Document preview */}
         <FFCard className="overflow-hidden">
-          {doc.fileUrl.includes('demo') || !doc.fileUrl ? (
+          {!doc.fileUrl ? (
             <div className="h-56 flex flex-col items-center justify-center gap-3 bg-black/[0.02]">
               <div className="w-16 h-16 bg-bg-cream rounded-ff flex items-center justify-center">
                 <span className="text-3xl">📄</span>
               </div>
               <p className="font-body text-xs text-gray-400">Document preview</p>
             </div>
-          ) : doc.fileUrl.match(/\.(jpg|jpeg|png|heic)$/i) ? (
+          ) : isImageFileUrl(doc.fileUrl) ? (
             <img src={doc.fileUrl} alt={doc.documentName} className="w-full h-56 object-cover" />
           ) : (
             <iframe src={doc.fileUrl} title={doc.documentName} className="w-full h-56 border-0" />

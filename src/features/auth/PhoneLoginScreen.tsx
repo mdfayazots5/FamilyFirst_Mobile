@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, Eye, EyeOff, KeyRound, Phone } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Phone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import FFButton from '../../shared/components/FFButton';
@@ -8,16 +8,8 @@ import FFErrorState from '../../shared/components/FFErrorState';
 import FFPageHeader from '../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../shared/components/FFSectionHeader';
 import FFShimmer from '../../shared/components/FFShimmer';
-import { AuthRepository } from '../../core/repositories/AuthRepository';
+import { AuthRepository, COUNTRY_PHONE_OPTIONS } from '../../core/repositories/AuthRepository';
 import { useAuth } from '../../core/auth/AuthContext';
-
-const countries = [
-  { code: '+91', label: 'India' },
-  { code: '+971', label: 'UAE' },
-  { code: '+966', label: 'Saudi Arabia' },
-  { code: '+1', label: 'United States' },
-  { code: '+44', label: 'United Kingdom' },
-];
 
 const PhoneLoginScreen: React.FC = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -90,7 +82,7 @@ const PhoneLoginScreen: React.FC = () => {
                   onChange={(event) => setCountryCode(event.target.value)}
                   className="min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-primary outline-none transition focus:border-accent"
                 >
-                  {countries.map((country) => (
+                  {COUNTRY_PHONE_OPTIONS.map((country) => (
                     <option key={country.code} value={country.code}>
                       {country.label} ({country.code})
                     </option>

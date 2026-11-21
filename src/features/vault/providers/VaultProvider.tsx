@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { VaultRepository, VaultDocument, PaginatedDocuments } from '../repositories/VaultRepository';
+import { VaultRepository, VaultDocument, PaginatedDocuments, DocumentCategoryOption } from '../repositories/VaultRepository';
 import { useAuth } from '../../../core/auth/AuthContext';
 
 interface VaultContextType {
@@ -8,6 +8,9 @@ interface VaultContextType {
   isLoading: boolean;
   error: string | null;
   expiringDocuments: VaultDocument[];
+  categories: DocumentCategoryOption[];
+  categoriesError: string | null;
+  loadCategories: () => Promise<void>;
   loadDocuments: (params?: {
     category?: number;
     memberId?: string;
@@ -31,6 +34,8 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expiringDocuments, setExpiringDocuments] = useState<VaultDocument[]>([]);
+  const [categories, setCategories] = useState<DocumentCategoryOption[]>([]);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
 
   const loadDocuments = useCallback(async (params?: Parameters<VaultContextType['loadDocuments']>[0]) => {
     if (!user?.familyId) return;
@@ -64,11 +69,20 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTotalCount(prev => prev - 1);
   }, [user?.familyId]);
 
+  const loadCategories = useCallback(async () => {
+    setCategoriesError(null);
+    try {
+      setCategories(await VaultRepository.getDocumentCategories());
+    } catch {
+      setCategoriesError('Unable to load document categories.');
+    }
+  }, []);
+
   const clearError = useCallback(() => setError(null), []);
 
   return (
     <VaultContext.Provider value={{
-      documents, totalCount, isLoading, error, expiringDocuments,
+      documents, totalCount, isLoading, error, expiringDocuments, categories, categoriesError, loadCategories,
       loadDocuments, loadExpiringDocuments, deleteDocument, clearError,
     }}>
       {children}

@@ -1,9 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import {
-  Search, MessageSquare, Clock, AlertCircle,
-  ChevronRight, Send, X, LifeBuoy, User,
-} from 'lucide-react';
+import { Search, MessageSquare, Clock, ChevronRight, Send, X, LifeBuoy, User } from 'lucide-react';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFBadge from '../../../shared/components/FFBadge';
@@ -11,50 +8,11 @@ import FFAvatar from '../../../shared/components/FFAvatar';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
-
-interface Ticket {
-  id: string;
-  user: string;
-  email: string;
-  subject: string;
-  status: 'open' | 'pending' | 'resolved';
-  priority: 'low' | 'medium' | 'high';
-  createdAt: string;
-  lastMessage: string;
-}
-
-const TICKETS: Ticket[] = [
-  {
-    id: 'TKT-1001',
-    user: 'Rahul Sharma',
-    email: 'rahul@example.com',
-    subject: 'Attendance button not working',
-    status: 'open',
-    priority: 'high',
-    createdAt: '2h ago',
-    lastMessage: 'The button is greyed out even during class hours.',
-  },
-  {
-    id: 'TKT-1002',
-    user: 'Priya Patel',
-    email: 'priya@example.com',
-    subject: 'Child profile not showing tasks',
-    status: 'pending',
-    priority: 'medium',
-    createdAt: '5h ago',
-    lastMessage: 'My son cannot see any tasks assigned to him.',
-  },
-  {
-    id: 'TKT-1003',
-    user: 'Amit Kumar',
-    email: 'amit@example.com',
-    subject: 'How do I add a second child?',
-    status: 'resolved',
-    priority: 'low',
-    createdAt: '1d ago',
-    lastMessage: 'Thank you for the quick help!',
-  },
-];
+import FFErrorState from '../../../shared/components/FFErrorState';
+import {
+  AdminRepository,
+  AdminSupportTicket,
+} from '../repositories/AdminRepository';
 
 type FilterType = 'all' | 'open' | 'pending' | 'resolved';
 
@@ -78,10 +36,27 @@ const getPriorityDot = (priority: string) => {
 const SupportTicketsScreen: React.FC = () => {
   const [filter, setFilter]             = useState<FilterType>('all');
   const [searchQuery, setSearchQuery]   = useState('');
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [tickets, setTickets] = useState<AdminSupportTicket[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<AdminSupportTicket | null>(null);
   const [replyText, setReplyText]       = useState('');
 
-  const filteredTickets = TICKETS.filter(t => {
+  const fetchTickets = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setTickets(await AdminRepository.getSupportTickets());
+    } catch {
+      setError('Could not load support tickets. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => { void fetchTickets(); }, []);
+
+  const filteredTickets = tickets.filter(t => {
     const matchesFilter = filter === 'all' || t.status === filter;
     const matchesSearch =
       t.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -133,7 +108,15 @@ const SupportTicketsScreen: React.FC = () => {
         </div>
 
         {/* Ticket list */}
-        {filteredTickets.length === 0 ? (
+        {isLoading ? (
+          <FFEmptyState
+            icon={<LifeBuoy className="w-8 h-8 text-gray-300" />}
+            title="Loading Tickets"
+            message="Please wait while support tickets are loaded."
+          />
+        ) : error ? (
+          <FFErrorState message={error} onRetry={() => void fetchTickets()} />
+        ) : filteredTickets.length === 0 ? (
           <FFEmptyState
             icon={<LifeBuoy className="w-8 h-8 text-gray-300" />}
             title="No Tickets Found"

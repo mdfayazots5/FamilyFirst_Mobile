@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Edit3, Shield } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
@@ -7,6 +7,8 @@ import FFEmptyState from '../../../shared/components/FFEmptyState';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 const ZONE_BADGE: Record<string, string> = {
   Home:           'bg-success/10 text-success border-success/20',
@@ -21,23 +23,26 @@ const ZONE_BADGE: Record<string, string> = {
 const SafeZoneManagerScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [zones, setZones] = useState<SafeZone[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const familyId = user?.familyId;
+  const resource = useApiResource<SafeZone[]>(
+    familyId ? () => SafetyRepository.listZones(familyId) : null,
+    [familyId],
+    'Safe zones could not be loaded.',
+  );
+  const zones = resource.data ?? [];
+  const loadError = familyId ? resource.error : 'Family details are not available.';
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!user?.familyId) return;
-    SafetyRepository.listZones(user.familyId)
-      .then(setZones)
-      .finally(() => setIsLoading(false));
-  }, [user?.familyId]);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const handleDelete = async (zoneId: string) => {
-    if (!user?.familyId) return;
+    if (!familyId) return;
     setDeletingId(zoneId);
+    setActionError(null);
     try {
-      await SafetyRepository.deleteZone(user.familyId, zoneId);
-      setZones(prev => prev.filter(z => z.zoneId !== zoneId));
+      await SafetyRepository.deleteZone(familyId, zoneId);
+      resource.setData(zones.filter(z => z.zoneId !== zoneId));
+    } catch {
+      setActionError('The zone could not be deleted. Please try again.');
     } finally {
       setDeletingId(null);
     }
@@ -60,10 +65,13 @@ const SafeZoneManagerScreen: React.FC = () => {
       />
 
       <div className="px-4 pt-4 pb-24 space-y-3">
-        {isLoading ? (
+        {actionError && <p role="alert" className="font-body text-sm text-alert">{actionError}</p>}
+        {resource.isLoading ? (
           <div className="space-y-2">
             {[...Array(3)].map((_, i) => <FFShimmer key={i} className="h-20 rounded-ff" />)}
           </div>
+        ) : loadError ? (
+          <FFErrorState message={loadError} onRetry={familyId ? resource.reload : undefined} />
         ) : zones.length === 0 ? (
           <FFEmptyState
             title="No safe zones yet"

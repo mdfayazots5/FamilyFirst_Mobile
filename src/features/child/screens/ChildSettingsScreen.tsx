@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Bell,
-  ChevronRight,
   Languages,
   Lock,
   Palette,
@@ -21,20 +20,6 @@ const ChildSettingsScreen: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [language, setLanguage] = useState('English');
   const [selectedAvatar, setSelectedAvatar] = useState('A');
-  const [showPinEditor, setShowPinEditor] = useState(false);
-  const [pinValue, setPinValue] = useState('');
-  const [pinMessage, setPinMessage] = useState('');
-
-  const handleSavePin = () => {
-    if (pinValue.length !== 4) {
-      setPinMessage('Enter a 4-digit PIN.');
-      return;
-    }
-
-    setPinMessage('PIN updated for demo mode.');
-    setShowPinEditor(false);
-    setPinValue('');
-  };
 
   return (
     <div className="min-h-screen bg-[#F8F4EE]">
@@ -128,33 +113,13 @@ const ChildSettingsScreen: React.FC = () => {
 
         <section className="space-y-4">
           <FFSectionHeader icon={<Lock />} title="PIN safety" />
+          {/* The in-app "Change PIN" editor was removed with demo mode (2026-11-21): it never saved anything.
+              [VERIFY] Re-add it wired to POST /auth/set-pin (AuthRepository has no setPin yet). */}
           <FFCard className="shadow-card p-5">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="font-display text-lg font-semibold text-primary">Child PIN</p>
-                <p className="mt-1 font-body text-sm text-slate-500">
-                  Ask a parent to help if you want to change the PIN for this account.
-                </p>
-              </div>
-              <FFButton variant="outline" onClick={() => setShowPinEditor((value) => !value)} icon={<ChevronRight size={16} />}>
-                {showPinEditor ? 'Hide PIN editor' : 'Change PIN'}
-              </FFButton>
-            </div>
-
-            {showPinEditor ? (
-              <div className="mt-4 space-y-3 border-t border-black/5 pt-4">
-                <input
-                  value={pinValue}
-                  onChange={(event) => setPinValue(event.target.value.replace(/\D/g, '').slice(0, 4))}
-                  inputMode="numeric"
-                  className="min-h-12 w-full rounded-ff border border-black/10 px-4 font-body text-sm text-primary"
-                  placeholder="Enter 4-digit PIN"
-                />
-                <FFButton onClick={handleSavePin}>Save PIN</FFButton>
-              </div>
-            ) : null}
-
-            {pinMessage ? <p className="mt-3 font-body text-sm text-slate-500">{pinMessage}</p> : null}
+            <p className="font-display text-lg font-semibold text-primary">Child PIN</p>
+            <p className="mt-1 font-body text-sm text-slate-500">
+              Ask a parent to help if you want to change the PIN for this account.
+            </p>
           </FFCard>
         </section>
 

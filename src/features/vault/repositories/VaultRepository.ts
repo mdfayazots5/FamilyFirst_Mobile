@@ -1,16 +1,34 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
-import { AppConfig } from '../../../core/config/appConfig';
 import type { ApiResponse } from '../../../core/network/apiTypes';
+import { requireApiData } from '../../../core/network/apiTypes';
+import type { MasterDataItem } from '../../../core/network/apiTypes';
+import { getMasters } from '../../../core/repositories/MasterDataRepository';
+import {
+  downloadEmergencyFile, EmergencyOfflineStore, isEmergencyAccessFailure, isEmergencyNetworkFailure,
+  type EmergencyLoad,
+} from '../../../core/cache/EmergencyOfflineStore';
+import { SecureStorageService } from '../../../core/storage/SecureStorageService';
+
+const mapDocumentCategories = (items: MasterDataItem[]) =>
+  items
+    .map((item) => ({ id: item.id, value: item.sortOrder, name: item.name }))
+    .sort((a, b) => a.value - b.value);
 
 export type DocumentCategory =
   | 'Medical' | 'Identity' | 'School' | 'Financial'
   | 'Insurance' | 'Legal' | 'Certificates' | 'Other';
 
-export const CATEGORY_LABELS: Record<number, DocumentCategory> = {
-  1: 'Medical', 2: 'Identity', 3: 'School', 4: 'Financial',
-  5: 'Insurance', 6: 'Legal', 7: 'Certificates', 8: 'Other',
-};
+/**
+ * DocumentCategory option from GetMasters 'DocumentCategory' (P3 seed 112).
+ * `value` = the int the API persists (lookup SortOrder = DocumentCategory enum value 1–8).
+ */
+export interface DocumentCategoryOption {
+  id: string;
+  value: number;
+  name: string;
+}
+
 
 export type ExpiryStatus = 'None' | 'Green' | 'Amber' | 'Red';
 
@@ -70,89 +88,37 @@ export interface PaginatedDocuments {
   hasPreviousPage: boolean;
 }
 
-const DEMO_DOCS: VaultDocument[] = [
-  {
-    documentId: 'doc-1', documentName: 'Arjun Health Card', category: 1, categoryName: 'Medical',
-    memberId: 'm1', memberName: 'Arjun', uploadedByUserId: 'u1',
-    uploadDate: new Date(Date.now() - 86400000 * 5).toISOString(),
-    expiryDate: undefined, expiryStatus: 'None',
-    tags: ['health', 'card'], isEmergencyPriority: true, versionNumber: 1,
-  },
-  {
-    documentId: 'doc-2', documentName: 'Priya Passport', category: 2, categoryName: 'Identity',
-    memberId: 'm2', memberName: 'Priya', uploadedByUserId: 'u1',
-    uploadDate: new Date(Date.now() - 86400000 * 30).toISOString(),
-    expiryDate: new Date(Date.now() + 86400000 * 25).toISOString(),
-    expiryStatus: 'Red',
-    tags: ['passport', 'travel'], isEmergencyPriority: false, versionNumber: 1,
-  },
-  {
-    documentId: 'doc-3', documentName: 'Arjun School Report 2025', category: 3, categoryName: 'School',
-    memberId: 'm1', memberName: 'Arjun', uploadedByUserId: 'u1',
-    uploadDate: new Date(Date.now() - 86400000 * 60).toISOString(),
-    expiryDate: undefined, expiryStatus: 'None',
-    tags: ['school', 'report'], isEmergencyPriority: false, versionNumber: 1,
-  },
-  {
-    documentId: 'doc-4', documentName: 'Family Health Insurance', category: 5, categoryName: 'Insurance',
-    memberId: 'm1', memberName: 'Arjun', uploadedByUserId: 'u1',
-    uploadDate: new Date(Date.now() - 86400000 * 90).toISOString(),
-    expiryDate: new Date(Date.now() + 86400000 * 55).toISOString(),
-    expiryStatus: 'Amber',
-    tags: ['insurance', 'health'], isEmergencyPriority: true, versionNumber: 2,
-  },
-  {
-    documentId: 'doc-5', documentName: 'Home Loan Agreement', category: 6, categoryName: 'Legal',
-    memberId: 'm2', memberName: 'Priya', uploadedByUserId: 'u1',
-    uploadDate: new Date(Date.now() - 86400000 * 180).toISOString(),
-    expiryDate: new Date(Date.now() + 86400000 * 200).toISOString(),
-    expiryStatus: 'Green',
-    tags: ['loan', 'property'], isEmergencyPriority: false, versionNumber: 1,
-  },
-  {
-    documentId: 'doc-6', documentName: 'Zara Swimming Certificate', category: 7, categoryName: 'Certificates',
-    memberId: 'm3', memberName: 'Zara', uploadedByUserId: 'u1',
-    uploadDate: new Date(Date.now() - 86400000 * 10).toISOString(),
-    expiryDate: undefined, expiryStatus: 'None',
-    tags: ['certificate', 'swimming'], isEmergencyPriority: false, versionNumber: 1,
-  },
-  {
-    documentId: 'doc-7', documentName: 'Salary Slip March 2025', category: 4, categoryName: 'Financial',
-    memberId: 'm2', memberName: 'Priya', uploadedByUserId: 'u1',
-    uploadDate: new Date(Date.now() - 86400000 * 15).toISOString(),
-    expiryDate: undefined, expiryStatus: 'None',
-    tags: ['salary', 'payslip'], isEmergencyPriority: false, versionNumber: 1,
-  },
-  {
-    documentId: 'doc-8', documentName: 'Warranty Card — Washing Machine', category: 8, categoryName: 'Other',
-    memberId: 'm1', memberName: 'Arjun', uploadedByUserId: 'u1',
-    uploadDate: new Date(Date.now() - 86400000 * 45).toISOString(),
-    expiryDate: new Date(Date.now() + 86400000 * 365).toISOString(),
-    expiryStatus: 'Green',
-    tags: ['warranty', 'appliance'], isEmergencyPriority: false, versionNumber: 1,
-  },
-];
-
 export const VaultRepository = {
+
+  /** Document category lookup — GetMasters 'DocumentCategory'. Sorted by enum value. */
+  getDocumentCategories: async (): Promise<DocumentCategoryOption[]> => {
+    return mapDocumentCategories(await getMasters('DocumentCategory'));
+  },
+
   getUploadUrl: async (
     familyId: string,
     fileName: string,
     contentType: string,
     category: number,
   ): Promise<UploadUrlResponse> => {
-    if (AppConfig.isDemo) {
-      return {
-        uploadUrl: 'https://demo-upload.s3.amazonaws.com/family/demo/vault/mock.pdf',
-        fileUrl: `https://demo-s3.amazonaws.com/family/${familyId}/vault/${Date.now()}.pdf`,
-        expiresAtUtc: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      };
-    }
     const response = await apiClient.post<ApiResponse<UploadUrlResponse>>(resolvePath(MasterApiReference.Vault.UploadUrl, {
       familyId,
     }), {
       fileName, contentType, category,
     });
-    return response.data.data;
+    return requireApiData(response.data, 'VaultRepository.getUploadUrl');
+  },
+
+  /**
+   * PUTs the file to the presigned S3 URL from getUploadUrl. `contentType` must be the same value sent to
+   * getUploadUrl (it is part of the signature). Rejects on any non-2xx status, so a document record is never
+   * created for a file that did not upload. Direct S3 call: intentionally not via apiClient (no Bearer token).
+   */
+  uploadFile: async (uploadUrl: string, file: Blob, contentType: string): Promise<void> => {
+    const response = await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': contentType } });
+    if (!response.ok) {
+      throw new Error(`Document upload failed (HTTP ${response.status}).`);
+    }
   },
 
   listDocuments: async (
@@ -167,51 +133,18 @@ export const VaultRepository = {
       sortBy?: string;
     },
   ): Promise<PaginatedDocuments> => {
-    if (AppConfig.isDemo) {
-      let docs = [...DEMO_DOCS];
-      if (params?.category) docs = docs.filter(d => d.category === params.category);
-      if (params?.memberId) docs = docs.filter(d => d.memberId === params.memberId);
-      if (params?.search) {
-        const q = params.search.toLowerCase();
-        docs = docs.filter(d =>
-          d.documentName.toLowerCase().includes(q) ||
-          d.tags.some(t => t.toLowerCase().includes(q)) ||
-          d.memberName.toLowerCase().includes(q),
-        );
-      }
-      if (params?.expiryStatus === 'expiring-soon') {
-        docs = docs.filter(d => d.expiryStatus === 'Red' || d.expiryStatus === 'Amber');
-      }
-      const page = params?.page ?? 1;
-      const pageSize = params?.pageSize ?? 20;
-      const start = (page - 1) * pageSize;
-      const paginated = docs.slice(start, start + pageSize);
-      return {
-        items: paginated, totalCount: docs.length,
-        totalPages: Math.ceil(docs.length / pageSize),
-        hasNextPage: start + pageSize < docs.length,
-        hasPreviousPage: page > 1,
-      };
-    }
     const response = await apiClient.get<ApiResponse<PaginatedDocuments>>(
       resolvePath(MasterApiReference.Vault.Documents, { familyId }),
       { params },
     );
-    return response.data.data;
+    return requireApiData(response.data, 'VaultRepository.listDocuments');
   },
 
   getDocument: async (familyId: string, documentId: string): Promise<DocumentDetail> => {
-    if (AppConfig.isDemo) {
-      const doc = DEMO_DOCS.find(d => d.documentId === documentId) ?? DEMO_DOCS[0];
-      return {
-        ...doc, fileUrl: 'https://demo-s3.amazonaws.com/family/demo/vault/sample.pdf',
-        visibility: 2, versionHistory: [], activeShareLinks: [],
-      };
-    }
     const response = await apiClient.get<ApiResponse<DocumentDetail>>(
       resolvePath(MasterApiReference.Vault.Document, { familyId, documentId }),
     );
-    return response.data.data;
+    return requireApiData(response.data, 'VaultRepository.getDocument');
   },
 
   createDocument: async (
@@ -222,22 +155,11 @@ export const VaultRepository = {
       visibility?: number; isEmergencyPriority?: boolean;
     },
   ): Promise<VaultDocument> => {
-    if (AppConfig.isDemo) {
-      return {
-        documentId: `doc-${Date.now()}`, ...data,
-        categoryName: CATEGORY_LABELS[data.category] ?? 'Other',
-        memberName: 'Demo Member', uploadedByUserId: 'u1',
-        uploadDate: new Date().toISOString(),
-        expiryStatus: data.expiryDate ? 'Green' : 'None',
-        tags: data.tags ?? [], isEmergencyPriority: data.isEmergencyPriority ?? false,
-        versionNumber: 1,
-      };
-    }
     const response = await apiClient.post<ApiResponse<VaultDocument>>(
       resolvePath(MasterApiReference.Vault.Documents, { familyId }),
       data,
     );
-    return response.data.data;
+    return requireApiData(response.data, 'VaultRepository.createDocument');
   },
 
   updateDocument: async (
@@ -248,43 +170,80 @@ export const VaultRepository = {
       visibility: number; isEmergencyPriority: boolean; newFileUrl: string;
     }>,
   ): Promise<VaultDocument> => {
-    if (AppConfig.isDemo) {
-      const doc = DEMO_DOCS.find(d => d.documentId === documentId) ?? DEMO_DOCS[0];
-      return { ...doc, ...data } as VaultDocument;
-    }
     const response = await apiClient.put<ApiResponse<VaultDocument>>(
       resolvePath(MasterApiReference.Vault.Document, { familyId, documentId }),
       data,
     );
-    return response.data.data;
+    return requireApiData(response.data, 'VaultRepository.updateDocument');
   },
 
   deleteDocument: async (familyId: string, documentId: string): Promise<boolean> => {
-    if (AppConfig.isDemo) return true;
     const response = await apiClient.delete<ApiResponse<boolean>>(
       resolvePath(MasterApiReference.Vault.Document, { familyId, documentId }),
     );
-    return response.data.data;
+    return response.data.data ?? false;
   },
 
   getExpiringDocuments: async (familyId: string): Promise<VaultDocument[]> => {
-    if (AppConfig.isDemo) {
-      return DEMO_DOCS.filter(d => d.expiryStatus === 'Red' || d.expiryStatus === 'Amber');
-    }
     const response = await apiClient.get<ApiResponse<VaultDocument[]>>(
       resolvePath(MasterApiReference.Vault.Expiry, { familyId }),
     );
-    return response.data.data;
+    return response.data.data ?? [];
   },
 
   getEmergencyDocuments: async (familyId: string): Promise<VaultDocument[]> => {
-    if (AppConfig.isDemo) {
-      return DEMO_DOCS.filter(d => d.isEmergencyPriority);
+    return (await VaultRepository.loadEmergencyDocuments(familyId)).data;
+  },
+
+  loadEmergencyDocuments: async (familyId: string): Promise<EmergencyLoad<VaultDocument[]>> => {
+    const scope = SecureStorageService.getEmergencyCacheScope(familyId);
+    const revision = scope ? crypto.randomUUID() : '';
+    let documents: VaultDocument[];
+    try {
+      const response = await apiClient.get<ApiResponse<VaultDocument[]>>(
+        resolvePath(MasterApiReference.Vault.Emergency, { familyId }),
+      );
+      documents = requireApiData(response.data, 'VaultRepository.getEmergencyDocuments');
+    } catch (error) {
+      if (scope && isEmergencyNetworkFailure(error)) {
+        const cached = await EmergencyOfflineStore.getVault(scope).catch(() => undefined);
+        if (cached) return { data: cached, fromCache: true };
+      } else if (scope && isEmergencyAccessFailure(error)) {
+        await EmergencyOfflineStore.saveVault(scope, revision).catch(() => undefined);
+      }
+      throw error;
     }
-    const response = await apiClient.get<ApiResponse<VaultDocument[]>>(
-      resolvePath(MasterApiReference.Vault.Emergency, { familyId }),
-    );
-    return response.data.data;
+
+    if (scope) {
+      await EmergencyOfflineStore.saveVault(scope, revision, documents).catch(() => undefined);
+      // R6: file bytes are cached in the background so the folder renders as soon as metadata arrives
+      // (previously one getDocument + download per document ran sequentially before returning).
+      void VaultRepository.cacheEmergencyFiles(familyId, scope, revision, documents);
+    }
+    return { data: documents, fromCache: false };
+  },
+
+  /** Background offline caching of emergency file bytes; stops when a newer revision takes over. Never throws. */
+  cacheEmergencyFiles: async (familyId: string, scope: string, revision: string, documents: VaultDocument[]) => {
+    for (const doc of documents) {
+      if (!EmergencyOfflineStore.isCurrent(scope)) break;
+      try {
+        const detail = await VaultRepository.getDocument(familyId, doc.documentId);
+        if (detail.versionNumber !== doc.versionNumber) continue;
+        const blob = await downloadEmergencyFile(detail.fileUrl);
+        if (blob) await EmergencyOfflineStore.saveFile(scope, revision, doc, blob);
+        else await EmergencyOfflineStore.removeFile(scope, revision, doc);
+      } catch (error) {
+        if (isEmergencyAccessFailure(error)) {
+          await EmergencyOfflineStore.removeFile(scope, revision, doc).catch(() => undefined);
+        }
+      }
+    }
+  },
+
+  getSavedEmergencyFile: async (familyId: string, doc: VaultDocument) => {
+    const scope = SecureStorageService.getEmergencyCacheScope(familyId);
+    return scope ? EmergencyOfflineStore.getFile(scope, doc) : undefined;
   },
 
   createShareLink: async (
@@ -292,21 +251,11 @@ export const VaultRepository = {
     documentId: string,
     data: { expiryHours?: number; allowDownload?: boolean },
   ): Promise<ShareLink> => {
-    if (AppConfig.isDemo) {
-      return {
-        shareLinkId: `sl-${Date.now()}`,
-        shareUrl: `/vault/share/demo-token-${Date.now()}`,
-        expiresAt: new Date(Date.now() + (data.expiryHours ?? 72) * 3600000).toISOString(),
-        allowDownload: data.allowDownload ?? false,
-        isRevoked: false,
-        createdAt: new Date().toISOString(),
-      };
-    }
     const response = await apiClient.post<ApiResponse<ShareLink>>(
       resolvePath(MasterApiReference.Vault.Share, { familyId, documentId }),
       data,
     );
-    return response.data.data;
+    return requireApiData(response.data, 'VaultRepository.createShareLink');
   },
 
   revokeShareLink: async (
@@ -314,24 +263,16 @@ export const VaultRepository = {
     documentId: string,
     shareLinkId: string,
   ): Promise<boolean> => {
-    if (AppConfig.isDemo) return true;
     const response = await apiClient.delete<ApiResponse<boolean>>(
       resolvePath(MasterApiReference.Vault.ShareLink, { familyId, documentId, shareLinkId }),
     );
-    return response.data.data;
+    return response.data.data ?? false;
   },
 
   getDocumentByShareToken: async (token: string): Promise<DocumentDetail> => {
-    if (AppConfig.isDemo) {
-      return {
-        ...DEMO_DOCS[0],
-        fileUrl: 'https://demo-s3.amazonaws.com/family/demo/vault/sample.pdf',
-        visibility: 2, versionHistory: [], activeShareLinks: [],
-      };
-    }
     const response = await apiClient.get<ApiResponse<DocumentDetail>>(
       resolvePath(MasterApiReference.Vault.ShareToken, { token }),
     );
-    return response.data.data;
+    return requireApiData(response.data, 'VaultRepository.getDocumentByShareToken');
   },
 };

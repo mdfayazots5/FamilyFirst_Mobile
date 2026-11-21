@@ -1,35 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Edit3, Save } from 'lucide-react';
 import { FinanceProvider, useFinance } from '../providers/FinanceProvider';
-import { FinanceRepository } from '../repositories/FinanceRepository';
+import { FinanceRepository, FINANCE_CATEGORY_ICONS, FINANCE_DEFAULT_ICON } from '../repositories/FinanceRepository';
+import FFErrorState from '../../../shared/components/FFErrorState';
 import { useAuth } from '../../../core/auth/AuthContext';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 
-const CATEGORY_LABELS: Record<string, string> = {
-  GroceriesKirana: '🛒 Groceries & Kirana',
-  FoodDining: '🍔 Food & Dining',
-  Utilities: '💡 Utilities',
-  MobileRecharge: '📱 Mobile Recharge',
-  EducationSchool: '📚 Education & School',
-  MedicalHealth: '🏥 Medical & Health',
-  TravelTransport: '🚗 Travel & Transport',
-  Shopping: '🛍 Shopping',
-  InsuranceLIC: '🛡 Insurance & LIC',
-  LoanEmi: '🏦 Loan EMI',
-  DomesticHelp: '🏠 Domestic Help',
-  Entertainment: '🎬 Entertainment',
-  DonationsReligion: '🙏 Donations',
-  ChitFundInvestment: '📈 Chit Fund / Investment',
-};
-
 const BudgetManagerContent: React.FC = () => {
   const { user } = useAuth();
-  const { budgets, isLoading, loadBudgets } = useFinance();
+  const { budgets, isLoading, error, loadBudgets, categoryLabel } = useFinance();
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => { loadBudgets(); }, [loadBudgets]);
 
@@ -41,6 +26,7 @@ const BudgetManagerContent: React.FC = () => {
   const handleSave = async () => {
     if (!user?.familyId || !editingCategory) return;
     setSaving(true);
+    setSaveError(null);
     try {
       await FinanceRepository.setBudget(user.familyId, {
         category: editingCategory,
@@ -48,6 +34,8 @@ const BudgetManagerContent: React.FC = () => {
       });
       await loadBudgets();
       setEditingCategory(null);
+    } catch {
+      setSaveError('The budget could not be saved. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -62,8 +50,11 @@ const BudgetManagerContent: React.FC = () => {
       />
 
       <div className="px-4 pt-4 pb-24 space-y-3">
+        {saveError && <p role="alert" className="font-body text-sm text-alert">{saveError}</p>}
         {isLoading ? (
           [...Array(6)].map((_, i) => <FFShimmer key={i} className="h-20 rounded-ff" />)
+        ) : error ? (
+          <FFErrorState message={error} onRetry={() => void loadBudgets()} />
         ) : (
           budgets.map(budget => {
             const isEditing = editingCategory === budget.category;
@@ -75,7 +66,7 @@ const BudgetManagerContent: React.FC = () => {
               <FFCard key={budget.category} className="p-4">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <p className="font-body text-sm font-semibold text-primary">
-                    {CATEGORY_LABELS[budget.category] ?? budget.category}
+                    {FINANCE_CATEGORY_ICONS[budget.category] ?? FINANCE_DEFAULT_ICON} {categoryLabel(budget.category)}
                   </p>
                   {!isEditing && (
                     <button

@@ -6,6 +6,7 @@ import { useAuth } from '../../../core/auth/AuthContext';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import FFErrorState from '../../../shared/components/FFErrorState';
 
 const TIER_LABELS: Record<number, { label: string; desc: string; color: string }> = {
   1: { label: 'Full Visibility',  desc: 'All transactions with merchant names', color: 'text-alert bg-alert/5' },
@@ -23,18 +24,22 @@ const CONSENT_LABELS: Record<string, { label: string; color: string }> = {
 
 const FinanceSettingsContent: React.FC = () => {
   const { user } = useAuth();
-  const { settings, isLoading, loadSettings } = useFinance();
+  const { settings, isLoading, error, loadSettings } = useFinance();
   const [inviting, setInviting] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
   const handleInvite = async (memberId: string) => {
     if (!user?.familyId) return;
     setInviting(memberId);
+    setActionError(null);
     try {
       await FinanceRepository.inviteConsent(user.familyId, { memberId, privacyTier: 2 });
       await loadSettings();
+    } catch {
+      setActionError('The invite could not be sent. Please try again.');
     } finally {
       setInviting(null);
     }
@@ -43,9 +48,12 @@ const FinanceSettingsContent: React.FC = () => {
   const handleRevoke = async (memberId: string) => {
     if (!user?.familyId) return;
     setRevoking(memberId);
+    setActionError(null);
     try {
       await FinanceRepository.revokeConsent(user.familyId, memberId);
       await loadSettings();
+    } catch {
+      setActionError('Consent could not be revoked. Please try again.');
     } finally {
       setRevoking(null);
     }
@@ -65,6 +73,7 @@ const FinanceSettingsContent: React.FC = () => {
       />
 
       <div className="px-4 pt-5 pb-24 space-y-4">
+        {actionError && <p role="alert" className="font-body text-sm text-alert">{actionError}</p>}
         {/* Privacy tier legend */}
         <FFCard className="p-4 space-y-3">
           <div className="flex items-center gap-2">
@@ -114,6 +123,10 @@ const FinanceSettingsContent: React.FC = () => {
           {isLoading ? (
             <div className="px-4 pb-4 space-y-3">
               {[...Array(3)].map((_, i) => <FFShimmer key={i} className="h-12 rounded-xl" />)}
+            </div>
+          ) : error ? (
+            <div className="px-4 pb-4">
+              <FFErrorState message={error} onRetry={() => void loadSettings()} />
             </div>
           ) : (
             settings?.memberSettings.map((m, i) => {

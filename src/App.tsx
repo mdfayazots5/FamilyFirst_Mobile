@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from './core/auth/AuthContext';
 import { NotificationProvider } from './features/notifications/providers/NotificationProvider';
@@ -7,17 +7,44 @@ import { ElderSettingsProvider } from './features/elder/providers/ElderSettingsP
 import { LocalNotificationProvider } from './core/notifications/LocalNotificationService';
 import { FCMService } from './core/notifications/FCMService';
 import AppRouter from './core/router/AppRouter';
+import { apiForbiddenEvent } from './core/network/apiClient';
 
 function AppContent() {
-  const { user } = useAuth();
+  const { user, isAuthReady } = useAuth();
+  const [permissionError, setPermissionError] = useState('');
 
   useEffect(() => {
-    if (user?.id) {
-      FCMService.initialize(user.id);
-    }
-  }, [user?.id]);
+    let hideTimer: ReturnType<typeof setTimeout> | undefined;
+    const showPermissionError = (event: Event) => {
+      setPermissionError((event as CustomEvent<string>).detail);
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => setPermissionError(''), 5000);
+    };
+    window.addEventListener(apiForbiddenEvent, showPermissionError);
+    return () => {
+      clearTimeout(hideTimer);
+      window.removeEventListener(apiForbiddenEvent, showPermissionError);
+    };
+  }, []);
 
-  return <AppRouter />;
+  useEffect(() => {
+    if (isAuthReady) {
+      void FCMService.initialize(user?.id).catch(() => {
+        // The service records registration failures.
+      });
+    }
+  }, [isAuthReady, user?.id]);
+
+  return (
+    <>
+      <AppRouter />
+      {permissionError && (
+        <div role="alert" className="fixed inset-x-4 bottom-24 z-[100] mx-auto max-w-md rounded-xl bg-alert px-4 py-3 font-body text-sm text-white shadow-lg">
+          {permissionError}
+        </div>
+      )}
+    </>
+  );
 }
 
 export default function App() {

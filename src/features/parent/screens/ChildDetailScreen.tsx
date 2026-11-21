@@ -1,14 +1,5 @@
 import React, { useEffect, useReducer, useState } from 'react';
-import {
-  BookOpen,
-  CheckCircle2,
-  Filter,
-  MessageSquare,
-  RefreshCw,
-  Sparkles,
-  Target,
-  TriangleAlert,
-} from 'lucide-react';
+import { BookOpen, CheckCircle2, Filter, MessageSquare, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
 import FFAvatar from '../../../shared/components/FFAvatar';
@@ -26,6 +17,7 @@ import {
   Feedback,
   TaskCompletion,
 } from '../repositories/ChildRepository';
+import { logger } from '../../../core/services/logger';
 
 type TabKey = 'tasks' | 'feedback';
 
@@ -114,7 +106,7 @@ const ChildDetailScreen: React.FC = () => {
         payload: { child, tasks, feedback, taskTypes, taskStatuses },
       });
     } catch (error) {
-      console.error('Failed to load child detail screen', error);
+      logger.error('Failed to load child detail screen', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load this child profile right now.' });
     }
   };
@@ -147,11 +139,11 @@ const ChildDetailScreen: React.FC = () => {
     try {
       await ChildRepository.reviewTask(user.familyId, task.id, status);
       const nextTasks = (payload?.tasks ?? []).map((item) =>
-        item.id === task.id ? { ...item, status: status === 'done' ? 'done' : 'flagged' } : item,
+        item.id === task.id ? { ...item, status } : item,
       );
       dispatch({ type: 'TASK_UPDATED', payload: nextTasks });
     } catch (error) {
-      console.error('Failed to review child task', error);
+      logger.error('Failed to review child task', error);
     }
   };
 
@@ -163,7 +155,7 @@ const ChildDetailScreen: React.FC = () => {
       );
       dispatch({ type: 'FEEDBACK_UPDATED', payload: nextFeedback });
     } catch (error) {
-      console.error('Failed to acknowledge child feedback', error);
+      logger.error('Failed to acknowledge child feedback', error);
     }
   };
 

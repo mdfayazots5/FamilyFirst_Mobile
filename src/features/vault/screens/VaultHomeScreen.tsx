@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
-  Shield, Plus, Search, AlertTriangle, ShieldAlert, WifiOff,
+  Shield, Plus, Search, AlertTriangle, ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { VaultProvider, useVault } from '../providers/VaultProvider';
-import { VaultRepository, CATEGORY_LABELS } from '../repositories/VaultRepository';
 import CategoryTile from '../widgets/CategoryTile';
 import DocumentCard from '../widgets/DocumentCard';
 import FFButton from '../../../shared/components/FFButton';
@@ -15,43 +14,22 @@ import FFShimmer from '../../../shared/components/FFShimmer';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 
-const CATEGORIES = [1, 2, 3, 4, 5, 6, 7, 8] as const;
-
 const VaultHomeContent: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { documents, isLoading, error, expiringDocuments, loadDocuments, loadExpiringDocuments } = useVault();
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const { documents, isLoading, error, expiringDocuments, categories, categoriesError, loadDocuments, loadExpiringDocuments, loadCategories } = useVault();
 
   useEffect(() => {
     loadDocuments({ pageSize: 5, sortBy: 'date' });
     loadExpiringDocuments();
-  }, [loadDocuments, loadExpiringDocuments]);
-
-  useEffect(() => {
-    const handleOnline  = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    window.addEventListener('online',  handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online',  handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+    loadCategories();
+  }, [loadDocuments, loadExpiringDocuments, loadCategories]);
 
   const countByCategory    = (cat: number) => documents.filter(d => d.category === cat).length;
   const expiringByCategory = (cat: number) => expiringDocuments.filter(d => d.category === cat).length;
 
   return (
     <div className="min-h-screen bg-bg-cream pb-24">
-      {/* Offline banner */}
-      {isOffline && (
-        <div className="bg-accent text-primary px-4 py-2 flex items-center gap-2 font-body text-sm font-semibold">
-          <WifiOff className="w-4 h-4 flex-shrink-0" />
-          <span>You're offline. Showing last synced content.</span>
-        </div>
-      )}
-
       <FFPageHeader
         title="Document Vault"
         subtitle={user?.familyId ? "Your family's secure document store" : ''}
@@ -81,7 +59,7 @@ const VaultHomeContent: React.FC = () => {
           <div className="flex-1 text-left min-w-0">
             <p className="font-display font-semibold text-sm text-alert">Emergency Folder</p>
             <p className="font-body text-xs text-alert/70">
-              {expiringDocuments.filter(d => d.isEmergencyPriority).length} priority docs · Available offline
+              Priority documents and saved copies
             </p>
           </div>
           <span className="font-body text-alert/60 text-xs font-medium flex-shrink-0">View →</span>
@@ -134,14 +112,17 @@ const VaultHomeContent: React.FC = () => {
         <div>
           <FFSectionHeader icon={<Shield className="w-[18px] h-[18px]" />} title="Categories" />
           <div className="grid grid-cols-2 gap-3 mt-3">
-            {CATEGORIES.map(cat => (
+            {categories.length === 0 && !categoriesError && [1, 2, 3, 4].map(i => (
+              <FFShimmer key={i} className="h-24 rounded-2xl" />
+            ))}
+            {categories.map(cat => (
               <CategoryTile
-                key={cat}
-                category={cat}
-                categoryName={CATEGORY_LABELS[cat]}
-                documentCount={countByCategory(cat)}
-                expiringCount={expiringByCategory(cat)}
-                onClick={() => navigate(`/vault/category/${cat}`)}
+                key={cat.id}
+                category={cat.value}
+                categoryName={cat.name}
+                documentCount={countByCategory(cat.value)}
+                expiringCount={expiringByCategory(cat.value)}
+                onClick={() => navigate(`/vault/category/${cat.value}`)}
               />
             ))}
           </div>

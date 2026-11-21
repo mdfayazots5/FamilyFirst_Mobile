@@ -19,6 +19,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { Feedback, FeedbackRepository, FeedbackType } from '../../teacher/repositories/FeedbackRepository';
+import { logger } from '../../../core/services/logger';
 
 type DetailState =
   | { status: 'loading'; data: Feedback | null; error: string | null }
@@ -89,7 +90,7 @@ const FeedbackDetailScreen: React.FC = () => {
       dispatch({ type: 'LOAD_SUCCESS', payload: detail });
       setResponseText(detail.parentResponse ?? '');
     } catch (error) {
-      console.error('Failed to load feedback detail', error);
+      logger.error('Failed to load feedback detail', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load this feedback item right now.' });
     }
   };
@@ -120,7 +121,7 @@ const FeedbackDetailScreen: React.FC = () => {
         },
       });
     } catch (error) {
-      console.error('Failed to acknowledge feedback detail', error);
+      logger.error('Failed to acknowledge feedback detail', error);
     } finally {
       setIsSubmitting(false);
     }

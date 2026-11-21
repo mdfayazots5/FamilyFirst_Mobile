@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, MapPin, Settings, AlertTriangle, ChevronRight, Battery } from 'lucide-react';
+import { Shield, MapPin, Settings, AlertTriangle, Battery } from 'lucide-react';
 import { SafetyProvider, useSafety } from '../providers/SafetyProvider';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
 import FFCard from '../../../shared/components/FFCard';

@@ -1,16 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useReducer, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RefreshCw, TrendingUp, TrendingDown, Minus, Heart, FileText, Download } from 'lucide-react';
 import {
   RadarChart, PolarGrid, PolarAngleAxis, Radar,
   ResponsiveContainer, LineChart, Line, XAxis, Tooltip,
 } from 'recharts';
-import { useAuth } from '../../../core/auth/AuthContext';
+import { useAuth, UserRole } from '../../../core/auth/AuthContext';
 import {
   ReportsRepository,
   MonthlyFamilyReport,
   ChildMonthlySummary,
+  type MonthlyReportExportRequest,
+  type ReportExport,
 } from '../repositories/ReportsRepository';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
@@ -18,6 +21,10 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+type ExportState = { key: string } & (
+  | { status: 'idle' | 'loading' | 'error' }
+  | { status: 'ready'; result: ReportExport }
+);
 
 // Recharts SVG stroke/fill require hex strings — CSS tokens don't apply here
 const CHART_COLORS = { primary: '#1A2E4A', accent: '#C8922A', success: '#2D6A4F' };
@@ -31,7 +38,7 @@ const MonthlyFamilyView: React.FC<{
   return (
     <div className="space-y-4">
       {/* Headline */}
-      <FFCard className="bg-primary text-white p-5">
+      <FFCard variant="primary" className="text-white p-5">
         <p className="font-body text-xs text-white/60 mb-1">
           Monthly Report — {MONTH_NAMES[report.month - 1]} {report.year}
         </p>
@@ -158,7 +165,7 @@ const ChildMonthlyView: React.FC<{ summary: ChildMonthlySummary }> = ({ summary 
   return (
     <div className="space-y-4">
       {/* Narrative */}
-      <FFCard className="bg-primary text-white p-5">
+      <FFCard variant="primary" className="text-white p-5">
         <p className="font-body text-xs text-white/60 mb-1">
           {summary.childName} — {MONTH_NAMES[summary.month - 1]} {summary.year}
         </p>
@@ -241,44 +248,29 @@ const MonthlyReportScreen: React.FC = () => {
   const childIdParam = searchParams.get('childId');
   const [view, setView] = useState<'family' | 'child'>(childIdParam ? 'child' : 'family');
   const [selectedChildId, setSelectedChildId] = useState<string | null>(childIdParam);
+  const [pdf, setPdf] = useReducer((_previous: ExportState, next: ExportState) => next, { key: '', status: 'idle' });
 
-  const [familyReport, setFamilyReport] = useState<MonthlyFamilyReport | null>(null);
-  const [childSummary, setChildSummary]  = useState<ChildMonthlySummary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const familyId = user?.familyId ?? null;
 
-  const loadFamily = async () => {
-    if (!user?.familyId) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await ReportsRepository.getMonthlyFamilyReport(user.familyId);
-      setFamilyReport(data);
-    } catch {
-      setError('Failed to load monthly report.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // API data via the shared reducer hook (no component useState for API data).
+  const familyResource = useApiResource<MonthlyFamilyReport>(
+    familyId && view === 'family' ? () => ReportsRepository.getMonthlyFamilyReport(familyId) : null,
+    [familyId, view],
+    'Failed to load monthly report.',
+  );
+  const childResource = useApiResource<ChildMonthlySummary>(
+    familyId && view === 'child' && selectedChildId
+      ? () => ReportsRepository.getChildMonthlySummary(familyId, selectedChildId)
+      : null,
+    [familyId, view, selectedChildId],
+    'Failed to load child summary.',
+  );
 
-  const loadChild = async (childId: string) => {
-    if (!user?.familyId) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await ReportsRepository.getChildMonthlySummary(user.familyId, childId);
-      setChildSummary(data);
-    } catch {
-      setError('Failed to load child summary.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (view === 'family') loadFamily();
-    else if (view === 'child' && selectedChildId) loadChild(selectedChildId);
-  }, [view, selectedChildId, user?.familyId]);
+  const familyReport = familyResource.data;
+  const childSummary = childResource.data;
+  const active = view === 'family' ? familyResource : childResource;
+  const isLoading = active.isLoading;
+  const error = !familyId ? 'No family is linked to this account.' : active.error;
 
   const handleChildSelect = (childId: string) => {
     setSelectedChildId(childId);
@@ -294,9 +286,25 @@ const MonthlyReportScreen: React.FC = () => {
     ? `${childSummary.childName}'s Report`
     : 'Monthly Report';
 
-  const handleRefresh = () => {
-    if (view === 'family') loadFamily();
-    else if (selectedChildId) loadChild(selectedChildId);
+  const handleRefresh = () => active.reload();
+  const report = view === 'family' ? familyReport : childSummary;
+  const canExport = user?.role === UserRole.PARENT || user?.role === UserRole.FAMILY_ADMIN;
+  const exportKey = `${familyId}:${view}:${view === 'child' ? selectedChildId : ''}:${report?.year}:${report?.month}`;
+  const currentPdf = pdf.key === exportKey ? pdf : null;
+  const handleExport = async () => {
+    if (!familyId || !report || !canExport || pdf.status === 'loading') return;
+    if (view === 'child' && !selectedChildId) return;
+    const period = `${report.year}-${String(report.month).padStart(2, '0')}`;
+    const request: MonthlyReportExportRequest = view === 'child' && selectedChildId
+      ? { reportType: 'ChildMonthly', period, childId: selectedChildId, format: 'PDF' }
+      : { reportType: 'MonthlyFamily', period, format: 'PDF' };
+    setPdf({ key: exportKey, status: 'loading' });
+    try {
+      const result = await ReportsRepository.exportMonthlyReport(familyId, request);
+      setPdf({ key: exportKey, status: 'ready', result });
+    } catch {
+      setPdf({ key: exportKey, status: 'error' });
+    }
   };
 
   return (
@@ -310,9 +318,17 @@ const MonthlyReportScreen: React.FC = () => {
             <button onClick={handleRefresh} className="p-2 rounded-xl bg-white/10" aria-label="Refresh">
               <RefreshCw className={`w-4 h-4 text-white ${isLoading ? 'animate-spin' : ''}`} />
             </button>
-            <button className="p-2 rounded-xl bg-white/10" aria-label="Export PDF">
-              <Download className="w-4 h-4 text-white" />
-            </button>
+            {canExport && (
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={!report || isLoading || Boolean(error) || pdf.status === 'loading'}
+                className="grid min-h-12 min-w-12 place-items-center rounded-xl bg-white/10 disabled:opacity-50"
+                aria-label="Export PDF"
+              >
+                <Download className="w-4 h-4 text-white" />
+              </button>
+            )}
           </div>
         }
       />
@@ -339,6 +355,23 @@ const MonthlyReportScreen: React.FC = () => {
       )}
 
       <div className="px-4 pt-4 pb-24">
+        {currentPdf?.status === 'loading' && <p role="status" className="mb-4 text-sm text-primary">Preparing your PDF…</p>}
+        {currentPdf?.status === 'error' && (
+          <p role="alert" className="mb-4 text-sm text-alert">Unable to prepare the PDF. Select Export PDF to try again.</p>
+        )}
+        {currentPdf?.status === 'ready' && (
+          <FFCard className="mb-4 flex items-center justify-between gap-3 p-4">
+            <p role="status" className="text-sm text-primary">PDF ready. The link is valid for 15 minutes.</p>
+            <a
+              href={currentPdf.result.downloadUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-12 items-center rounded-xl bg-primary px-4 text-sm font-semibold text-white"
+            >
+              Download PDF
+            </a>
+          </FFCard>
+        )}
         {isLoading ? (
           <div className="space-y-3">
             <FFShimmer className="h-24 rounded-ff" />

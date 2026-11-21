@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
-import { AlertCircle, BookOpen, CheckCircle2, ChevronRight, Clock, MessageSquare, Send, Users, WifiOff } from 'lucide-react';
+import { AlertCircle, BookOpen, CheckCircle2, Clock, MessageSquare, Send, Users, WifiOff } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
 import {
@@ -92,7 +92,10 @@ const statusTone: Record<AttendanceStatus, string> = {
 };
 
 const nextStatus = (current: AttendanceStatus, available: AttendanceStatus[]) => {
-  const sequence = available.length > 0 ? available : FALLBACK_STATUSES;
+  const sequence = available.length > 0
+    ? available
+    : ([]);
+  if (sequence.length === 0) return current;
   const index = sequence.indexOf(current);
   return sequence[(index + 1) % sequence.length];
 };
@@ -377,7 +380,7 @@ const AttendanceMarkingScreen: React.FC = () => {
                             item.status,
                             loadState.statusOptions.length > 0
                               ? loadState.statusOptions
-                              : FALLBACK_STATUSES,
+                              : ([]),
                           ),
                         }))
                       }

@@ -5,19 +5,12 @@ import {
   Settings, List, PieChart, Calendar,
 } from 'lucide-react';
 import { FinanceProvider, useFinance } from '../providers/FinanceProvider';
-import { FinanceTransaction } from '../repositories/FinanceRepository';
+import { FinanceTransaction, FINANCE_CATEGORY_ICONS, FINANCE_DEFAULT_ICON } from '../repositories/FinanceRepository';
+import FFErrorState from '../../../shared/components/FFErrorState';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  GroceriesKirana: '🛒 Groceries', FoodDining: '🍔 Food', Utilities: '💡 Utilities',
-  MobileRecharge: '📱 Recharge', EducationSchool: '📚 School', MedicalHealth: '🏥 Medical',
-  TravelTransport: '🚗 Travel', Shopping: '🛍 Shopping', InsuranceLIC: '🛡 Insurance',
-  LoanEmi: '🏦 Loan EMI', DomesticHelp: '🏠 Help', Entertainment: '🎬 Entertainment',
-  DonationsReligion: '🙏 Donations', ChitFundInvestment: '📈 Investment',
-};
 
 // Hex used inside SVG attributes — CSS token classes don't apply to SVG fill/stroke
 const GAUGE_COLORS = { Green: '#2D6A4F', Amber: '#C8922A', Red: '#C1121F' };
@@ -43,14 +36,14 @@ const HealthGauge: React.FC<{ status: 'Green' | 'Amber' | 'Red'; rate: number }>
   );
 };
 
-const TxRow: React.FC<{ tx: FinanceTransaction }> = ({ tx }) => (
+const TxRow: React.FC<{ tx: FinanceTransaction; categoryLabel: (code: string) => string }> = ({ tx, categoryLabel }) => (
   <div className="flex items-center gap-3 py-2.5 border-b border-black/5 last:border-0">
     <div className="w-9 h-9 rounded-xl bg-black/5 flex items-center justify-center text-base flex-shrink-0">
-      {(CATEGORY_LABELS[tx.category] ?? '💸').split(' ')[0]}
+      {FINANCE_CATEGORY_ICONS[tx.category] ?? FINANCE_DEFAULT_ICON}
     </div>
     <div className="flex-1 min-w-0">
       <p className="font-body text-sm font-medium text-primary truncate">
-        {tx.merchantName ?? (tx.isCategoryBlurred ? '••••' : CATEGORY_LABELS[tx.category] ?? tx.category)}
+        {tx.merchantName ?? (tx.isCategoryBlurred ? '••••' : categoryLabel(tx.category))}
       </p>
       <p className="font-body text-xs text-gray-400">
         {tx.memberName} · {new Date(tx.parsedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
@@ -64,9 +57,21 @@ const TxRow: React.FC<{ tx: FinanceTransaction }> = ({ tx }) => (
 
 const FinanceDashboardContent: React.FC = () => {
   const navigate = useNavigate();
-  const { dashboard, isLoading, loadDashboard } = useFinance();
+  const { dashboard, isLoading, error, loadDashboard, categoryLabel } = useFinance();
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
+
+  // Error first: `!dashboard` alone kept the shimmer up forever after a failed load.
+  if (!isLoading && error) {
+    return (
+      <div className="min-h-screen bg-bg-cream">
+        <FFPageHeader title="Family Finance" />
+        <div className="px-4 pt-4">
+          <FFErrorState message={error} onRetry={() => void loadDashboard()} />
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading || !dashboard) {
     return (
@@ -223,7 +228,7 @@ const FinanceDashboardContent: React.FC = () => {
             {todaysTransactions.length === 0 ? (
               <p className="font-body text-xs text-gray-400 py-4 text-center">No transactions today.</p>
             ) : (
-              todaysTransactions.slice(0, 5).map(tx => <TxRow key={tx.transactionId} tx={tx} />)
+              todaysTransactions.slice(0, 5).map(tx => <TxRow key={tx.transactionId} tx={tx} categoryLabel={categoryLabel} />)
             )}
           </FFCard>
         </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Save, SlidersHorizontal } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { FamilyAdminL2Repository, AlertThresholds } from '../repositories/FamilyAdminL2Repository';
 import FFCard from '../../../shared/components/FFCard';
@@ -7,6 +7,8 @@ import FFButton from '../../../shared/components/FFButton';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 interface FieldConfig {
   key: keyof AlertThresholds;
@@ -33,32 +35,32 @@ const formatValue = (field: FieldConfig, value: number): string =>
 
 const SafetyAlertThresholdsScreen: React.FC = () => {
   const { user } = useAuth();
-  const [thresholds, setThresholds] = useState<AlertThresholds | null>(null);
+  const familyId = user?.familyId;
+  const resource = useApiResource<AlertThresholds>(
+    familyId ? () => FamilyAdminL2Repository.getAlertThresholds(familyId) : null,
+    [familyId],
+    'Alert thresholds could not be loaded.',
+  );
+  const thresholds = resource.data;
+  const isLoading = resource.isLoading;
+  const loadError = familyId ? resource.error : 'Family details are not available.';
   const [form, setForm]             = useState<Partial<AlertThresholds>>({});
-  const [isLoading, setIsLoading]   = useState(true);
   const [isSaving, setIsSaving]     = useState(false);
+  const [saveError, setSaveError]   = useState<string | null>(null);
 
-  const load = async () => {
-    if (!user?.familyId) return;
-    setIsLoading(true);
-    try {
-      const data = await FamilyAdminL2Repository.getAlertThresholds(user.familyId);
-      setThresholds(data);
-      setForm({ ...data });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [user?.familyId]);
+  useEffect(() => {
+    if (thresholds) setForm({ ...thresholds });
+  }, [thresholds]);
 
   const handleSave = async () => {
-    if (!user?.familyId) return;
+    if (!familyId) return;
     setIsSaving(true);
+    setSaveError(null);
     try {
-      const updated = await FamilyAdminL2Repository.updateAlertThresholds(user.familyId, form);
-      setThresholds(updated);
-      setForm({ ...updated });
+      const updated = await FamilyAdminL2Repository.updateAlertThresholds(familyId, form);
+      resource.setData(updated);
+    } catch {
+      setSaveError('Alert thresholds could not be saved. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -78,10 +80,13 @@ const SafetyAlertThresholdsScreen: React.FC = () => {
 
         <FFSectionHeader icon={<Save className="w-[18px] h-[18px]" />} title="Thresholds" />
 
+        {saveError && <p role="alert" className="font-body text-sm text-alert">{saveError}</p>}
         {isLoading ? (
           <div className="space-y-3">
             {[...Array(7)].map((_, i) => <FFShimmer key={i} className="h-24 rounded-ff" />)}
           </div>
+        ) : loadError ? (
+          <FFErrorState message={loadError} onRetry={familyId ? resource.reload : undefined} />
         ) : (
           <>
             <div className="space-y-3">

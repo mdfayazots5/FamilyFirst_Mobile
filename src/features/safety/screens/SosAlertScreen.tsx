@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Phone, CheckCircle, MapPin, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { SafetyRepository, LocationAlert } from '../repositories/SafetyRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 // SL-06 — Parent SOS Alert Screen
 // Deep-link from FCM: /safety/sos-alert?alertId=<uuid>&memberId=<uuid>
@@ -17,31 +19,37 @@ const SosAlertScreen: React.FC = () => {
   const alertId  = searchParams.get('alertId');
   const memberId = searchParams.get('memberId');
 
-  const [alert, setAlert]         = useState<LocationAlert | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const familyId = user?.familyId;
+  const resource = useApiResource<LocationAlert | null>(
+    familyId
+      ? () => SafetyRepository.listAlerts(familyId, { alertType: 'SOS', memberId: memberId ?? undefined })
+          .then(({ items }) => {
+            const found = alertId
+              ? items.find(a => a.alertId === alertId)
+              : items.find(a => a.alertType === 'SOS' && !a.isResolved);
+            return found ?? items[0] ?? null;
+          })
+      : null,
+    [familyId, alertId, memberId],
+    'The SOS alert could not be loaded.',
+  );
+  const alert = resource.data;
+  const isLoading = resource.isLoading;
+  const loadError = familyId ? resource.error : 'Family details are not available.';
   const [resolving, setResolving] = useState(false);
   const [note, setNote]           = useState('');
   const [resolved, setResolved]   = useState(false);
-
-  useEffect(() => {
-    if (!user?.familyId) return;
-    SafetyRepository.listAlerts(user.familyId, {
-      alertType: 'SOS',
-      memberId:  memberId ?? undefined,
-    }).then(({ items }) => {
-      const found = alertId
-        ? items.find(a => a.alertId === alertId)
-        : items.find(a => a.alertType === 'SOS' && !a.isResolved);
-      setAlert(found ?? items[0] ?? null);
-    }).finally(() => setIsLoading(false));
-  }, [user?.familyId, alertId, memberId]);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const handleResolve = async () => {
-    if (!user?.familyId || !alert) return;
+    if (!familyId || !alert) return;
     setResolving(true);
+    setActionError(null);
     try {
-      await SafetyRepository.resolveAlert(user.familyId, alert.alertId, note || undefined);
+      await SafetyRepository.resolveAlert(familyId, alert.alertId, note || undefined);
       setResolved(true);
+    } catch {
+      setActionError('The alert could not be resolved. Please try again.');
     } finally {
       setResolving(false);
     }
@@ -55,6 +63,14 @@ const SosAlertScreen: React.FC = () => {
     return (
       <div className="min-h-screen bg-alert flex items-center justify-center">
         <div className="w-12 h-12 rounded-full bg-white/20 animate-pulse" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-bg-cream flex items-center justify-center px-6">
+        <FFErrorState message={loadError} onRetry={familyId ? resource.reload : undefined} />
       </div>
     );
   }
@@ -156,6 +172,7 @@ const SosAlertScreen: React.FC = () => {
             placeholder={`Optional note — e.g. "False alarm" or "Child confirmed safe"`}
             className="w-full border border-black/5 rounded-xl px-3 py-2.5 font-body text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary/20"
           />
+          {actionError && <p role="alert" className="font-body text-sm text-alert mb-2">{actionError}</p>}
           <FFButton onClick={handleResolve} isLoading={resolving} icon={<CheckCircle className="w-4 h-4" />} className="w-full">
             Mark as Resolved
           </FFButton>

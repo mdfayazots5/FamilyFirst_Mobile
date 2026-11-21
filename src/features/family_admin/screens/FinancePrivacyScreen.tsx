@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, Save, Shield, Info } from 'lucide-react';
+import { Save, Shield, Info } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { FamilyAdminL2Repository, FinancePrivacyConfig } from '../repositories/FamilyAdminL2Repository';
+import { FamilyAdminL2Repository, FinancePrivacyConfig, FINANCE_CONSENT_REMINDER_OPTIONS } from '../repositories/FamilyAdminL2Repository';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
-import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 
 const TIER_META = {
   1: { label: 'Full Visibility', colorOn: 'bg-alert text-white border-alert',     colorOff: 'bg-white text-gray-500 border-black/5', desc: 'All transactions + merchant names' },
@@ -14,41 +15,41 @@ const TIER_META = {
   3: { label: 'Aggregate Only',  colorOn: 'bg-success text-white border-success',  colorOff: 'bg-white text-gray-500 border-black/5', desc: 'Monthly total only' },
 };
 
-const REMINDER_OPTIONS = [7, 14, 30, 60, 90];
+const REMINDER_OPTIONS = FINANCE_CONSENT_REMINDER_OPTIONS;
 
 const FinancePrivacyScreen: React.FC = () => {
   const { user } = useAuth();
-  const [config, setConfig] = useState<FinancePrivacyConfig | null>(null);
+  const familyId = user?.familyId;
+  const resource = useApiResource<FinancePrivacyConfig>(
+    familyId ? () => FamilyAdminL2Repository.getFinancePrivacyConfig(familyId) : null,
+    [familyId],
+    'Finance privacy settings could not be loaded.',
+  );
+  const config = resource.data;
+  const isLoading = resource.isLoading;
+  const loadError = familyId ? resource.error : 'Family details are not available.';
   const [form, setForm] = useState<FinancePrivacyConfig>({
     defaultAdultEarningMemberTier: 2,
     defaultIndependentMemberTier: 3,
     consentReminderIntervalDays: 30,
     autoExcludeSalaryCredits: true,
   });
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving]   = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const load = async () => {
-    if (!user?.familyId) return;
-    setIsLoading(true);
-    try {
-      const data = await FamilyAdminL2Repository.getFinancePrivacyConfig(user.familyId);
-      setConfig(data);
-      setForm({ ...data });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [user?.familyId]);
+  useEffect(() => {
+    if (config) setForm({ ...config });
+  }, [config]);
 
   const handleSave = async () => {
-    if (!user?.familyId) return;
+    if (!familyId) return;
     setIsSaving(true);
+    setSaveError(null);
     try {
-      const updated = await FamilyAdminL2Repository.updateFinancePrivacyConfig(user.familyId, form);
-      setConfig(updated);
-      setForm({ ...updated });
+      const updated = await FamilyAdminL2Repository.updateFinancePrivacyConfig(familyId, form);
+      resource.setData(updated);
+    } catch {
+      setSaveError('Finance privacy settings could not be saved. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -79,10 +80,13 @@ const FinancePrivacyScreen: React.FC = () => {
           </p>
         </FFCard>
 
+        {saveError && <p role="alert" className="font-body text-sm text-alert">{saveError}</p>}
         {isLoading ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => <FFShimmer key={i} className="h-28 rounded-ff" />)}
           </div>
+        ) : loadError ? (
+          <FFErrorState message={loadError} onRetry={familyId ? resource.reload : undefined} />
         ) : (
           <>
             {/* Adult Earning Members tier */}

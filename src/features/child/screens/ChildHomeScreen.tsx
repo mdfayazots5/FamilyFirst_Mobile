@@ -18,6 +18,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { RewardRepository } from '../../parent/repositories/RewardRepository';
 import { TaskCompletion, TaskCompletionRepository } from '../repositories/TaskCompletionRepository';
+import { logger } from '../../../core/services/logger';
 
 interface ChildHomeData {
   completions: TaskCompletion[];
@@ -59,7 +60,7 @@ const ChildHomeScreen: React.FC = () => {
   const [state, dispatch] = useReducer(reducer, initialState);
 
   const loadScreen = async () => {
-    if (!user?.familyId || !user?.id) {
+    if (!user?.familyId || !user?.childProfileId) {
       dispatch({ type: 'LOAD_ERROR', error: 'Child details are not available right now.' });
       return;
     }
@@ -69,8 +70,8 @@ const ChildHomeScreen: React.FC = () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const [completions, history] = await Promise.all([
-        TaskCompletionRepository.getCompletions(user.familyId, user.id, today),
-        RewardRepository.getCoinHistory(user.id),
+        TaskCompletionRepository.getCompletions(user.familyId, user.childProfileId, today),
+        RewardRepository.getCoinHistory(user.childProfileId),
       ]);
 
       const coins = history.reduce(
@@ -80,14 +81,14 @@ const ChildHomeScreen: React.FC = () => {
 
       dispatch({ type: 'LOAD_SUCCESS', payload: { completions, coins } });
     } catch (error) {
-      console.error('Failed to load child home', error);
+      logger.error('Failed to load child home', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load your day right now.' });
     }
   };
 
   useEffect(() => {
     void loadScreen();
-  }, [user?.familyId, user?.id]);
+  }, [user?.familyId, user?.childProfileId]);
 
   const screenData = state.data;
   const completions = screenData?.completions ?? [];

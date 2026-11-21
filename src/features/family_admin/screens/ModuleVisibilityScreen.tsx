@@ -1,21 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Save,
-  Info,
-  Eye,
-  EyeOff,
-  Shield,
-  ClipboardList,
-  ShoppingBag,
-  MessageSquare,
-  Calendar,
-  BarChart3,
-  ShieldAlert,
-  Settings,
-} from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Save, Info, Eye, EyeOff, ClipboardList, ShoppingBag, MessageSquare, Calendar, BarChart3, ShieldAlert, Settings } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { FamilyAdminL2Repository } from '../repositories/FamilyAdminL2Repository';
+import {
+  FAMILY_ADMIN_ROLE_OPTIONS,
+  FamilyAdminL2Repository,
+} from '../repositories/FamilyAdminL2Repository';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
@@ -32,12 +21,11 @@ const ROLE_TO_INT: Record<string, number> = { PARENT: 3, CHILD: 4, TEACHER: 5, E
 const ROLE_FROM_INT: Record<number, string> = { 3: 'PARENT', 4: 'CHILD', 5: 'TEACHER', 6: 'ELDER' };
 
 const ModuleVisibilityScreen: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const roles = ['PARENT', 'CHILD', 'TEACHER', 'ELDER'];
+  const roles = FAMILY_ADMIN_ROLE_OPTIONS;
   const roleLabels: Record<string, string> = { PARENT: 'Parent', CHILD: 'Child', TEACHER: 'Teacher', ELDER: 'Elder' };
 
   const modules = [

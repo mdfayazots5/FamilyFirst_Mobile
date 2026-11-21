@@ -4,7 +4,6 @@ import { Heart } from 'lucide-react';
 import { MedicalProvider, useMedical } from '../providers/MedicalProvider';
 import HealthSummaryCard from '../widgets/HealthSummaryCard';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
-import FFButton from '../../../shared/components/FFButton';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import FFErrorState from '../../../shared/components/FFErrorState';
@@ -22,7 +21,7 @@ const HealthHomeContent: React.FC = () => {
         subtitle="Family health profiles · Emergency cards"
         rightAction={
           <button
-            onClick={() => navigate('/medical/add')}
+            onClick={() => navigate('/medical/new')}
             className="p-2 rounded-xl bg-white/10"
             aria-label="Add health profile"
           >
@@ -43,7 +42,7 @@ const HealthHomeContent: React.FC = () => {
             title="No health profiles yet"
             message="Add your family members' health information to get started."
             actionLabel="Add Profile"
-            onAction={() => navigate('/medical/add')}
+            onAction={() => navigate('/medical/new')}
           />
         ) : (
           summaries.map(s => (

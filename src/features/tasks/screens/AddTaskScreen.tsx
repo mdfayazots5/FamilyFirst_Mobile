@@ -1,9 +1,17 @@
 import React, { useEffect, useMemo, useReducer, useState } from 'react';
-import { BookOpen, Calendar, Camera, CheckCircle2, Clock, Coins, Library, Repeat, Tag, Users } from 'lucide-react';
+import { BookOpen, Calendar, CheckCircle2, Clock, Coins, Library, Repeat, Tag, Users } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { FamilyRepository } from '../../family/repositories/FamilyRepository';
-import { PillarTag, TaskItem, TaskRepository, TaskTemplate, TimeBlock } from '../repositories/TaskRepository';
+import {
+  PILLAR_TAG_OPTIONS,
+  PillarTag,
+  TaskItem,
+  TaskLookupOption,
+  TaskRepository,
+  TaskTemplate,
+  TimeBlock,
+} from '../repositories/TaskRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
@@ -12,7 +20,6 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
 
-const pillarTags: PillarTag[] = ['Study', 'Cleanliness', 'Discipline', 'ScreenControl', 'Responsibility'];
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const timeBlocks: Array<{ value: TimeBlock; label: string; detail: string }> = [
   { value: 'Morning', label: 'Morning', detail: 'Start the day well' },
@@ -96,6 +103,22 @@ const AddTaskScreen: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showTemplateSheet, setShowTemplateSheet] = useState(false);
+  const [taskTypes, setTaskTypes] = useState<TaskLookupOption[]>([]);
+  const [taskStatuses, setTaskStatuses] = useState<TaskLookupOption[]>([]);
+  const [selectedTaskTypeCode, setSelectedTaskTypeCode] = useState('');
+  const [selectedTaskStatusCode, setSelectedTaskStatusCode] = useState('');
+
+  useEffect(() => {
+    void Promise.all([
+      TaskRepository.getTaskTypes(),
+      TaskRepository.getTaskStatuses(),
+    ]).then(([types, statuses]) => {
+      setTaskTypes(types);
+      setTaskStatuses(statuses);
+      setSelectedTaskTypeCode(types[0]?.code ?? '');
+      setSelectedTaskStatusCode(statuses[0]?.code ?? '');
+    });
+  }, []);
 
   useEffect(() => {
     const loadBootstrap = async () => {
@@ -315,6 +338,36 @@ const AddTaskScreen: React.FC = () => {
             </section>
 
             <section className="space-y-3">
+              <FFSectionHeader icon={<Tag />} title="Task master data" />
+              <FFCard className="grid gap-3 p-4 sm:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-semibold text-gray-500">Task type</span>
+                  <select
+                    value={selectedTaskTypeCode}
+                    onChange={(event) => setSelectedTaskTypeCode(event.target.value)}
+                    className="min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 text-sm text-primary"
+                  >
+                    {taskTypes.map((option) => (
+                      <option key={option.id} value={option.code}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-semibold text-gray-500">Initial status</span>
+                  <select
+                    value={selectedTaskStatusCode}
+                    onChange={(event) => setSelectedTaskStatusCode(event.target.value)}
+                    className="min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 text-sm text-primary"
+                  >
+                    {taskStatuses.map((option) => (
+                      <option key={option.id} value={option.code}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </FFCard>
+            </section>
+
+            <section className="space-y-3">
               <FFSectionHeader icon={<Clock />} title="Effort and reward" />
               <FFCard className="space-y-4 p-4">
                 <label className="block space-y-2">
@@ -380,7 +433,7 @@ const AddTaskScreen: React.FC = () => {
             <section className="space-y-3">
               <FFSectionHeader icon={<Tag />} title="Focus area" />
               <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-                {pillarTags.map((tag) => {
+                {PILLAR_TAG_OPTIONS.map((tag) => {
                   const selected = pillarTag === tag;
                   return (
                     <FFButton

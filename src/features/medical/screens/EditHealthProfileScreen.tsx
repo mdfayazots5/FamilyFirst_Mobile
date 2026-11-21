@@ -1,29 +1,48 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useReducer, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Plus, Trash2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { MedicalRepository, AllergyEntry } from '../repositories/MedicalRepository';
+import { FamilyRepository, type FamilyMember } from '../../family/repositories/FamilyRepository';
+import {
+  ALLERGY_CATEGORY_OPTIONS,
+  BLOOD_GROUP_OPTIONS,
+  CHRONIC_CONDITION_OPTIONS,
+  MedicalRepository,
+  AllergyEntry,
+} from '../repositories/MedicalRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
-
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-const ALLERGY_CATEGORIES = ['Food', 'Medication', 'Environmental'] as const;
-const CHRONIC_CONDITIONS = ['Asthma', 'Diabetes', 'Epilepsy', 'Heart condition', 'Other'];
+import FFErrorState from '../../../shared/components/FFErrorState';
+import FFShimmer from '../../../shared/components/FFShimmer';
 
 const inputClass = "w-full h-12 px-3 bg-bg-cream rounded-xl border border-black/5 font-body text-sm text-primary focus:outline-none focus:ring-1 focus:ring-primary/20";
 
-const EditHealthProfileScreen: React.FC = () => {
+type LoadState =
+  | { status: 'loading' }
+  | { status: 'failed' }
+  | { status: 'ready'; members: FamilyMember[] };
+
+const EditHealthProfileScreen: React.FC<{ createMode?: boolean }> = ({ createMode = false }) => {
   const navigate = useNavigate();
-  const { memberId } = useParams<{ memberId: string }>();
+  const { memberId: routeMemberId } = useParams<{ memberId: string }>();
   const { user } = useAuth();
+  const familyId = user?.familyId;
+  const [loadState, setLoadState] = useReducer(
+    (_previous: LoadState, next: LoadState) => next,
+    { status: 'loading' },
+  );
+  const [selectedId, setSelectedId] = useState('');
+  const memberId = createMode ? selectedId : routeMemberId;
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [bloodGroup, setBloodGroup] = useState('');
   const [allergies, setAllergies] = useState<AllergyEntry[]>([]);
   const [newAllergyText, setNewAllergyText] = useState('');
-  const [newAllergyCategory, setNewAllergyCategory] = useState<typeof ALLERGY_CATEGORIES[number]>('Food');
+  const [newAllergyCategory, setNewAllergyCategory] = useState<(typeof ALLERGY_CATEGORY_OPTIONS)[number]>('Food');
   const [chronicConditions, setChronicConditions] = useState<string[]>([]);
   const [doctorName, setDoctorName] = useState('');
   const [doctorPhone, setDoctorPhone] = useState('');
@@ -33,8 +52,25 @@ const EditHealthProfileScreen: React.FC = () => {
   const [organDonor, setOrganDonor] = useState(false);
 
   useEffect(() => {
-    if (!user?.familyId || !memberId) return;
-    MedicalRepository.getHealthProfile(user.familyId, memberId).then(p => {
+    let active = true;
+    setLoadState({ status: 'loading' });
+    const load = async () => {
+      if (!familyId) throw new Error('Family unavailable');
+      if (createMode) {
+        const [familyMembers, profiles] = await Promise.all([
+          FamilyRepository.getMembers(familyId),
+          MedicalRepository.listHealthProfiles(familyId),
+        ]);
+        if (!active) return;
+        const existingIds = new Set(profiles.map(profile => profile.memberId));
+        const eligible = familyMembers.filter(member => member.id && !existingIds.has(member.id));
+        setLoadState({ status: 'ready', members: eligible });
+        setSelectedId(previous => eligible.some(member => member.id === previous) ? previous : '');
+        return;
+      }
+      if (!routeMemberId) throw new Error('Family member unavailable');
+      const p = await MedicalRepository.getHealthProfile(familyId, routeMemberId);
+      if (!active) return;
       setBloodGroup(p.bloodGroup);
       setAllergies(p.knownAllergies);
       setChronicConditions(p.chronicConditions);
@@ -44,8 +80,11 @@ const EditHealthProfileScreen: React.FC = () => {
       setContactRelationship(p.emergencyContact?.relationship ?? '');
       setContactPhone(p.emergencyContact?.phone ?? '');
       setOrganDonor(p.organDonor);
-    });
-  }, [user?.familyId, memberId]);
+      setLoadState({ status: 'ready', members: [] });
+    };
+    void load().catch(() => { if (active) setLoadState({ status: 'failed' }); });
+    return () => { active = false; };
+  }, [familyId, routeMemberId, createMode, loadAttempt]);
 
   const addAllergy = () => {
     if (!newAllergyText.trim()) return;
@@ -62,10 +101,11 @@ const EditHealthProfileScreen: React.FC = () => {
     );
 
   const handleSave = async () => {
-    if (!user?.familyId || !memberId) return;
+    if (!familyId || !memberId || loadState.status !== 'ready' || isSaving) return;
     setIsSaving(true);
+    setSaveFailed(false);
     try {
-      await MedicalRepository.updateHealthProfile(user.familyId, memberId, {
+      await MedicalRepository.updateHealthProfile(familyId, memberId, {
         bloodGroup,
         knownAllergies: allergies,
         chronicConditions,
@@ -77,19 +117,50 @@ const EditHealthProfileScreen: React.FC = () => {
         organDonor,
       });
       setIsSaved(true);
-      setTimeout(() => navigate(-1), 800);
+      if (createMode) {
+        navigate(`/medical/${memberId}`, { replace: true });
+      } else {
+        setTimeout(() => navigate(-1), 800);
+      }
     } catch {
-      // keep form open on error
+      setSaveFailed(true);
     } finally {
       setIsSaving(false);
     }
   };
 
+  const header = <FFPageHeader title={createMode ? 'Add Health Profile' : 'Edit Health Profile'} showBack />;
+  if (loadState.status !== 'ready' || (createMode && loadState.members.length === 0)) {
+    return (
+      <div className="min-h-screen bg-bg-cream">
+        {header}
+        <div className="px-4 pt-5 pb-24">
+          {loadState.status === 'loading' && <FFShimmer className="h-32 rounded-ff" />}
+          {loadState.status === 'failed' && (
+            <FFErrorState message="Unable to load health profile details." onRetry={() => setLoadAttempt(attempt => attempt + 1)} />
+          )}
+          {loadState.status === 'ready' && (
+            <p className="font-body text-sm text-primary">All family members already have a health profile.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-bg-cream">
-      <FFPageHeader title="Edit Health Profile" showBack />
+      {header}
 
       <div className="px-4 pt-5 pb-24 space-y-5">
+        {createMode && (
+          <label className="block space-y-2 font-body text-sm font-semibold text-primary">
+            <span>Family member</span>
+            <select className={inputClass} value={selectedId} disabled={isSaving} onChange={event => setSelectedId(event.target.value)}>
+              <option value="">Select a family member</option>
+              {loadState.members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
+            </select>
+          </label>
+        )}
 
         {/* Blood Group */}
         <div>
@@ -97,7 +168,7 @@ const EditHealthProfileScreen: React.FC = () => {
             Blood Group *
           </label>
           <div className="grid grid-cols-4 gap-2">
-            {BLOOD_GROUPS.map(bg => (
+            {BLOOD_GROUP_OPTIONS.map(bg => (
               <button
                 key={bg}
                 onClick={() => setBloodGroup(bg)}
@@ -142,10 +213,10 @@ const EditHealthProfileScreen: React.FC = () => {
             />
             <select
               value={newAllergyCategory}
-              onChange={e => setNewAllergyCategory(e.target.value as typeof ALLERGY_CATEGORIES[number])}
+              onChange={e => setNewAllergyCategory(e.target.value as (typeof ALLERGY_CATEGORY_OPTIONS)[number])}
               className="px-2 py-2.5 bg-white rounded-xl border border-black/5 font-body text-xs focus:outline-none"
             >
-              {ALLERGY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {ALLERGY_CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <button
               onClick={addAllergy}
@@ -163,7 +234,7 @@ const EditHealthProfileScreen: React.FC = () => {
             Chronic Conditions
           </label>
           <div className="flex flex-wrap gap-2">
-            {CHRONIC_CONDITIONS.map(c => (
+            {CHRONIC_CONDITION_OPTIONS.map(c => (
               <button
                 key={c}
                 onClick={() => toggleCondition(c)}
@@ -215,10 +286,11 @@ const EditHealthProfileScreen: React.FC = () => {
             <span className="font-body text-sm font-medium text-success">Profile saved!</span>
           </div>
         ) : (
-          <FFButton onClick={handleSave} disabled={!bloodGroup || isSaving} isLoading={isSaving} className="w-full">
+          <FFButton onClick={handleSave} disabled={!memberId || !bloodGroup || isSaving} isLoading={isSaving} className="w-full">
             Save Profile
           </FFButton>
         )}
+        {saveFailed && <p role="alert" className="font-body text-sm text-alert">Unable to save the health profile. Try again.</p>}
       </div>
     </div>
   );

@@ -1,50 +1,48 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { RefreshCw, Save, Plus, Trash2, Phone, ShieldAlert } from 'lucide-react';
+import { Save, Plus, Trash2, Phone, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import {
   FamilyAdminL2Repository,
   EmergencyAccessRules,
   EmergencyContact,
+  EMERGENCY_ACCESS_MODE_OPTIONS,
+  EMERGENCY_LINK_EXPIRY_OPTIONS,
 } from '../repositories/FamilyAdminL2Repository';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 
-const ACCESS_MODES = [
-  { id: 'LoginRequired', label: 'Login Required',  desc: 'Viewer must sign in to FamilyFirst.' },
-  { id: 'PinOnly',       label: 'PIN Only',         desc: 'Access via a numeric PIN — no FamilyFirst account needed.' },
-  { id: 'NoLogin',       label: 'No Login',         desc: 'Emergency folder viewable by anyone with the link. Only for Emergency Folder.' },
-] as const;
-
-const EXPIRY_OPTIONS = [24, 48, 72, 120, 168];
+const ACCESS_MODES = EMERGENCY_ACCESS_MODE_OPTIONS;
+const EXPIRY_OPTIONS = EMERGENCY_LINK_EXPIRY_OPTIONS;
 
 const EmergencyAccessRulesScreen: React.FC = () => {
   const { user } = useAuth();
-  const [rules, setRules]         = useState<EmergencyAccessRules | null>(null);
+  const familyId = user?.familyId;
+  // API data in the resource; mode/expiry/contacts are form state seeded from each load or save.
+  const resource = useApiResource<EmergencyAccessRules>(
+    familyId ? () => FamilyAdminL2Repository.getEmergencyConfig(familyId) : null,
+    [familyId],
+    'Emergency access rules could not be loaded.',
+  );
+  const rules = resource.data;
+  const isLoading = resource.isLoading;
+  const loadError = familyId ? resource.error : 'Family details are not available.';
   const [mode, setMode]           = useState<EmergencyAccessRules['accessMode']>('LoginRequired');
   const [expiry, setExpiry]       = useState(72);
   const [contacts, setContacts]   = useState<EmergencyContact[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving]   = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const load = async () => {
-    if (!user?.familyId) return;
-    setIsLoading(true);
-    try {
-      const data = await FamilyAdminL2Repository.getEmergencyConfig(user.familyId);
-      setRules(data);
-      setMode(data.accessMode);
-      setExpiry(data.emergencyLinkExpiryHours);
-      setContacts([...data.emergencyContacts]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [user?.familyId]);
+  useEffect(() => {
+    if (!rules) return;
+    setMode(rules.accessMode);
+    setExpiry(rules.emergencyLinkExpiryHours);
+    setContacts([...rules.emergencyContacts]);
+  }, [rules]);
 
   const addContact = () => {
     if (contacts.length >= 3) return;
@@ -57,15 +55,18 @@ const EmergencyAccessRulesScreen: React.FC = () => {
     setContacts(prev => prev.map((c, idx) => idx === i ? { ...c, [field]: value } : c));
 
   const handleSave = async () => {
-    if (!user?.familyId) return;
+    if (!familyId) return;
     setIsSaving(true);
+    setSaveError(null);
     try {
-      const updated = await FamilyAdminL2Repository.updateEmergencyConfig(user.familyId, {
+      const updated = await FamilyAdminL2Repository.updateEmergencyConfig(familyId, {
         accessMode: mode,
         emergencyLinkExpiryHours: expiry,
         emergencyContacts: contacts.filter(c => c.name && c.phoneNumber),
       });
-      setRules(updated);
+      resource.setData(updated);
+    } catch {
+      setSaveError('Emergency access rules could not be saved. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -81,10 +82,13 @@ const EmergencyAccessRulesScreen: React.FC = () => {
 
       <main className="px-4 py-5 space-y-4 page-enter">
 
+        {saveError && <p role="alert" className="font-body text-sm text-alert">{saveError}</p>}
         {isLoading ? (
           <div className="space-y-3">
             {[...Array(3)].map((_, i) => <FFShimmer key={i} className="h-32 rounded-ff" />)}
           </div>
+        ) : loadError ? (
+          <FFErrorState message={loadError} onRetry={familyId ? resource.reload : undefined} />
         ) : (
           <>
             {/* Access mode */}

@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { Syringe, Plus } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { MedicalRepository, VaccinationEntry } from '../repositories/MedicalRepository';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 const STATUS_ORDER = { Overdue: 0, Due: 1, Given: 2, NotApplicable: 3 };
 
@@ -16,32 +18,36 @@ const STATUS_STYLE: Record<string, { border: string; badge: string }> = {
 };
 
 const VaccinationTrackerScreen: React.FC = () => {
-  const navigate = useNavigate();
   const { memberId } = useParams<{ memberId: string }>();
   const { user } = useAuth();
 
-  const [vaccinations, setVaccinations] = useState<VaccinationEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const familyId = user?.familyId;
+  const resource = useApiResource<VaccinationEntry[]>(
+    familyId && memberId
+      ? () => MedicalRepository.listVaccinations(familyId, memberId)
+          .then(v => [...v].sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)))
+      : null,
+    [familyId, memberId],
+    'Vaccinations could not be loaded.',
+  );
+  const vaccinations = resource.data ?? [];
+  const isLoading = resource.isLoading;
+  const loadError = familyId && memberId ? resource.error : 'Member details are not available.';
   const [markingId, setMarkingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!user?.familyId || !memberId) return;
-    MedicalRepository.listVaccinations(user.familyId, memberId)
-      .then(v => setVaccinations([...v].sort((a, b) =>
-        (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9),
-      )))
-      .finally(() => setIsLoading(false));
-  }, [user?.familyId, memberId]);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const markAsGiven = async (vaccinationId: string) => {
-    if (!user?.familyId || !memberId) return;
+    if (!familyId || !memberId) return;
     setMarkingId(vaccinationId);
+    setActionError(null);
     try {
       const today = new Date().toISOString().split('T')[0];
       const updated = await MedicalRepository.updateVaccinationStatus(
-        user.familyId, memberId, vaccinationId, { status: 'Given', givenDate: today },
+        familyId, memberId, vaccinationId, { status: 'Given', givenDate: today },
       );
-      setVaccinations(prev => prev.map(v => v.vaccinationId === vaccinationId ? updated : v));
+      resource.setData(vaccinations.map(v => v.vaccinationId === vaccinationId ? updated : v));
+    } catch {
+      setActionError('The vaccination could not be updated. Please try again.');
     } finally {
       setMarkingId(null);
     }
@@ -56,10 +62,13 @@ const VaccinationTrackerScreen: React.FC = () => {
       />
 
       <div className="px-4 pt-4 pb-24 space-y-3">
+        {actionError && <p role="alert" className="font-body text-sm text-alert">{actionError}</p>}
         {isLoading ? (
           <div className="space-y-2">
             {[...Array(5)].map((_, i) => <FFShimmer key={i} className="h-16 rounded-ff" />)}
           </div>
+        ) : loadError ? (
+          <FFErrorState message={loadError} onRetry={familyId && memberId ? resource.reload : undefined} />
         ) : (
           <>
             {vaccinations.map(v => {

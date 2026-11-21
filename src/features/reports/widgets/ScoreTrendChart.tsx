@@ -9,28 +9,30 @@ import {
   ResponsiveContainer,
   Legend
 } from 'recharts';
+import type { ScoreHistoryPoint } from '../repositories/ReportsRepository';
+import { PILLAR_LABELS, PILLAR_MAX } from './ScoreRadarWidget';
 
 interface ScoreTrendChartProps {
-  data: {
-    date: string;
-    pillars: {
-      discipline: number;
-      learning: number;
-      contribution: number;
-      health: number;
-      social: number;
-    };
-  }[];
+  data: ScoreHistoryPoint[];
 }
+
+// Recharts SVG stroke requires hex strings — CSS tokens don't apply here
+const PILLAR_STROKES = {
+  study: '#1A2E4A',
+  cleanliness: '#2D6A4F',
+  discipline: '#C8922A',
+  screenControl: '#C1121F',
+  responsibility: '#6366f1',
+} as const;
 
 const ScoreTrendChart: React.FC<ScoreTrendChartProps> = ({ data }) => {
   const chartData = data.map(d => ({
     date: new Date(d.date).toLocaleDateString([], { month: 'short', day: 'numeric' }),
-    Discipline: d.pillars.discipline,
-    Learning: d.pillars.learning,
-    Contribution: d.pillars.contribution,
-    Health: d.pillars.health,
-    Social: d.pillars.social,
+    [PILLAR_LABELS.study]: d.pillars.study,
+    [PILLAR_LABELS.cleanliness]: d.pillars.cleanliness,
+    [PILLAR_LABELS.discipline]: d.pillars.discipline,
+    [PILLAR_LABELS.screenControl]: d.pillars.screenControl,
+    [PILLAR_LABELS.responsibility]: d.pillars.responsibility,
   }));
 
   return (
@@ -38,25 +40,23 @@ const ScoreTrendChart: React.FC<ScoreTrendChartProps> = ({ data }) => {
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-          <XAxis 
-            dataKey="date" 
-            tick={{ fontSize: 10, fill: '#9ca3af' }} 
+          <XAxis
+            dataKey="date"
+            tick={{ fontSize: 10, fill: '#9ca3af' }}
             axisLine={false}
             tickLine={false}
           />
-          <YAxis 
-            hide 
-            domain={[0, 100]} 
+          <YAxis
+            hide
+            domain={[0, PILLAR_MAX]}
           />
-          <Tooltip 
+          <Tooltip
             contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
           />
           <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }} />
-          <Line type="monotone" dataKey="Discipline" stroke="#6366f1" strokeWidth={3} dot={false} />
-          <Line type="monotone" dataKey="Learning" stroke="#10b981" strokeWidth={3} dot={false} />
-          <Line type="monotone" dataKey="Contribution" stroke="#f59e0b" strokeWidth={3} dot={false} />
-          <Line type="monotone" dataKey="Health" stroke="#ef4444" strokeWidth={3} dot={false} />
-          <Line type="monotone" dataKey="Social" stroke="#8b5cf6" strokeWidth={3} dot={false} />
+          {(Object.keys(PILLAR_STROKES) as (keyof typeof PILLAR_STROKES)[]).map((key) => (
+            <Line key={key} type="monotone" dataKey={PILLAR_LABELS[key]} stroke={PILLAR_STROKES[key]} strokeWidth={3} dot={false} />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     </div>

@@ -12,6 +12,8 @@ import { useAuth } from '../../../core/auth/AuthContext';
 import {
   CalendarEvent,
   CalendarRepository,
+  CALENDAR_REMINDER_OPTIONS,
+  CALENDAR_VISIBILITY_OPTIONS,
   EventType,
   EventTypeOption,
 } from '../repositories/CalendarRepository';
@@ -32,9 +34,6 @@ type BootstrapAction =
   | { type: 'LOAD_START' }
   | { type: 'LOAD_SUCCESS'; payload: { eventTypes: EventTypeOption[]; existingEvent: CalendarEvent | null } }
   | { type: 'LOAD_ERROR'; error: string };
-
-const visibilityOptions = ['Family', 'Parent', 'Child', 'Elder'];
-const reminderOptions = ['5min', '15min', '30min', '1hr', '2hr', '1day', '3days'];
 
 const bootstrapReducer = (state: BootstrapState, action: BootstrapAction): BootstrapState => {
   switch (action.type) {
@@ -390,7 +389,7 @@ const CreateEventScreen: React.FC = () => {
                   visibility selection per event.
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {visibilityOptions.map((option) => (
+                  {CALENDAR_VISIBILITY_OPTIONS.map((option) => (
                     <FFButton
                       key={option}
                       type="button"
@@ -408,7 +407,7 @@ const CreateEventScreen: React.FC = () => {
               <FFSectionHeader icon={<Bell />} title="Reminders" />
               <FFCard className="space-y-4 p-4 shadow-card">
                 <div className="grid gap-3 sm:grid-cols-3">
-                  {reminderOptions.map((option) => {
+                  {CALENDAR_REMINDER_OPTIONS.map((option) => {
                     const selected = formData.reminders?.includes(option) ?? false;
 
                     return (

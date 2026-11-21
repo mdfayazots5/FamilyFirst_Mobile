@@ -48,32 +48,35 @@ const SOSButton: React.FC = () => {
   }, []);
 
   const dispatch = useCallback(async () => {
-    if (!user?.familyId) return;
+    const familyId = user?.familyId;
+    if (!familyId) {
+      setState('error');
+      return;
+    }
+
+    // The send runs inside geolocation callbacks, so it needs its own try/catch: an outer try never sees
+    // those rejections (before R6 a failed SOS left the child with no feedback at all).
+    const send = async (latitude: number, longitude: number) => {
+      try {
+        const sos = await SafetyRepository.triggerSos(familyId, {
+          latitude, longitude, timestamp: new Date().toISOString(),
+        });
+        setAlertsSent(sos.alertsSentCount);
+        setState('dispatched');
+      } catch {
+        setState('error');
+      }
+    };
 
     try {
       navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const sos = await SafetyRepository.triggerSos(user.familyId!, {
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            timestamp: new Date().toISOString(),
-          });
-          setAlertsSent(sos.alertsSentCount);
-          setState('dispatched');
-        },
-        async () => {
-          // No GPS — send with approximate zeros; server logs the attempt
-          const sos = await SafetyRepository.triggerSos(user.familyId!, {
-            latitude: 0, longitude: 0,
-            timestamp: new Date().toISOString(),
-          });
-          setAlertsSent(sos.alertsSentCount);
-          setState('dispatched');
-        },
+        (pos) => { void send(pos.coords.latitude, pos.coords.longitude); },
+        // No GPS — send with approximate zeros; server logs the attempt
+        () => { void send(0, 0); },
         { timeout: 5000, maximumAge: 30000 },
       );
     } catch {
-      setState('error');
+      void send(0, 0);
     }
   }, [user?.familyId]);
 
@@ -137,8 +140,13 @@ const SOSButton: React.FC = () => {
           <Zap className="w-9 h-9 text-white" />
         </button>
       </div>
+      {state === 'error' && (
+        <p role="alert" className="max-w-[16rem] text-sm font-semibold text-red-700 text-center bg-white rounded-xl px-3 py-2 shadow">
+          The alert could not be sent. Hold the button again, or call a parent directly.
+        </p>
+      )}
       <p className="text-xs text-gray-500 text-center">
-        {state === 'holding' ? 'Hold…' : 'Hold 2s for SOS'}
+        {state === 'holding' ? 'Hold…' : state === 'error' ? 'Hold 2s to retry SOS' : 'Hold 2s for SOS'}
       </p>
     </div>
   );

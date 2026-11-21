@@ -15,6 +15,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { ChildDetail, ChildRepository } from '../../parent/repositories/ChildRepository';
 import { TaskCompletion, TaskCompletionRepository } from '../repositories/TaskCompletionRepository';
+import { logger } from '../../../core/services/logger';
 
 interface ScoresData {
   child: ChildDetail;
@@ -55,7 +56,7 @@ const MyScoresScreen: React.FC = () => {
   const [state, dispatch] = useReducer(reducer, initialState);
 
   const loadScreen = async () => {
-    if (!user?.familyId || !user?.id) {
+    if (!user?.familyId || !user?.childProfileId) {
       dispatch({ type: 'LOAD_ERROR', error: 'Your score details are not available right now.' });
       return;
     }
@@ -65,20 +66,20 @@ const MyScoresScreen: React.FC = () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const [child, completions] = await Promise.all([
-        ChildRepository.getChildDetail(user.familyId, user.id),
-        TaskCompletionRepository.getCompletions(user.familyId, user.id, today),
+        ChildRepository.getChildDetail(user.familyId, user.childProfileId),
+        TaskCompletionRepository.getCompletions(user.familyId, user.childProfileId, today),
       ]);
 
       dispatch({ type: 'LOAD_SUCCESS', payload: { child, completions } });
     } catch (error) {
-      console.error('Failed to load child scores', error);
+      logger.error('Failed to load child scores', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load your scores right now.' });
     }
   };
 
   useEffect(() => {
     void loadScreen();
-  }, [user?.familyId, user?.id]);
+  }, [user?.familyId, user?.childProfileId]);
 
   const screenData = state.data;
   const completions = screenData?.completions ?? [];

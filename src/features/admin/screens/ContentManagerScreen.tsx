@@ -1,20 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Plus, Edit3, Trash2, HelpCircle, Lightbulb, BookOpen, X, CheckCircle2 } from 'lucide-react';
+import { HelpCircle, Lightbulb, BookOpen, X } from 'lucide-react';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFBadge from '../../../shared/components/FFBadge';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
-
-interface ContentItem {
-  id: string;
-  type: 'onboarding' | 'tip' | 'faq';
-  title: string;
-  content: string;
-  status: 'active' | 'draft';
-}
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { AdminContentItem, AdminRepository } from '../repositories/AdminRepository';
 
 type ContentType = 'onboarding' | 'tip' | 'faq';
 
@@ -34,19 +28,27 @@ const getTabIcon = (type: ContentType, size = 'w-[18px] h-[18px]') => {
 
 const ContentManagerScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ContentType>('onboarding');
-  const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<AdminContentItem | null>(null);
+  const [items, setItems] = useState<AdminContentItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [items, setItems] = useState<ContentItem[]>([
-    { id: '1', type: 'onboarding', title: 'Welcome to FamilyFirst', content: 'The all-in-one family coordination app.', status: 'active' },
-    { id: '2', type: 'onboarding', title: 'Track Attendance',        content: 'Never miss a class with real-time tracking.', status: 'active' },
-    { id: '3', type: 'tip',        title: 'Morning Routine',         content: 'Set tasks the night before to save time.', status: 'active' },
-    { id: '4', type: 'faq',        title: 'How to redeem coins?',    content: 'Go to the Reward Shop in the child app.', status: 'active' },
-  ]);
+  const fetchItems = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setItems(await AdminRepository.getContentItems());
+    } catch {
+      setError('Could not load content. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => { void fetchItems(); }, []);
 
   const filteredItems = items.filter(item => item.type === activeTab);
   const activeLabel = TAB_CONFIG.find(t => t.id === activeTab)?.label ?? '';
-
-  const handleSave = () => setSelectedItem(null);
 
   return (
     <div className="min-h-screen bg-bg-cream pb-24">
@@ -54,9 +56,6 @@ const ContentManagerScreen: React.FC = () => {
         title="Content Manager"
         subtitle="Onboarding, tips, and FAQs"
         showBack
-        rightAction={
-          <FFButton size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => {}}>Add</FFButton>
-        }
       />
 
       <main className="px-4 py-5 space-y-5 page-enter">
@@ -107,13 +106,19 @@ const ContentManagerScreen: React.FC = () => {
             }
           />
 
-          {filteredItems.length === 0 ? (
+          {isLoading ? (
+            <FFEmptyState
+              icon={getTabIcon(activeTab, 'w-8 h-8')}
+              title="Loading Content"
+              message="Please wait while content is loaded."
+            />
+          ) : error ? (
+            <FFErrorState message={error} onRetry={() => void fetchItems()} />
+          ) : filteredItems.length === 0 ? (
             <FFEmptyState
               icon={getTabIcon(activeTab, 'w-8 h-8')}
               title="No Content Yet"
               message={`Add your first ${activeLabel.toLowerCase()} item.`}
-              actionLabel="Add Item"
-              onAction={() => {}}
             />
           ) : (
             <div className="space-y-3">
@@ -131,19 +136,6 @@ const ContentManagerScreen: React.FC = () => {
                       <FFBadge variant={item.status === 'active' ? 'success' : 'gray'}>
                         {item.status === 'active' ? 'Live' : 'Draft'}
                       </FFBadge>
-                      <button
-                        onClick={() => setSelectedItem(item)}
-                        className="p-2 text-gray-300 hover:text-primary transition-colors"
-                        aria-label="Edit item"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        className="p-2 text-gray-300 hover:text-alert transition-colors"
-                        aria-label="Delete item"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
                     </div>
                   </div>
                 </FFCard>
@@ -215,13 +207,6 @@ const ContentManagerScreen: React.FC = () => {
               <div className="p-5 pt-0 flex gap-3">
                 <FFButton variant="outline" className="flex-1" onClick={() => setSelectedItem(null)}>
                   Cancel
-                </FFButton>
-                <FFButton
-                  className="flex-1"
-                  icon={<CheckCircle2 className="w-4 h-4" />}
-                  onClick={handleSave}
-                >
-                  Save
                 </FFButton>
               </div>
             </motion.div>

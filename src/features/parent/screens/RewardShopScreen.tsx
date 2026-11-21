@@ -15,6 +15,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { Redemption, Reward, RewardRepository } from '../repositories/RewardRepository';
+import { logger } from '../../../core/services/logger';
 
 type RewardTab = 'active' | 'pending';
 
@@ -83,7 +84,7 @@ const RewardShopScreen: React.FC = () => {
 
       dispatch({ type: 'LOAD_SUCCESS', payload: { rewards, pending } });
     } catch (error) {
-      console.error('Failed to load reward shop', error);
+      logger.error('Failed to load reward shop', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load rewards right now.' });
     }
   };
@@ -110,7 +111,7 @@ const RewardShopScreen: React.FC = () => {
       );
       dispatch({ type: 'REWARDS_UPDATED', payload: nextRewards });
     } catch (error) {
-      console.error('Failed to toggle reward', error);
+      logger.error('Failed to toggle reward', error);
     }
   };
 
@@ -124,7 +125,7 @@ const RewardShopScreen: React.FC = () => {
       const nextPending = (rewardData?.pending ?? []).filter((entry) => entry.id !== item.id);
       dispatch({ type: 'PENDING_UPDATED', payload: nextPending });
     } catch (error) {
-      console.error('Failed to review redemption', error);
+      logger.error('Failed to review redemption', error);
     }
   };
 

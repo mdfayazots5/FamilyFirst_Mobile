@@ -7,7 +7,7 @@ import type { DocumentCategory } from '../repositories/VaultRepository';
 
 interface CategoryTileProps {
   category: number;
-  categoryName: DocumentCategory;
+  categoryName: DocumentCategory | string;
   documentCount: number;
   expiringCount: number;
   onClick: () => void;

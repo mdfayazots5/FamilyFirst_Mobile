@@ -18,6 +18,7 @@ import FFButton from '../../../shared/components/FFButton';
 import { CalendarEvent, CalendarRepository } from '../../calendar/repositories/CalendarRepository';
 import { FamilyGoal, FamilyGoalRepository } from '../../family/repositories/FamilyGoalRepository';
 import { Appreciation, ElderRepository, GrandchildStatus } from '../../elder/repositories/ElderRepository';
+import { logger } from '../../../core/services/logger';
 
 interface ChildFamilyData {
   goals: FamilyGoal[];
@@ -86,7 +87,7 @@ const ChildFamilyScreen: React.FC = () => {
         },
       });
     } catch (error) {
-      console.error('Failed to load child family screen', error);
+      logger.error('Failed to load child family screen', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load your family space right now.' });
     }
   };

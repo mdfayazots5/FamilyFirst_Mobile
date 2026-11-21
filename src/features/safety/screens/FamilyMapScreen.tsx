@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { MapPin, Battery, AlertTriangle } from 'lucide-react';
 import { SafetyProvider, useSafety } from '../providers/SafetyProvider';
 import FFCard from '../../../shared/components/FFCard';
@@ -18,7 +17,6 @@ const ZONE_COLORS: Record<string, string> = {
 };
 
 const FamilyMapContent: React.FC = () => {
-  const navigate = useNavigate();
   const { mapView, isLoading, loadMapView } = useSafety();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { Send, MessageSquare, CheckCircle2 } from 'lucide-react';
-import { AdminRepository } from '../repositories/AdminRepository';
+import {
+  ADMIN_CAMPAIGN_ROLE_OPTIONS,
+  ADMIN_CAMPAIGN_SCHEDULE_OPTIONS,
+  AdminRepository,
+} from '../repositories/AdminRepository';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFBadge from '../../../shared/components/FFBadge';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import { logger } from '../../../core/services/logger';
 
 const NotificationCampaignScreen: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
@@ -29,13 +34,13 @@ const NotificationCampaignScreen: React.FC = () => {
         setCampaign({ title: '', body: '', targetRole: 'All', scheduledFor: 'Immediate' });
       }, 3000);
     } catch (err) {
-      console.error('Failed to send campaign', err);
+      logger.error('Failed to send campaign', err);
     } finally {
       setIsSending(false);
     }
   };
 
-  const roles = ['All', 'Parent', 'Child', 'Teacher', 'Elder'];
+  const roles = ADMIN_CAMPAIGN_ROLE_OPTIONS;
 
   return (
     <div className="min-h-screen bg-bg-cream pb-24">
@@ -101,9 +106,9 @@ const NotificationCampaignScreen: React.FC = () => {
                   value={campaign.scheduledFor}
                   onChange={e => setCampaign({ ...campaign, scheduledFor: e.target.value })}
                 >
-                  <option value="Immediate">Immediate</option>
-                  <option value="In 1 Hour">In 1 Hour</option>
-                  <option value="Tomorrow">Tomorrow</option>
+                  {ADMIN_CAMPAIGN_SCHEDULE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
                 </select>
               </div>
             </div>

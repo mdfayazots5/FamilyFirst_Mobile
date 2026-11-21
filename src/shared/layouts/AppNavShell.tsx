@@ -1,6 +1,6 @@
 import React from 'react';
+import type { LucideProps } from 'lucide-react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
 import { useAuth, UserRole } from '../../core/auth/AuthContext';
 import { useNotifications } from '../../features/notifications/providers/NotificationProvider';
 import OfflineBanner from '../../core/connectivity/OfflineBanner';
@@ -199,7 +199,7 @@ const AppNavShell: React.FC = () => {
               <>
                 {/* Active indicator bar */}
                 <div className={`h-0.5 w-6 rounded-full mb-0.5 transition-colors ${isActive ? 'bg-accent' : 'bg-transparent'}`} />
-                {React.cloneElement(item.icon as React.ReactElement, { size: 22 })}
+                {React.cloneElement(item.icon as React.ReactElement<LucideProps>, { size: 22 })}
                 <span className="font-body font-semibold text-[10px] leading-none mt-0.5">{item.label}</span>
               </>
             )}

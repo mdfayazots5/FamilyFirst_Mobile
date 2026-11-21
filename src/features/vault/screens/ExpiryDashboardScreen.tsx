@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
@@ -9,25 +9,27 @@ import FFEmptyState from '../../../shared/components/FFEmptyState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import FFCard from '../../../shared/components/FFCard';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 const ExpiryDashboardScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [documents, setDocuments] = useState<VaultDocument[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (!user?.familyId) return;
-    VaultRepository.getExpiringDocuments(user.familyId)
-      .then(docs => {
-        const priority = { Red: 0, Amber: 1, Green: 2, None: 3 };
-        setDocuments([...docs].sort((a, b) =>
-          (priority[a.expiryStatus] ?? 3) - (priority[b.expiryStatus] ?? 3),
-        ));
-      })
-      .finally(() => setIsLoading(false));
-  }, [user?.familyId]);
+  const familyId = user?.familyId;
+  const resource = useApiResource<VaultDocument[]>(
+    familyId
+      ? () => VaultRepository.getExpiringDocuments(familyId).then(docs => {
+          const priority = { Red: 0, Amber: 1, Green: 2, None: 3 };
+          return [...docs].sort((a, b) => (priority[a.expiryStatus] ?? 3) - (priority[b.expiryStatus] ?? 3));
+        })
+      : null,
+    [familyId],
+    'Expiring documents could not be loaded.',
+  );
+  const documents = resource.data ?? [];
+  const isLoading = resource.isLoading;
+  const loadError = familyId ? resource.error : 'Family details are not available.';
 
   const redCount   = documents.filter(d => d.expiryStatus === 'Red').length;
   const amberCount = documents.filter(d => d.expiryStatus === 'Amber').length;
@@ -62,6 +64,8 @@ const ExpiryDashboardScreen: React.FC = () => {
           <div className="space-y-2">
             {[...Array(5)].map((_, i) => <FFShimmer key={i} className="h-16 rounded-ff" />)}
           </div>
+        ) : loadError ? (
+          <FFErrorState message={loadError} onRetry={familyId ? resource.reload : undefined} />
         ) : documents.length === 0 ? (
           <FFEmptyState
             title="All documents are current"

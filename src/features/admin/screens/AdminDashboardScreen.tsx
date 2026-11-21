@@ -29,17 +29,10 @@ const adminModules = [
   { id: 'config',    label: 'Configuration', desc: 'Platform settings and flags', Icon: Settings,  path: '/admin/config' },
 ];
 
-const activityLogs = [
-  { id: 1, dotColor: 'bg-primary/60',  message: 'Family sync completed for Sharma Family', time: '2 min ago' },
-  { id: 2, dotColor: 'bg-accent',      message: 'Latency spike detected — resolved',        time: '8 min ago' },
-  { id: 3, dotColor: 'bg-primary/60',  message: 'New family registered: Iyer Family',       time: '21 min ago' },
-  { id: 4, dotColor: 'bg-success',     message: 'Admin login verified',                     time: '34 min ago' },
-  { id: 5, dotColor: 'bg-black/20',    message: 'Encryption handshake confirmed',           time: '1 hr ago' },
-];
-
 const AdminDashboardScreen: React.FC = () => {
   const navigate = useNavigate();
   const [stats, setStats]       = useState<AdminDashboardStats | null>(null);
+  const [activityLogs, setActivityLogs] = useState<Array<{ id: string; dotColor: string; message: string; time: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
@@ -47,8 +40,12 @@ const AdminDashboardScreen: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await AdminRepository.getDashboardStats();
+      const [data, logs] = await Promise.all([
+        AdminRepository.getDashboardStats(),
+        AdminRepository.getActivityLogs(),
+      ]);
       setStats(data);
+      setActivityLogs(logs);
     } catch {
       setError('Could not load dashboard. Please try again.');
     } finally {
@@ -90,7 +87,7 @@ const AdminDashboardScreen: React.FC = () => {
             <p className="font-body text-white/60 text-xs">Platform overview</p>
             <p className="font-display font-bold text-xl text-white mt-0.5 truncate">Control Center</p>
           </div>
-          <FFBadge variant="neutral">v{AppConfig.version}</FFBadge>
+          <FFBadge variant="gray">v{AppConfig.version}</FFBadge>
         </div>
         <p className="font-body text-white/50 text-xs mt-3">All systems running smoothly</p>
       </div>

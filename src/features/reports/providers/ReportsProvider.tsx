@@ -1,12 +1,15 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { ReportsRepository, WeeklyDigest, AttendanceDay, ScoreHistoryPoint } from '../repositories/ReportsRepository';
+import { ReportsRepository, WeeklyDigest, AttendanceSummary, ScoreHistoryPoint } from '../repositories/ReportsRepository';
+import { logger } from '../../../core/services/logger';
 
 interface ReportsContextType {
   weeklyDigest: WeeklyDigest | null;
   isLoading: boolean;
   fetchWeeklyDigest: (weekStartDate: string) => Promise<void>;
-  fetchAttendanceSummary: (childId: string, from: string, to: string) => Promise<AttendanceDay[]>;
+  /** from / to: yyyy-mm-dd. Rejects when the user has no family. */
+  fetchAttendanceSummary: (childId: string, from: string, to: string) => Promise<AttendanceSummary>;
+  /** Rejects when the user has no family. */
   fetchScoreHistory: (childId: string) => Promise<ScoreHistoryPoint[]>;
 }
 
@@ -24,19 +27,21 @@ export const ReportsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const data = await ReportsRepository.getWeeklyDigest(user.familyId, weekStartDate);
       setWeeklyDigest(data);
     } catch (error) {
-      console.error('Failed to fetch weekly digest', error);
+      logger.error('Failed to fetch weekly digest', error);
     } finally {
       setIsLoading(false);
     }
   }, [user?.familyId]);
 
   const fetchAttendanceSummary = useCallback(async (childId: string, from: string, to: string) => {
-    return await ReportsRepository.getAttendanceSummary(childId, from, to);
-  }, []);
+    if (!user?.familyId) throw new Error('No family selected');
+    return await ReportsRepository.getAttendanceSummary(user.familyId, childId, from, to);
+  }, [user?.familyId]);
 
   const fetchScoreHistory = useCallback(async (childId: string) => {
-    return await ReportsRepository.getScoreHistory(childId);
-  }, []);
+    if (!user?.familyId) throw new Error('No family selected');
+    return await ReportsRepository.getScoreHistory(user.familyId, childId);
+  }, [user?.familyId]);
 
   return (
     <ReportsContext.Provider value={{ 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
-import { Calendar, CheckCircle2, Clock, Plus, RefreshCw, Sparkles, Trash2, Users } from 'lucide-react';
+import { Calendar, Clock, Plus, RefreshCw, Sparkles, Trash2, Users } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { FamilyRepository } from '../../family/repositories/FamilyRepository';

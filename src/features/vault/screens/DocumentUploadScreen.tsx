@@ -2,11 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Camera, File, CheckCircle, AlertCircle, ChevronDown, User } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { VaultRepository, CATEGORY_LABELS } from '../repositories/VaultRepository';
+import {
+  DocumentCategoryOption,
+  VaultRepository,
+} from '../repositories/VaultRepository';
 import { FamilyRepository, FamilyMember } from '../../family/repositories/FamilyRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 type Step = 'pick' | 'details' | 'uploading' | 'success' | 'error';
 
@@ -26,15 +30,33 @@ const DocumentUploadScreen: React.FC = () => {
   const [tags, setTags] = useState('');
   const [isEmergencyPriority, setIsEmergencyPriority] = useState(false);
 
-  const [members, setMembers] = useState<FamilyMember[]>([]);
+  const familyId = user?.familyId;
+  // Lookup data (API) via the shared resource hook; the selected member/category stay form state.
+  const membersResource = useApiResource<FamilyMember[]>(
+    familyId ? () => FamilyRepository.getMembers(familyId) : null,
+    [familyId],
+    'Family members could not be loaded.',
+  );
+  const categoriesResource = useApiResource<DocumentCategoryOption[]>(
+    () => VaultRepository.getDocumentCategories(),
+    [],
+    'Document categories could not be loaded.',
+  );
+  const members = membersResource.data ?? [];
+  const categories = categoriesResource.data ?? [];
+  const categoriesError = categoriesResource.error ?? membersResource.error;
 
   useEffect(() => {
-    if (!user?.familyId) return;
-    FamilyRepository.getMembers(user.familyId).then(m => {
-      setMembers(m);
-      if (m.length > 0) setSelectedMemberId(m[0].id);
-    });
-  }, [user?.familyId]);
+    if (membersResource.data && membersResource.data.length > 0) {
+      setSelectedMemberId(current => current || membersResource.data![0].id);
+    }
+  }, [membersResource.data]);
+
+  useEffect(() => {
+    if (categoriesResource.data && categoriesResource.data.length > 0) {
+      setCategory(categoriesResource.data[0].value);
+    }
+  }, [categoriesResource.data]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -49,12 +71,11 @@ const DocumentUploadScreen: React.FC = () => {
     if (!user?.familyId || !selectedFile || !selectedMemberId) return;
     setStep('uploading');
     try {
+      const contentType = selectedFile.type || 'application/octet-stream';
       const { uploadUrl, fileUrl } = await VaultRepository.getUploadUrl(
-        user.familyId, selectedFile.name, selectedFile.type || 'application/octet-stream', category,
+        user.familyId, selectedFile.name, contentType, category,
       );
-      if (!uploadUrl.includes('demo-upload')) {
-        await fetch(uploadUrl, { method: 'PUT', body: selectedFile, headers: { 'Content-Type': selectedFile.type } });
-      }
+      await VaultRepository.uploadFile(uploadUrl, selectedFile, contentType);
       await VaultRepository.createDocument(user.familyId, {
         documentName: documentName.trim() || selectedFile.name,
         memberId: selectedMemberId, category, fileUrl,
@@ -159,12 +180,15 @@ const DocumentUploadScreen: React.FC = () => {
                   onChange={e => setCategory(Number(e.target.value))}
                   className={`${inputClass} appearance-none`}
                 >
-                  {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
+                  {categories.map((item) => (
+                    <option key={item.id} value={item.value}>{item.name}</option>
                   ))}
                 </select>
                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
+              {categoriesError ? (
+                <p className="mt-2 text-xs text-alert">{categoriesError}</p>
+              ) : null}
             </div>
 
             <div>

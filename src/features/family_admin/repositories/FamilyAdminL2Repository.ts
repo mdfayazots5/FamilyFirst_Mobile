@@ -1,7 +1,42 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
-import { AppConfig } from '../../../core/config/appConfig';
 import type { ApiResponse } from '../../../core/network/apiTypes';
+import { requireApiData } from '../../../core/network/apiTypes';
+
+// [VERIFY - candidate master data]
+export const FAMILY_ADMIN_ROLE_OPTIONS: readonly string[] = ['PARENT', 'CHILD', 'TEACHER', 'ELDER'];
+
+// ── Screen option lists (R6: moved out of screen components) ─────────────────────────────────────────────
+// [VERIFY — candidate master data] These have no GetMasters code yet; ids match the backend enum/string values.
+
+export const EMERGENCY_ACCESS_MODE_OPTIONS = [
+  { id: 'LoginRequired', label: 'Login Required', desc: 'Viewer must sign in to FamilyFirst.' },
+  { id: 'PinOnly',       label: 'PIN Only',       desc: 'Access via a numeric PIN — no FamilyFirst account needed.' },
+  { id: 'NoLogin',       label: 'No Login',       desc: 'Emergency folder viewable by anyone with the link. Only for Emergency Folder.' },
+] as const;
+
+/** Emergency link lifetime choices in hours (backend max 168). */
+export const EMERGENCY_LINK_EXPIRY_OPTIONS: readonly number[] = [24, 48, 72, 120, 168];
+
+export const STORAGE_MODE_OPTIONS = [
+  { id: 'AppManaged',  label: 'App Managed',  desc: 'Documents stored securely on FamilyFirst servers (AWS S3, India region).' },
+  { id: 'GoogleDrive', label: 'Google Drive', desc: 'All documents routed to your Google Drive. Requires Google sign-in.' },
+  { id: 'Hybrid',      label: 'Hybrid',       desc: 'Medical + Identity stay on app; other categories route to Google Drive.' },
+] as const;
+
+export const STORAGE_QUOTA_ALERT_OPTIONS: readonly number[] = [75, 90, 95];
+export const OFFLINE_CACHE_SIZE_OPTIONS: readonly number[] = [500, 1000, 2000];
+export const FINANCE_CONSENT_REMINDER_OPTIONS: readonly number[] = [7, 14, 30, 60, 90];
+
+/** Display names for notification rule keys returned by GET .../family-admin/notification-rules (presentation only). */
+export const NOTIFICATION_RULE_LABELS: Readonly<Record<string, string>> = {
+  Attendance: 'Attendance updates (absent / late)',
+  Feedback: 'Teacher feedback received',
+  Task: 'Task submitted / completed',
+  Reward: 'Reward redemption',
+  Calendar: 'Calendar reminders',
+  WeeklyDigest: 'Weekly summary report',
+};
 
 // ── Storage Config (AC-01 / AC-02) ───────────────────────────────────────────
 
@@ -57,43 +92,6 @@ export interface FinancePrivacyConfig {
   autoExcludeSalaryCredits: boolean;
 }
 
-// ── Demo Data ─────────────────────────────────────────────────────────────────
-
-const DEMO_STORAGE: StorageConfig = {
-  storageMode: 'AppManaged',
-  googleDriveConnected: false,
-  storageQuotaAlertThresholdPct: 90,
-  offlineCacheSizeMb: 500,
-  storageUsedBytes: 320 * 1024 * 1024,
-  storageQuotaBytes: 2 * 1024 * 1024 * 1024,
-  hybridRouting: [],
-};
-
-const DEMO_THRESHOLDS: AlertThresholds = {
-  financeLargeTransactionThreshold: 5000,
-  documentExpiryLeadDaysDefault: 30,
-  documentExpiryLeadDaysIdentity: 60,
-  documentExpiryLeadDaysMedical: 30,
-  documentExpiryLeadDaysInsurance: 45,
-  lateArrivalToleranceMinutes: 0,
-  locationStaleThresholdMinutes: 60,
-};
-
-const DEMO_EMERGENCY: EmergencyAccessRules = {
-  accessMode: 'LoginRequired',
-  emergencyLinkExpiryHours: 72,
-  emergencyContacts: [
-    { name: 'Dr. Anil Sharma', phoneNumber: '+919876543210', relationship: 'Family Doctor' },
-  ],
-};
-
-const DEMO_FINANCE_PRIVACY: FinancePrivacyConfig = {
-  defaultAdultEarningMemberTier: 2,
-  defaultIndependentMemberTier: 3,
-  consentReminderIntervalDays: 30,
-  autoExcludeSalaryCredits: true,
-};
-
 // ── Module Visibility ─────────────────────────────────────────────────────────
 
 export interface ModuleVisibilityItem {
@@ -127,159 +125,96 @@ export interface UpdateNotificationRulePayload {
   deliveryDelayMinutes?: number;
 }
 
-// ── Demo Data (continued) ─────────────────────────────────────────────────────
-
-const ts = new Date().toISOString();
-
-const DEMO_MODULE_VISIBILITY: ModuleVisibilityItem[] = [
-  { role: 3, moduleName: 'Attendance',  isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 3, moduleName: 'Tasks',       isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 3, moduleName: 'Rewards',     isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 3, moduleName: 'Feedback',    isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 3, moduleName: 'Calendar',    isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 3, moduleName: 'Reports',     isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 3, moduleName: 'Safety',      isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 3, moduleName: 'FamilyAdmin', isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 4, moduleName: 'Attendance',  isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 4, moduleName: 'Tasks',       isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 4, moduleName: 'Rewards',     isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 4, moduleName: 'Feedback',    isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 4, moduleName: 'Calendar',    isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 4, moduleName: 'Reports',     isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 4, moduleName: 'Safety',      isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 4, moduleName: 'FamilyAdmin', isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 5, moduleName: 'Attendance',  isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 5, moduleName: 'Tasks',       isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 5, moduleName: 'Rewards',     isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 5, moduleName: 'Feedback',    isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 5, moduleName: 'Calendar',    isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 5, moduleName: 'Reports',     isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 5, moduleName: 'Safety',      isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 5, moduleName: 'FamilyAdmin', isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 6, moduleName: 'Attendance',  isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 6, moduleName: 'Tasks',       isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 6, moduleName: 'Rewards',     isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 6, moduleName: 'Feedback',    isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 6, moduleName: 'Calendar',    isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 6, moduleName: 'Reports',     isVisible: false, isDefault: true, updatedAt: ts },
-  { role: 6, moduleName: 'Safety',      isVisible: true,  isDefault: true, updatedAt: ts },
-  { role: 6, moduleName: 'FamilyAdmin', isVisible: false, isDefault: true, updatedAt: ts },
-];
-
-const DEMO_NOTIFICATION_RULES: NotificationRuleItem[] = [
-  { ruleId: '00000001-0000-0000-0000-000000000001', familyId: '', ruleKey: 'Attendance',   isEnabled: true, updatedAt: ts },
-  { ruleId: '00000001-0000-0000-0000-000000000002', familyId: '', ruleKey: 'Feedback',     isEnabled: true, updatedAt: ts },
-  { ruleId: '00000001-0000-0000-0000-000000000003', familyId: '', ruleKey: 'Task',         isEnabled: true, updatedAt: ts },
-  { ruleId: '00000001-0000-0000-0000-000000000004', familyId: '', ruleKey: 'Reward',       isEnabled: true, updatedAt: ts },
-  { ruleId: '00000001-0000-0000-0000-000000000005', familyId: '', ruleKey: 'Calendar',     isEnabled: true, updatedAt: ts },
-  { ruleId: '00000001-0000-0000-0000-000000000006', familyId: '', ruleKey: 'WeeklyDigest', isEnabled: true, updatedAt: ts },
-];
-
 // ── Repository ────────────────────────────────────────────────────────────────
 
 export const FamilyAdminL2Repository = {
   // Storage
   getStorageConfig: async (familyId: string): Promise<StorageConfig> => {
-    if (AppConfig.isDemo) return DEMO_STORAGE;
     const r = await apiClient.get<ApiResponse<StorageConfig>>(
       resolvePath(MasterApiReference.FamilyAdmin.Storage, { familyId }),
     );
-    return r.data.data;
+    return requireApiData(r.data, 'FamilyAdminL2Repository.getStorageConfig');
   },
   updateStorageConfig: async (familyId: string, data: Partial<StorageConfig>): Promise<StorageConfig> => {
-    if (AppConfig.isDemo) return { ...DEMO_STORAGE, ...data };
     const r = await apiClient.put<ApiResponse<StorageConfig>>(
       resolvePath(MasterApiReference.FamilyAdmin.Storage, { familyId }),
       data,
     );
-    return r.data.data;
+    return requireApiData(r.data, 'FamilyAdminL2Repository.updateStorageConfig');
   },
 
   // Alert Thresholds
   getAlertThresholds: async (familyId: string): Promise<AlertThresholds> => {
-    if (AppConfig.isDemo) return DEMO_THRESHOLDS;
     const r = await apiClient.get<ApiResponse<AlertThresholds>>(
       resolvePath(MasterApiReference.FamilyAdmin.AlertThresholds, { familyId }),
     );
-    return r.data.data;
+    return requireApiData(r.data, 'FamilyAdminL2Repository.getAlertThresholds');
   },
   updateAlertThresholds: async (familyId: string, data: Partial<AlertThresholds>): Promise<AlertThresholds> => {
-    if (AppConfig.isDemo) return { ...DEMO_THRESHOLDS, ...data };
     const r = await apiClient.put<ApiResponse<AlertThresholds>>(
       resolvePath(MasterApiReference.FamilyAdmin.AlertThresholds, { familyId }),
       data,
     );
-    return r.data.data;
+    return requireApiData(r.data, 'FamilyAdminL2Repository.updateAlertThresholds');
   },
 
   // Emergency Access
   getEmergencyConfig: async (familyId: string): Promise<EmergencyAccessRules> => {
-    if (AppConfig.isDemo) return DEMO_EMERGENCY;
     const r = await apiClient.get<ApiResponse<EmergencyAccessRules>>(
       resolvePath(MasterApiReference.FamilyAdmin.EmergencyConfig, { familyId }),
     );
-    return r.data.data;
+    return requireApiData(r.data, 'FamilyAdminL2Repository.getEmergencyConfig');
   },
   updateEmergencyConfig: async (familyId: string, data: Partial<EmergencyAccessRules>): Promise<EmergencyAccessRules> => {
-    if (AppConfig.isDemo) return { ...DEMO_EMERGENCY, ...data };
     const r = await apiClient.put<ApiResponse<EmergencyAccessRules>>(
       resolvePath(MasterApiReference.FamilyAdmin.EmergencyConfig, { familyId }),
       data,
     );
-    return r.data.data;
+    return requireApiData(r.data, 'FamilyAdminL2Repository.updateEmergencyConfig');
   },
 
   // Finance Privacy
   getFinancePrivacyConfig: async (familyId: string): Promise<FinancePrivacyConfig> => {
-    if (AppConfig.isDemo) return DEMO_FINANCE_PRIVACY;
     const r = await apiClient.get<ApiResponse<FinancePrivacyConfig>>(
       resolvePath(MasterApiReference.FamilyAdmin.FinanceConfig, { familyId }),
     );
-    return r.data.data;
+    return requireApiData(r.data, 'FamilyAdminL2Repository.getFinancePrivacyConfig');
   },
   updateFinancePrivacyConfig: async (familyId: string, data: Partial<FinancePrivacyConfig>): Promise<FinancePrivacyConfig> => {
-    if (AppConfig.isDemo) return { ...DEMO_FINANCE_PRIVACY, ...data };
     const r = await apiClient.put<ApiResponse<FinancePrivacyConfig>>(
       resolvePath(MasterApiReference.FamilyAdmin.FinanceConfig, { familyId }),
       data,
     );
-    return r.data.data;
+    return requireApiData(r.data, 'FamilyAdminL2Repository.updateFinancePrivacyConfig');
   },
 
   // Module Visibility
   getModuleVisibility: async (familyId: string): Promise<ModuleVisibilityItem[]> => {
-    if (AppConfig.isDemo) return DEMO_MODULE_VISIBILITY;
     const r = await apiClient.get<ApiResponse<ModuleVisibilityItem[]>>(
       resolvePath(MasterApiReference.FamilyAdmin.ModuleVisibility, { familyId }),
     );
-    return r.data.data;
+    return r.data.data ?? [];
   },
   updateModuleVisibility: async (familyId: string, data: UpdateModuleVisibilityRequest): Promise<ModuleVisibilityItem[]> => {
-    if (AppConfig.isDemo) return DEMO_MODULE_VISIBILITY;
     const r = await apiClient.put<ApiResponse<ModuleVisibilityItem[]>>(
       resolvePath(MasterApiReference.FamilyAdmin.ModuleVisibility, { familyId }),
       data,
     );
-    return r.data.data;
+    return r.data.data ?? [];
   },
 
   // Notification Rules
   getNotificationRules: async (familyId: string): Promise<NotificationRuleItem[]> => {
-    if (AppConfig.isDemo) return DEMO_NOTIFICATION_RULES;
     const r = await apiClient.get<ApiResponse<NotificationRuleItem[]>>(
       resolvePath(MasterApiReference.FamilyAdmin.NotificationRules, { familyId }),
     );
-    return r.data.data;
+    return r.data.data ?? [];
   },
   updateNotificationRule: async (familyId: string, ruleId: string, data: UpdateNotificationRulePayload): Promise<NotificationRuleItem> => {
-    if (AppConfig.isDemo) {
-      const existing = DEMO_NOTIFICATION_RULES.find(rule => rule.ruleId === ruleId) ?? DEMO_NOTIFICATION_RULES[0];
-      return { ...existing, ...data };
-    }
     const r = await apiClient.put<ApiResponse<NotificationRuleItem>>(
       resolvePath(MasterApiReference.FamilyAdmin.NotificationRule, { familyId, ruleId }),
       data,
     );
-    return r.data.data;
+    return requireApiData(r.data, 'FamilyAdminL2Repository.updateNotificationRule');
   },
 };

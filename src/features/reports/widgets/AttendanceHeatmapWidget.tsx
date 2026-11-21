@@ -1,32 +1,45 @@
 import React from 'react';
 import { motion } from 'motion/react';
+import type { AttendanceHeatmapEntry, AttendanceHeatmapStatus } from '../repositories/ReportsRepository';
 
 interface AttendanceHeatmapWidgetProps {
-  data: { date: string; completionRate: number }[];
+  data: AttendanceHeatmapEntry[];
 }
 
-const AttendanceHeatmapWidget: React.FC<AttendanceHeatmapWidgetProps> = ({ data }) => {
-  const getColor = (rate: number) => {
-    if (rate >= 0.8) return 'bg-success';
-    if (rate >= 0.4) return 'bg-amber-500';
-    return 'bg-alert';
-  };
+// One colour per API heatmap status (ReportService.ResolveHeatmapStatus).
+const STATUS_STYLE: Record<AttendanceHeatmapStatus, { cell: string; label: string }> = {
+  Present:   { cell: 'bg-success',   label: 'Present' },
+  Late:      { cell: 'bg-amber-500', label: 'Late' },
+  LeftEarly: { cell: 'bg-amber-300', label: 'Left early' },
+  Absent:    { cell: 'bg-alert',     label: 'Absent' },
+  NoSession: { cell: 'bg-black/5',   label: 'No session' },
+};
 
+export const HEATMAP_LEGEND = (Object.keys(STATUS_STYLE) as AttendanceHeatmapStatus[]).map((status) => ({
+  status,
+  ...STATUS_STYLE[status],
+}));
+
+const AttendanceHeatmapWidget: React.FC<AttendanceHeatmapWidgetProps> = ({ data }) => {
   return (
     <div className="grid grid-cols-7 gap-2">
-      {data.map((day, idx) => (
-        <motion.div
-          key={day.date}
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: idx * 0.01 }}
-          className={`aspect-square rounded-lg ${getColor(day.completionRate)} shadow-sm relative group`}
-        >
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-primary text-white text-[8px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-            {new Date(day.date).toLocaleDateString()}: {Math.round(day.completionRate * 100)}%
-          </div>
-        </motion.div>
-      ))}
+      {data.map((day, idx) => {
+        const style = STATUS_STYLE[day.status] ?? STATUS_STYLE.NoSession;
+        return (
+          <motion.div
+            key={day.date}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: idx * 0.01 }}
+            className={`aspect-square rounded-lg ${style.cell} shadow-sm relative group`}
+            aria-label={`${day.date}: ${style.label}`}
+          >
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-primary text-white text-[8px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+              {new Date(day.date).toLocaleDateString()}: {style.label}
+            </div>
+          </motion.div>
+        );
+      })}
     </div>
   );
 };

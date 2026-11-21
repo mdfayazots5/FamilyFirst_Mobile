@@ -8,7 +8,11 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
-import { FamilyLookupOption, FamilyRepository } from '../repositories/FamilyRepository';
+import {
+  FAMILY_LINK_TYPE_OPTIONS,
+  FamilyLookupOption,
+  FamilyRepository,
+} from '../repositories/FamilyRepository';
 import { useAuth, UserRole } from '../../../core/auth/AuthContext';
 
 type State = {
@@ -30,19 +34,6 @@ type Action =
   | { type: 'SET_SUBMITTING'; isSubmitting: boolean }
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'SET_SUCCESS'; isSuccess: boolean };
-
-const LINK_TYPES = [
-  'Father',
-  'Mother',
-  'Son',
-  'Daughter',
-  'Grandfather',
-  'Grandmother',
-  'Tutor',
-  'ArabicTeacher',
-  'Driver',
-  'Caregiver',
-];
 
 const initialState: State = {
   name: '',
@@ -265,7 +256,7 @@ const AddMemberScreen: React.FC = () => {
                       onChange={(event) => dispatch({ type: 'SET_FIELD', field: 'linkType', value: event.target.value })}
                       className="min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-primary outline-none transition focus:border-accent"
                     >
-                      {LINK_TYPES.map((linkType) => (
+                      {FAMILY_LINK_TYPE_OPTIONS.map((linkType) => (
                         <option key={linkType} value={linkType}>
                           {linkType}
                         </option>

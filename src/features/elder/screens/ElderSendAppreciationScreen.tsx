@@ -2,12 +2,8 @@ import React, { useEffect, useReducer, useState } from 'react';
 import {
   CheckCircle2,
   Heart,
-  Mic,
-  Play,
   RefreshCw,
   Send,
-  Square,
-  Trash2,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
@@ -20,6 +16,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { ElderRepository, GrandchildStatus } from '../repositories/ElderRepository';
+import { logger } from '../../../core/services/logger';
 
 type ChildLookupState =
   | { status: 'loading'; data: GrandchildStatus | null; error: string | null }
@@ -66,8 +63,6 @@ const ElderSendAppreciationScreen: React.FC = () => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [message, setMessage] = useState('');
   const [selectedSticker, setSelectedSticker] = useState<string | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -90,7 +85,7 @@ const ElderSendAppreciationScreen: React.FC = () => {
 
       dispatch({ type: 'LOAD_SUCCESS', payload: child });
     } catch (error) {
-      console.error('Failed to load appreciation target', error);
+      logger.error('Failed to load appreciation target', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load this appreciation screen right now.' });
     }
   };
@@ -116,24 +111,15 @@ const ElderSendAppreciationScreen: React.FC = () => {
         authorName: user.name || 'Elder',
         message: message || (selectedSticker ? `Sending you ${selectedSticker}` : 'Thinking of you today.'),
         sticker: selectedSticker || undefined,
-        audioUrl: audioUrl || undefined,
       });
 
       setIsSuccess(true);
       setTimeout(() => navigate('/elder'), 1500);
     } catch (error) {
-      console.error('Failed to send elder appreciation', error);
+      logger.error('Failed to send elder appreciation', error);
     } finally {
       setIsSending(false);
     }
-  };
-
-  const startRecording = () => {
-    setIsRecording(true);
-    setTimeout(() => {
-      setIsRecording(false);
-      setAudioUrl('demo_audio_url');
-    }, 3000);
   };
 
   return (
@@ -213,44 +199,7 @@ const ElderSendAppreciationScreen: React.FC = () => {
               </div>
             </section>
 
-            <section className="space-y-4">
-              <FFSectionHeader icon={<Mic />} title="Voice note" />
-              <FFCard className="p-5 shadow-card">
-                {audioUrl ? (
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-white"
-                    >
-                      <Play size={18} />
-                    </button>
-                    <div className="h-3 flex-1 rounded-full bg-slate-100" />
-                    <button
-                      type="button"
-                      onClick={() => setAudioUrl(null)}
-                      className="flex h-12 w-12 items-center justify-center rounded-full bg-alert/10 text-alert"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-4 text-center">
-                    <button
-                      type="button"
-                      onClick={isRecording ? () => setIsRecording(false) : startRecording}
-                      className={`flex h-24 w-24 items-center justify-center rounded-full ${
-                        isRecording ? 'bg-alert text-white' : 'bg-primary text-white'
-                      }`}
-                    >
-                      {isRecording ? <Square size={28} /> : <Mic size={28} />}
-                    </button>
-                    <p className="font-body text-sm text-slate-500">
-                      {isRecording ? 'Recording your message...' : 'Tap to record a short voice blessing.'}
-                    </p>
-                  </div>
-                )}
-              </FFCard>
-            </section>
+            {/* Voice note removed with demo mode (2026-11-21): recording was simulated and sent 'demo_audio_url' to the live API. [VERIFY] Re-add with a real audio upload. */}
 
             <section className="space-y-4">
               <FFSectionHeader icon={<Send />} title="Write a note" />

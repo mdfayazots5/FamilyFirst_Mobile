@@ -1,48 +1,73 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useReducer, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-  ArrowLeft, Heart, Phone, Share2, Link2, Copy, Check, Lock, Pill, AlertCircle,
+  ArrowLeft, Heart, Phone, Share2, Copy, Check, Lock, Pill,
 } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
+import { UserRole } from '../../../core/auth/UserRole';
 import { MedicalRepository, EmergencyCard, EmergencyCardShare } from '../repositories/MedicalRepository';
 import AllergyBadge from '../widgets/AllergyBadge';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import EmergencyCacheBanner from '../../../core/connectivity/EmergencyCacheBanner';
+import { isEmergencyNetworkFailure } from '../../../core/cache/EmergencyOfflineStore';
 
 interface EmergencyCardScreenProps {
   shareToken?: string;
 }
+
+type CardState =
+  | { status: 'loading' }
+  | { status: 'ready'; card: EmergencyCard; fromCache: boolean }
+  | { status: 'error'; message: string };
 
 const EmergencyCardScreen: React.FC<EmergencyCardScreenProps> = ({ shareToken }) => {
   const navigate = useNavigate();
   const { memberId } = useParams<{ memberId: string }>();
   const { user } = useAuth();
 
-  const [card, setCard] = useState<EmergencyCard | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [cardState, setCardState] = useReducer((_previous: CardState, next: CardState) => next, { status: 'loading' });
   const [shareData, setShareData] = useState<EmergencyCardShare | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [showSharePanel, setShowSharePanel] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const isPublicView = !!shareToken;
-  const canShare = !isPublicView && (user?.role === 'Parent' || user?.role === 'FamilyAdmin');
+  const canShare = !isPublicView && (user?.role === UserRole.PARENT || user?.role === UserRole.FAMILY_ADMIN);
 
   useEffect(() => {
-    if (shareToken) {
-      MedicalRepository.getEmergencyCardByToken(shareToken)
-        .then(setCard)
-        .catch(() => setError('This emergency card link has expired or been revoked.'))
-        .finally(() => setIsLoading(false));
-    } else if (user?.familyId && memberId) {
-      MedicalRepository.getEmergencyCard(user.familyId, memberId)
-        .then(setCard)
-        .finally(() => setIsLoading(false));
+    let active = true;
+    setCardState({ status: 'loading' });
+    setShareData(null);
+    setShowSharePanel(false);
+    const request = shareToken
+      ? MedicalRepository.getEmergencyCardByToken(shareToken).then(data => ({ data, fromCache: false }))
+      : user?.familyId && memberId
+        ? MedicalRepository.loadEmergencyCard(user.familyId, memberId)
+        : null;
+    if (!request) {
+      setCardState({ status: 'error', message: 'The emergency card could not be found.' });
+      return;
     }
-  }, [shareToken, user?.familyId, memberId]);
+    void request
+      .then(({ data, fromCache }) => {
+        if (active) setCardState({ status: 'ready', card: data, fromCache });
+      })
+      .catch(error => {
+        if (!active) return;
+        const message = shareToken
+          ? isEmergencyNetworkFailure(error)
+            ? 'Reconnect to verify and open this shared emergency card.'
+            : 'Unable to load this emergency card link. It may have expired or been revoked.'
+          : 'Unable to load the emergency card.';
+        setCardState({ status: 'error', message });
+      });
+    return () => { active = false; };
+  }, [shareToken, user?.familyId, user?.id, memberId, loadAttempt]);
 
   const handleShare = async () => {
     if (!user?.familyId || !memberId) return;
@@ -67,7 +92,7 @@ const EmergencyCardScreen: React.FC<EmergencyCardScreenProps> = ({ shareToken })
     });
   };
 
-  if (isLoading) {
+  if (cardState.status === 'loading') {
     return (
       <div className="min-h-screen bg-bg-cream">
         <div className="bg-alert px-5 pt-12 pb-5">
@@ -82,33 +107,34 @@ const EmergencyCardScreen: React.FC<EmergencyCardScreenProps> = ({ shareToken })
     );
   }
 
-  if (error || !card) {
+  if (cardState.status === 'error') {
     return (
       <div className="min-h-screen bg-bg-cream flex flex-col items-center justify-center px-8 gap-5">
-        <div className="w-16 h-16 bg-alert/10 rounded-full flex items-center justify-center">
-          <AlertCircle className="w-8 h-8 text-alert" />
-        </div>
-        <h2 className="font-display font-semibold text-base text-primary text-center">
-          {error ?? 'Emergency card unavailable.'}
-        </h2>
-        <p className="font-body text-xs text-gray-500 text-center">
-          Contact the family for a new emergency card link.
-        </p>
+        <FFErrorState
+          title="Emergency card unavailable"
+          message={cardState.message}
+          onRetry={() => setLoadAttempt(attempt => attempt + 1)}
+        />
+        {isPublicView && (
         <div className="flex items-center gap-2 bg-black/[0.03] border border-black/5 rounded-xl px-4 py-3">
           <Lock className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <p className="font-body text-xs text-gray-500">Emergency card links expire after 72 hours.</p>
         </div>
+        )}
       </div>
     );
   }
 
+  const { card, fromCache } = cardState;
+  const showShareActions = canShare && !fromCache;
   return (
     <div className="min-h-screen bg-bg-cream">
+      {fromCache && <EmergencyCacheBanner />}
       {/* Header — alert red intentional for emergency card */}
       <div className="bg-alert px-5 pt-12 pb-5">
         <div className="flex items-center gap-3">
           {!isPublicView && (
-            <button onClick={() => navigate(-1)} className="p-2 rounded-xl bg-white/10" aria-label="Go back">
+            <button onClick={() => navigate(-1)} className="grid min-h-12 min-w-12 place-items-center rounded-xl bg-white/10" aria-label="Go back">
               <ArrowLeft className="w-5 h-5 text-white" />
             </button>
           )}
@@ -163,7 +189,7 @@ const EmergencyCardScreen: React.FC<EmergencyCardScreenProps> = ({ shareToken })
         )}
 
         {/* Doctor + Emergency Contact */}
-        <FFCard className="p-4 space-y-3">
+        {(card.primaryDoctorName || card.emergencyContactName) && <FFCard className="p-4 space-y-3">
           {card.primaryDoctorName && (
             <div className="flex items-center justify-between">
               <div>
@@ -192,10 +218,10 @@ const EmergencyCardScreen: React.FC<EmergencyCardScreenProps> = ({ shareToken })
               )}
             </div>
           )}
-        </FFCard>
+        </FFCard>}
 
         {/* Share actions */}
-        {canShare && !showSharePanel && (
+        {showShareActions && !showSharePanel && (
           <FFButton
             onClick={handleShare}
             disabled={!card.isProfileComplete}
@@ -207,14 +233,14 @@ const EmergencyCardScreen: React.FC<EmergencyCardScreenProps> = ({ shareToken })
           </FFButton>
         )}
 
-        {!card.isProfileComplete && canShare && (
+        {!card.isProfileComplete && showShareActions && (
           <p className="font-body text-xs text-center text-accent">
             Add Blood Group and Allergies to enable sharing.
           </p>
         )}
 
         {/* Share panel */}
-        {showSharePanel && shareData && (
+        {showShareActions && showSharePanel && shareData && (
           <FFCard className="p-5 space-y-4">
             <p className="font-display font-semibold text-sm text-primary">Share Options</p>
 
@@ -223,7 +249,6 @@ const EmergencyCardScreen: React.FC<EmergencyCardScreenProps> = ({ shareToken })
                 value={`${window.location.origin}${shareData.shareLink}`}
                 size={160}
                 level="H"
-                renderAs="svg"
               />
             </div>
 

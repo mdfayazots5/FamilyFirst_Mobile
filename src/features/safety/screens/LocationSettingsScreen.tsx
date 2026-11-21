@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { SafetyRepository, LocationSettings, MemberLocationSetting } from '../repositories/SafetyRepository';
@@ -7,6 +6,8 @@ import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 // SL-08 — Location Settings (FamilyAdmin only)
 // Adults require explicit consent before enabling sharing (enforced by backend 422).
@@ -18,46 +19,45 @@ interface MemberUpdate {
 }
 
 const LocationSettingsScreen: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
-  const [settings, setSettings] = useState<LocationSettings | null>(null);
+  const familyId = user?.familyId;
+  // API data lives in the resource; `updates` is form state seeded from each successful load.
+  const resource = useApiResource<LocationSettings>(
+    familyId ? () => SafetyRepository.getSettings(familyId) : null,
+    [familyId],
+    'Location settings could not be loaded.',
+  );
+  const settings = resource.data;
+  const isLoading = resource.isLoading;
+  const loadError = familyId ? resource.error : 'Family details are not available.';
+  const load = resource.reload;
   const [updates, setUpdates]   = useState<Record<string, MemberUpdate>>({});
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving]   = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const [saved, setSaved]         = useState(false);
 
-  const load = async () => {
-    if (!user?.familyId) return;
-    setIsLoading(true);
-    try {
-      const data = await SafetyRepository.getSettings(user.familyId);
-      setSettings(data);
-      const init: Record<string, MemberUpdate> = {};
-      data.memberSettings.forEach(m => {
-        init[m.memberId] = { memberId: m.memberId, sharingEnabled: m.sharingEnabled, caregiverViewOnly: m.caregiverViewOnly };
-      });
-      setUpdates(init);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [user?.familyId]);
+  useEffect(() => {
+    if (!settings) return;
+    const init: Record<string, MemberUpdate> = {};
+    settings.memberSettings.forEach(m => {
+      init[m.memberId] = { memberId: m.memberId, sharingEnabled: m.sharingEnabled, caregiverViewOnly: m.caregiverViewOnly };
+    });
+    setUpdates(init);
+  }, [settings]);
 
   const setMemberUpdate = (memberId: string, field: keyof Omit<MemberUpdate, 'memberId'>, value: boolean) => {
     setUpdates(prev => ({ ...prev, [memberId]: { ...prev[memberId], [field]: value } }));
   };
 
   const handleSave = async () => {
-    if (!user?.familyId) return;
+    if (!familyId) return;
     setError(null);
     setIsSaving(true);
     try {
-      const result = await SafetyRepository.updateSettings(user.familyId, {
+      const result = await SafetyRepository.updateSettings(familyId, {
         memberSettings: Object.values(updates),
       });
-      setSettings(result);
+      resource.setData(result);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e: unknown) {
@@ -115,6 +115,8 @@ const LocationSettingsScreen: React.FC = () => {
           <div className="space-y-2">
             {[...Array(3)].map((_, i) => <FFShimmer key={i} className="h-24 rounded-ff" />)}
           </div>
+        ) : loadError ? (
+          <FFErrorState message={loadError} onRetry={familyId ? load : undefined} />
         ) : (
           <FFCard className="overflow-hidden">
             {settings?.memberSettings.map((member: MemberLocationSetting, index: number) => {

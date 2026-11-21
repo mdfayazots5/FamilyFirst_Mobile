@@ -8,12 +8,7 @@ export const useDeepLinkHandler = () => {
   const navigate = useNavigate();
 
   const handleDeepLink = useCallback((path: string) => {
-    // Basic validation and mapping if needed
-    if (!path) return;
-
-    // Example mapping (if paths from backend differ from frontend routes)
-    // For now, we assume paths match our AppRouter routes
-    
+    if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\')) return;
     navigate(path);
   }, [navigate]);
 

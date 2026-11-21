@@ -1,7 +1,21 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
-import { AppConfig } from '../../../core/config/appConfig';
 import type { ApiResponse } from '../../../core/network/apiTypes';
+import { requireApiData } from '../../../core/network/apiTypes';
+import type { MasterDataItem } from '../../../core/network/apiTypes';
+import { getMasters } from '../../../core/repositories/MasterDataRepository';
+export interface SafetyLookupOption {
+  id: string;
+  label: string;
+  code: string;
+}
+
+// [VERIFY - candidate master data]
+export const SAFETY_ALERT_FILTER_OPTIONS: readonly string[] =
+  ['All', 'ZoneArrival', 'ZoneDeparture', 'LateAlert', 'SOS', 'BatteryWarning'];
+
+const mapLookupItems = (items: MasterDataItem[]): SafetyLookupOption[] =>
+  items.map((item) => ({ id: item.id, label: item.name, code: item.code }));
 
 export interface MemberPin {
   memberId: string;
@@ -74,74 +88,22 @@ export interface LocationSettings {
   memberSettings: MemberLocationSetting[];
 }
 
-const DEMO_MAP: MapView = {
-  memberPins: [
-    {
-      memberId: 'm1', memberName: 'Arjun',
-      lastKnownLat: 28.6139, lastKnownLng: 77.2090,
-      lastUpdatedAt: new Date(Date.now() - 8 * 60000).toISOString(),
-      batteryLevel: 72,
-      currentLocationName: 'Delhi Public School, Dwarka',
-      isInsideZone: true, zoneType: 'School',
-      isStale: false, hasActiveSos: false,
-    },
-    {
-      memberId: 'm3', memberName: 'Zara',
-      lastKnownLat: 28.6200, lastKnownLng: 77.1950,
-      lastUpdatedAt: new Date(Date.now() - 3 * 60000).toISOString(),
-      batteryLevel: 45,
-      currentLocationName: 'Home',
-      isInsideZone: true, zoneType: 'Home',
-      isStale: false, hasActiveSos: false,
-    },
-  ],
-  safeZones: [
-    {
-      zoneId: 'z1', zoneName: 'Delhi Public School', zoneType: 'School',
-      centerLatitude: 28.6139, centerLongitude: 77.2090, radiusMetres: 200,
-      alertOnArrival: true, alertOnDeparture: true,
-      lateAlertEnabled: true, lateAlertTime: '08:30',
-      overrideQuietHours: true, appliedToMemberIds: ['m1', 'm3'],
-    },
-    {
-      zoneId: 'z2', zoneName: 'Home', zoneType: 'Home',
-      centerLatitude: 28.6200, centerLongitude: 77.1950, radiusMetres: 100,
-      alertOnArrival: false, alertOnDeparture: true,
-      lateAlertEnabled: false,
-      overrideQuietHours: true, appliedToMemberIds: ['m1', 'm3'],
-    },
-  ],
-};
-
-const DEMO_ALERTS: LocationAlert[] = [
-  {
-    alertId: 'a1', memberId: 'm1', memberName: 'Arjun',
-    alertType: 'ZoneArrival', zoneName: 'Delhi Public School',
-    isResolved: false,
-    triggeredAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-  },
-  {
-    alertId: 'a2', memberId: 'm3', memberName: 'Zara',
-    alertType: 'BatteryWarning',
-    isResolved: true, resolvedAt: new Date(Date.now() - 3600000).toISOString(),
-    triggeredAt: new Date(Date.now() - 4 * 3600000).toISOString(),
-  },
-];
-
 export const SafetyRepository = {
+  getSafeZoneTypes: async (): Promise<SafetyLookupOption[]> => {
+    return mapLookupItems(await getMasters('SafeZoneType'));
+  },
+
   getMapView: async (familyId: string): Promise<MapView> => {
-    if (AppConfig.isDemo) return DEMO_MAP;
     const response = await apiClient.get<ApiResponse<MapView>>(
       resolvePath(MasterApiReference.Safety.Map, { familyId }),
     );
-    return response.data.data;
+    return requireApiData(response.data, 'SafetyRepository.getMapView');
   },
 
   updateLocation: async (
     familyId: string,
     data: { latitude: number; longitude: number; batteryLevel: number; timestamp: string },
   ): Promise<void> => {
-    if (AppConfig.isDemo) return;
     await apiClient.post<ApiResponse<null>>(
       resolvePath(MasterApiReference.Safety.Location, { familyId }),
       data,
@@ -149,33 +111,29 @@ export const SafetyRepository = {
   },
 
   listZones: async (familyId: string): Promise<SafeZone[]> => {
-    if (AppConfig.isDemo) return DEMO_MAP.safeZones;
     const response = await apiClient.get<ApiResponse<SafeZone[]>>(
       resolvePath(MasterApiReference.Safety.Zones, { familyId }),
     );
-    return response.data.data;
+    return response.data.data ?? [];
   },
 
   createZone: async (familyId: string, data: Omit<SafeZone, 'zoneId'>): Promise<SafeZone> => {
-    if (AppConfig.isDemo) return { zoneId: `z-${Date.now()}`, ...data };
     const response = await apiClient.post<ApiResponse<SafeZone>>(
       resolvePath(MasterApiReference.Safety.Zones, { familyId }),
       data,
     );
-    return response.data.data;
+    return requireApiData(response.data, 'SafetyRepository.createZone');
   },
 
   updateZone: async (familyId: string, zoneId: string, data: Omit<SafeZone, 'zoneId'>): Promise<SafeZone> => {
-    if (AppConfig.isDemo) return { zoneId, ...data };
     const response = await apiClient.put<ApiResponse<SafeZone>>(
       resolvePath(MasterApiReference.Safety.Zone, { familyId, zoneId }),
       data,
     );
-    return response.data.data;
+    return requireApiData(response.data, 'SafetyRepository.updateZone');
   },
 
   deleteZone: async (familyId: string, zoneId: string): Promise<void> => {
-    if (AppConfig.isDemo) return;
     await apiClient.delete<ApiResponse<null>>(
       resolvePath(MasterApiReference.Safety.Zone, { familyId, zoneId }),
     );
@@ -185,60 +143,37 @@ export const SafetyRepository = {
     familyId: string,
     params?: { memberId?: string; alertType?: string; fromDate?: string; toDate?: string; page?: number },
   ): Promise<{ items: LocationAlert[]; totalCount: number }> => {
-    if (AppConfig.isDemo) return { items: DEMO_ALERTS, totalCount: DEMO_ALERTS.length };
     const response = await apiClient.get<ApiResponse<{ items: LocationAlert[]; totalCount: number }>>(
       resolvePath(MasterApiReference.Safety.Alerts, { familyId }),
       { params },
     );
-    return { items: response.data.data.items, totalCount: response.data.data.totalCount };
+    return { items: response.data.data?.items ?? [], totalCount: response.data.data?.totalCount ?? 0 };
   },
 
   resolveAlert: async (familyId: string, alertId: string, resolutionNote?: string): Promise<LocationAlert> => {
-    if (AppConfig.isDemo) {
-      const alert = DEMO_ALERTS.find(a => a.alertId === alertId) ?? DEMO_ALERTS[0];
-      return { ...alert, isResolved: true, resolvedAt: new Date().toISOString() };
-    }
     const response = await apiClient.put<ApiResponse<LocationAlert>>(
       resolvePath(MasterApiReference.Safety.ResolveAlert, { familyId, alertId }),
       { resolutionNote },
     );
-    return response.data.data;
+    return requireApiData(response.data, 'SafetyRepository.resolveAlert');
   },
 
   triggerSos: async (
     familyId: string,
     data: { latitude: number; longitude: number; timestamp: string },
   ): Promise<SosEvent> => {
-    if (AppConfig.isDemo) {
-      return {
-        sosEventId: `sos-${Date.now()}`,
-        dispatchedAt: new Date().toISOString(),
-        latitude: data.latitude,
-        longitude: data.longitude,
-        alertsSentCount: 2,
-      };
-    }
     const response = await apiClient.post<ApiResponse<SosEvent>>(
       resolvePath(MasterApiReference.Safety.Sos, { familyId }),
       data,
     );
-    return response.data.data;
+    return requireApiData(response.data, 'SafetyRepository.triggerSos');
   },
 
   getSettings: async (familyId: string): Promise<LocationSettings> => {
-    if (AppConfig.isDemo) {
-      return {
-        globalSharingEnabled: true,
-        memberSettings: [
-          { memberId: 'm1', memberName: 'Arjun', sharingEnabled: true, consentGiven: true, caregiverViewOnly: false },
-          { memberId: 'm3', memberName: 'Zara', sharingEnabled: true, consentGiven: true, caregiverViewOnly: false },
-        ],
-      };
-    }
     const response = await apiClient.get<ApiResponse<LocationSettings>>(
       resolvePath(MasterApiReference.Safety.Settings, { familyId }),
     );
-    return response.data.data;
+    return requireApiData(response.data, 'SafetyRepository.getSettings');
   },
 
   updateSettings: async (
@@ -248,11 +183,10 @@ export const SafetyRepository = {
       memberSettings: Array<{ memberId: string; sharingEnabled: boolean; caregiverViewOnly: boolean }>;
     },
   ): Promise<LocationSettings> => {
-    if (AppConfig.isDemo) return SafetyRepository.getSettings(familyId);
     const response = await apiClient.put<ApiResponse<LocationSettings>>(
       resolvePath(MasterApiReference.Safety.Settings, { familyId }),
       data,
     );
-    return response.data.data;
+    return requireApiData(response.data, 'SafetyRepository.updateSettings');
   },
 };

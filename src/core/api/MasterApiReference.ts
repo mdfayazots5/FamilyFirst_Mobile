@@ -21,6 +21,7 @@ export const MasterApiReference = {
   },
   Admin: {
     Dashboard: '/admin/dashboard',
+    Analytics: '/admin/analytics/overview',
     Families: '/admin/families',
     Plans: '/admin/plans',
     RewardCatalog: '/admin/rewards/catalog',
@@ -92,6 +93,9 @@ export const MasterApiReference = {
     UserNotificationsReadAll: '/users/:userId/notifications/read-all',
     Preferences: '/users/:userId/notification-preferences',
   },
+  Users: {
+    FcmToken: '/users/:userId/fcm-token',
+  },
   FamilyAdmin: {
     Storage: '/families/:familyId/admin/storage',
     AlertThresholds: '/families/:familyId/admin/alert-thresholds',
@@ -140,6 +144,7 @@ export const MasterApiReference = {
     Archive: '/families/:familyId/reports/archive',
     AttendanceSummary: '/children/:childId/reports/attendance-summary',
     MonthlyFamily: '/families/:familyId/reports/monthly',
+    Export: '/families/:familyId/reports/export',
     ChildMonthly: '/families/:familyId/children/:childId/reports/monthly',
     DocumentExpiry: '/families/:familyId/reports/documents/expiry',
     HealthReminders: '/families/:familyId/reports/health/reminders',

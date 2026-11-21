@@ -1,4 +1,4 @@
-import React, { useEffect, useReducer } from 'react';
+import React, { useEffect, useReducer, useState } from 'react';
 import {
   Bell,
   Calendar,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
+import { FCMService } from '../../../core/notifications/FCMService';
 import {
   NotificationPreferences,
   NotificationRepository,
@@ -193,6 +194,18 @@ const preferenceSections: Array<{
 
 const NotificationPreferencesScreen: React.FC = () => {
   const { user } = useAuth();
+  const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+
+  const enablePush = async () => {
+    if (!user?.id || pushStatus === 'loading') return;
+    setPushStatus('loading');
+    try {
+      await FCMService.enable(user.id);
+      setPushStatus('ready');
+    } catch {
+      setPushStatus('error');
+    }
+  };
   const navigate = useNavigate();
   const [state, dispatch] = useReducer(preferencesReducer, {
     status: 'loading',
@@ -307,6 +320,15 @@ const NotificationPreferencesScreen: React.FC = () => {
       />
 
       <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        {user?.id && FCMService.isConfigured && (
+          <FFCard className="space-y-3 p-5">
+            <FFButton onClick={() => void enablePush()} isLoading={pushStatus === 'loading'} disabled={pushStatus === 'ready'}>
+              Enable browser push
+            </FFButton>
+            {pushStatus === 'ready' && <p role="status">Browser push is enabled.</p>}
+            {pushStatus === 'error' && <p role="alert">Browser push could not be enabled. Check this site’s notification permission and try again.</p>}
+          </FFCard>
+        )}
         <FFCard variant="primary" className="space-y-3 p-5 sm:p-6">
           <p className="text-sm text-white/80">
             Choose which updates matter most and set a quiet window for the hours when your family

@@ -1,8 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  Heart, Pill, Edit3, Plus, ChevronRight, Clock,
-} from 'lucide-react';
+import { Heart, Edit3, Plus } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { MedicalRepository, HealthProfile } from '../repositories/MedicalRepository';
 import AllergyBadge from '../widgets/AllergyBadge';
@@ -10,6 +8,8 @@ import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 import { UserRole } from '../../../core/auth/AuthContext';
 
 const STATUS_CONFIG = {
@@ -24,18 +24,29 @@ const MemberHealthProfileScreen: React.FC = () => {
   const { memberId } = useParams<{ memberId: string }>();
   const { user } = useAuth();
 
-  const [profile, setProfile] = useState<HealthProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const familyId = user?.familyId;
+  const resource = useApiResource<HealthProfile>(
+    familyId && memberId ? () => MedicalRepository.getHealthProfile(familyId, memberId) : null,
+    [familyId, memberId],
+    'This health profile could not be loaded.',
+  );
+  const profile = resource.data;
+  const isLoading = resource.isLoading;
+  const loadError = familyId && memberId ? resource.error : 'Member details are not available.';
   const [activeTab, setActiveTab] = useState<'overview' | 'medications' | 'vaccinations'>('overview');
 
   const canEdit = user?.role === UserRole.PARENT || user?.role === UserRole.FAMILY_ADMIN;
 
-  useEffect(() => {
-    if (!user?.familyId || !memberId) return;
-    MedicalRepository.getHealthProfile(user.familyId, memberId)
-      .then(setProfile)
-      .finally(() => setIsLoading(false));
-  }, [user?.familyId, memberId]);
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-bg-cream">
+        <FFPageHeader title="Health Profile" showBack />
+        <div className="px-4 pt-4">
+          <FFErrorState message={loadError} onRetry={familyId && memberId ? resource.reload : undefined} />
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -187,29 +198,16 @@ const MemberHealthProfileScreen: React.FC = () => {
               </FFCard>
             )}
 
-            <button
-              onClick={() => navigate(`/medical/${memberId}/timeline`)}
-              className="flex items-center gap-3 w-full p-4 bg-white border border-black/5 rounded-ff shadow-card"
-            >
-              <Clock className="w-5 h-5 text-gray-400" />
-              <span className="font-body text-sm font-medium text-primary flex-1 text-left">Health Timeline</span>
-              <ChevronRight className="w-4 h-4 text-gray-300" />
-            </button>
+            {/* Health Timeline entry hidden: no timeline screen/route exists yet (it fell through to "/").
+                The API (GET .../timeline) is ready — re-add this button when the screen is built. */}
           </>
         )}
 
         {/* Medications tab */}
         {activeTab === 'medications' && (
           <>
-            {canEdit && (
-              <button
-                onClick={() => navigate(`/medical/${memberId}/prescriptions/add`)}
-                className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-black/10 rounded-ff text-gray-400 hover:border-primary hover:text-primary transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="font-body text-sm font-medium">Add Prescription</span>
-              </button>
-            )}
+            {/* "Add Prescription" hidden: no add-prescription screen/route exists yet (it fell through to "/").
+                The API (POST .../prescriptions) is ready — re-add this button when the screen is built. */}
             {activeMeds.length === 0 ? (
               <p className="font-body text-sm text-gray-400 text-center py-8">No active medications.</p>
             ) : (

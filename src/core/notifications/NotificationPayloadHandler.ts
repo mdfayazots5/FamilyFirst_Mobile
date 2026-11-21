@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useDeepLinkHandler } from '../router/DeepLinkHandler';
 
 export enum NotificationType {
   Attendance = 'Attendance',
@@ -24,34 +24,32 @@ export interface NotificationPayload {
 }
 
 export const useNotificationNavigation = () => {
-  const navigate = useNavigate();
+  const { handleDeepLink: navigate } = useDeepLinkHandler();
 
   const handleNotificationTap = (payload: NotificationPayload) => {
-    console.log('Handling notification tap:', payload);
-
     switch (payload.type) {
       case NotificationType.Attendance:
         if (payload.childId) {
-          navigate(`/parent/children/${payload.childId}`);
+          navigate(`/parent/children/${encodeURIComponent(payload.childId)}`);
         }
         break;
       case NotificationType.Feedback:
       case NotificationType.UrgentFeedback:
         if (payload.referenceId) {
-          navigate(`/parent/feedback/${payload.referenceId}`);
+          navigate(`/parent/feedback/${encodeURIComponent(payload.referenceId)}`);
         }
         break;
       case NotificationType.TaskVerification:
-        navigate('/parent/verification-queue');
+        navigate('/parent/verification');
         break;
       case NotificationType.RewardRedemption:
-        navigate('/parent/reward-shop');
+        navigate('/parent/rewards');
         break;
       case NotificationType.RewardApproved:
         navigate('/child/coins');
         break;
       case NotificationType.Birthday:
-        navigate('/parent/calendar');
+        navigate('/calendar');
         break;
       case NotificationType.Appreciation:
         navigate('/child/family');
@@ -60,10 +58,8 @@ export const useNotificationNavigation = () => {
         navigate('/reports/weekly');
         break;
       case NotificationType.SOS:
-        navigate('/parent/safety');
+        navigate('/safety');
         break;
-      default:
-        console.warn('Unknown notification type:', payload.type);
     }
   };
 

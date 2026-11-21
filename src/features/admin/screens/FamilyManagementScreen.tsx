@@ -1,6 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Search, Users, Calendar, UserCheck } from 'lucide-react';
-import { AdminRepository, AdminFamily, AdminLookupOption } from '../repositories/AdminRepository';
+import {
+  ADMIN_FAMILY_STATUS_OPTIONS,
+  AdminRepository,
+  AdminFamily,
+  AdminLookupOption,
+} from '../repositories/AdminRepository';
 import FFCard from '../../../shared/components/FFCard';
 import FFBadge from '../../../shared/components/FFBadge';
 import FFButton from '../../../shared/components/FFButton';
@@ -8,33 +13,21 @@ import FFShimmer from '../../../shared/components/FFShimmer';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
 import FFErrorState from '../../../shared/components/FFErrorState';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 const FamilyManagementScreen: React.FC = () => {
-  const [families, setFamilies] = useState<AdminFamily[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('All');
-  const [planOptions, setPlanOptions] = useState<AdminLookupOption[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchData = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const [familyData, livePlanOptions] = await Promise.all([
-        AdminRepository.getFamilies(),
-        AdminRepository.getPlanOptions(),
-      ]);
-      setFamilies(familyData);
-      setPlanOptions(livePlanOptions);
-    } catch {
-      setError('Could not load families. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const resource = useApiResource<{ families: AdminFamily[]; planOptions: AdminLookupOption[] }>(
+    () => Promise.all([AdminRepository.getFamilies(), AdminRepository.getPlanOptions()])
+      .then(([families, planOptions]) => ({ families, planOptions })),
+    [],
+    'Could not load families. Please try again.',
+  );
+  const families = resource.data?.families ?? [];
+  const isLoading = resource.isLoading;
+  const error = resource.error;
+  const fetchData = resource.reload;
 
   const filteredFamilies = families.filter(f => {
     const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -51,7 +44,7 @@ const FamilyManagementScreen: React.FC = () => {
     }
   };
 
-  const statuses = ['All', 'Active', 'Trial', 'Churned', 'Flagged'];
+  const statuses = ADMIN_FAMILY_STATUS_OPTIONS;
 
   return (
     <div className="px-4 py-5 space-y-5 pb-24 page-enter">

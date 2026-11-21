@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Share2,
   TrendingUp,
@@ -9,9 +9,9 @@ import {
   Send,
   RefreshCw,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useReports } from '../providers/ReportsProvider';
-import { ReportsRepository, ReportLookupOption } from '../repositories/ReportsRepository';
+import { useAuth } from '../../../core/auth/AuthContext';
+import { useApiResource } from '../../../core/hooks/useApiResource';
+import { ReportsRepository, ReportLookupOption, WeeklyDigest } from '../repositories/ReportsRepository';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFBadge from '../../../shared/components/FFBadge';
@@ -20,6 +20,7 @@ import FFShimmer from '../../../shared/components/FFShimmer';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
 import FFErrorState from '../../../shared/components/FFErrorState';
+import { logger } from '../../../core/services/logger';
 
 const normalizeLookupValue = (value: string) =>
   value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
@@ -32,38 +33,42 @@ const matchesLookup = (value: string, option: ReportLookupOption) => {
 };
 
 const WeeklyDigestScreen: React.FC = () => {
-  const navigate = useNavigate();
-  const { weeklyDigest, fetchWeeklyDigest, isLoading } = useReports();
+  const { user } = useAuth();
+  const familyId = user?.familyId ?? null;
+  // UI / form state.
   const [remark, setRemark] = useState('');
   const [isSavingRemark, setIsSavingRemark] = useState(false);
-  const [taskTypes, setTaskTypes] = useState<ReportLookupOption[]>([]);
-  const [eventTypes, setEventTypes] = useState<ReportLookupOption[]>([]);
   const [selectedTaskType, setSelectedTaskType] = useState<string>('All');
   const [selectedEventType, setSelectedEventType] = useState<string>('All');
-  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [weekStartDate] = useState(() => {
+    const today = new Date();
+    const lastSunday = new Date(today.setDate(today.getDate() - today.getDay()));
+    return lastSunday.toISOString().split('T')[0];
+  });
 
-  const loadLookups = async () => {
-    setLookupError(null);
-    try {
-      const [liveTaskTypes, liveEventTypes] = await Promise.all([
+  // API data via the shared reducer hook — loading → success → error-with-retry.
+  // (Previously a failed digest load left the shimmer spinning forever.)
+  const digest = useApiResource<WeeklyDigest>(
+    familyId ? () => ReportsRepository.getWeeklyDigest(familyId, weekStartDate) : null,
+    [familyId, weekStartDate],
+    'Unable to load this week\'s digest.',
+  );
+  const lookups = useApiResource<{ taskTypes: ReportLookupOption[]; eventTypes: ReportLookupOption[] }>(
+    async () => {
+      const [taskTypes, eventTypes] = await Promise.all([
         ReportsRepository.getTaskTypes(),
         ReportsRepository.getCalendarEventTypes(),
       ]);
-      setTaskTypes(liveTaskTypes);
-      setEventTypes(liveEventTypes);
-    } catch (error) {
-      console.error('Failed to load report filters', error);
-      setLookupError('Unable to load report focus filters right now.');
-    }
-  };
-
-  useEffect(() => {
-    const today = new Date();
-    const lastSunday = new Date(today.setDate(today.getDate() - today.getDay()));
-    fetchWeeklyDigest(lastSunday.toISOString().split('T')[0]);
-  }, [fetchWeeklyDigest]);
-
-  useEffect(() => { void loadLookups(); }, []);
+      return { taskTypes, eventTypes };
+    },
+    [],
+    'Unable to load report focus filters right now.',
+  );
+  const weeklyDigest = digest.data;
+  const taskTypes = lookups.data?.taskTypes ?? [];
+  const eventTypes = lookups.data?.eventTypes ?? [];
+  const lookupError = lookups.error;
+  const loadLookups = lookups.reload;
 
   const handleSaveRemark = async (childId: string) => {
     if (!remark) return;
@@ -72,7 +77,7 @@ const WeeklyDigestScreen: React.FC = () => {
       await ReportsRepository.updateParentRemark(childId, remark);
       setRemark('');
     } catch (error) {
-      console.error('Failed to save remark', error);
+      logger.error('Failed to save remark', error);
     } finally {
       setTimeout(() => setIsSavingRemark(false), 500);
     }
@@ -82,7 +87,19 @@ const WeeklyDigestScreen: React.FC = () => {
     // Sharing logic
   };
 
-  if (isLoading || !weeklyDigest) {
+  if (!familyId || digest.error) {
+    return (
+      <div className="min-h-screen bg-bg-cream">
+        <FFPageHeader title="Weekly Digest" showBack />
+        <FFErrorState
+          message={familyId ? digest.error ?? undefined : 'No family is linked to this account.'}
+          onRetry={familyId ? digest.reload : undefined}
+        />
+      </div>
+    );
+  }
+
+  if (digest.isLoading || !weeklyDigest) {
     return (
       <div className="min-h-screen bg-bg-cream">
         <FFPageHeader title="Weekly Digest" showBack />
@@ -132,7 +149,7 @@ const WeeklyDigestScreen: React.FC = () => {
 
       <div className="px-4 pt-4 space-y-4">
         {/* Family score hero */}
-        <FFCard className="bg-primary text-white p-5">
+        <FFCard variant="primary" className="text-white p-5">
           <p className="font-body text-xs text-white/60 mb-1">Family Score this week</p>
           <div className="flex items-end justify-between">
             <p className="font-numbers text-6xl font-bold text-white leading-none">

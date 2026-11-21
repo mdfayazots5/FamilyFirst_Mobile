@@ -1,6 +1,5 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
-import { AppConfig } from '../../../core/config/appConfig';
 import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
 import { getMasters } from '../../../core/repositories/MasterDataRepository';
 import { TaskRepository, type TimeBlock } from '../../tasks/repositories/TaskRepository';
@@ -143,17 +142,6 @@ const mapTaskCompletionDto = (
 
 export const TaskCompletionRepository = {
   getCompletions: async (familyId: string, childId: string, date: string): Promise<TaskCompletion[]> => {
-    if (AppConfig.isDemo) {
-      return [
-        { id: 'c1', taskId: 't1', taskName: 'Take Bath', childProfileId: childId, status: 'approved', timeBlock: 'Morning', coinValue: 10 },
-        { id: 'c2', taskId: 't2', taskName: 'Eat Breakfast', childProfileId: childId, status: 'approved', timeBlock: 'Morning', coinValue: 5 },
-        { id: 'c3', taskId: 't3', taskName: 'Brush Teeth', childProfileId: childId, status: 'approved', timeBlock: 'Morning', coinValue: 5 },
-        { id: 'c4', taskId: 't4', taskName: 'Math Homework', childProfileId: childId, status: 'submitted', timeBlock: 'Evening', coinValue: 30, photoUrl: 'https://picsum.photos/seed/math/400/300' },
-        { id: 'c5', taskId: 't5', taskName: 'Read Book', childProfileId: childId, status: 'pending', timeBlock: 'Evening', coinValue: 20 },
-        { id: 'c6', taskId: 't6', taskName: 'Clean Room', childProfileId: childId, status: 'pending', timeBlock: 'Night', coinValue: 50 },
-        { id: 'c7', taskId: 't7', taskName: 'Revision', childProfileId: childId, status: 'pending', timeBlock: 'Night', coinValue: 20 },
-      ];
-    }
     const [response, taskDetails] = await Promise.all([
       apiClient.get<ApiResponse<TaskCompletionDto[]>>(
         resolvePath(MasterApiReference.Tasks.FamilyTaskCompletions, { familyId }),
@@ -166,9 +154,6 @@ export const TaskCompletionRepository = {
   },
 
   getUploadUrl: async (familyId: string, taskId: string): Promise<{ presignedUrl: string; s3Key: string }> => {
-    if (AppConfig.isDemo) {
-      return { presignedUrl: 'https://demo-upload.com', s3Key: `tasks/${taskId}/${Date.now()}` };
-    }
     const response = await apiClient.post<ApiResponse<TaskCompletionUploadUrlDto>>(
       resolvePath(MasterApiReference.Tasks.UploadUrl, { familyId }),
       { TaskId: taskId },
@@ -179,20 +164,44 @@ export const TaskCompletionRepository = {
     };
   },
 
-  submitCompletion: async (familyId: string, taskId: string, data: { scheduledDate: string; photoUrl?: string }): Promise<TaskCompletion> => {
-    if (AppConfig.isDemo) {
-      return {
-        id: `comp_${Math.random().toString(36).substr(2, 9)}`,
-        taskId,
-        taskName: 'Demo Task',
-        childProfileId: 'demo_child',
-        status: 'submitted',
-        timeBlock: 'Morning',
-        coinValue: 10,
-        submittedAt: new Date().toISOString(),
-        ...data
-      } as TaskCompletion;
+  /**
+   * Uploads a task photo and returns the canonical S3 object URL to send as `photoUrl` (ProjectOverview §6).
+   * Live: PUT to the presigned URL with the signed `Content-Type: image/jpeg`. This is the documented exception to
+   * "all HTTP via apiClient": S3 must not receive the app's Bearer token or base URL. Rejects on any non-2xx status,
+   * so a failed upload can never be submitted as a completed photo.
+   */
+  uploadPhoto: async (
+    familyId: string,
+    taskId: string,
+    file: Blob,
+    onProgress?: (progress: number) => void,
+  ): Promise<string> => {
+    const { presignedUrl } = await TaskCompletionRepository.getUploadUrl(familyId, taskId);
+    if (!presignedUrl) {
+      throw new Error('Upload URL was not issued.');
     }
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', presignedUrl);
+      xhr.setRequestHeader('Content-Type', 'image/jpeg');
+      xhr.timeout = 60_000;
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
+      };
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`Photo upload failed (HTTP ${xhr.status}).`)));
+      xhr.onerror = () => reject(new Error('Photo upload failed (network).'));
+      xhr.ontimeout = () => reject(new Error('Photo upload timed out.'));
+      xhr.send(file);
+    });
+
+    onProgress?.(100);
+    return presignedUrl.split('?')[0];
+  },
+
+  submitCompletion: async (familyId: string, taskId: string, data: { scheduledDate: string; photoUrl?: string }): Promise<TaskCompletion> => {
     const response = await apiClient.post<ApiResponse<TaskCompletionDto>>(
       resolvePath(MasterApiReference.Tasks.TaskCompletions, { familyId, taskId }),
       data,
@@ -202,13 +211,6 @@ export const TaskCompletionRepository = {
   },
 
   getVerificationQueue: async (familyId: string): Promise<TaskCompletion[]> => {
-    if (AppConfig.isDemo) {
-      return [
-        { id: 'q1', taskId: 't4', taskName: 'Math Homework', childProfileId: 'mem_2', status: 'submitted', timeBlock: 'Evening', coinValue: 30, photoUrl: 'https://picsum.photos/seed/math/400/300', submittedAt: new Date().toISOString() },
-        { id: 'q2', taskId: 't8', taskName: 'Clean Room', childProfileId: 'mem_2', status: 'submitted', timeBlock: 'Night', coinValue: 50, photoUrl: 'https://picsum.photos/seed/room/400/300', submittedAt: new Date().toISOString() },
-        { id: 'q3', taskId: 't9', taskName: 'Science Project', childProfileId: 'mem_3', status: 'submitted', timeBlock: 'Evening', coinValue: 100, photoUrl: 'https://picsum.photos/seed/science/400/300', submittedAt: new Date().toISOString() },
-      ];
-    }
     const response = await apiClient.get<ApiResponse<TaskCompletionDto[]>>(
       resolvePath(MasterApiReference.Tasks.VerificationQueue, { familyId }),
     );
@@ -217,7 +219,6 @@ export const TaskCompletionRepository = {
   },
 
   reviewCompletion: async (familyId: string, completionId: string, status: 'approved' | 'flagged', reviewNote?: string): Promise<void> => {
-    if (AppConfig.isDemo) return;
     await apiClient.put<ApiResponse<null>>(
       resolvePath(MasterApiReference.Tasks.TaskCompletionReview, { familyId, completionId }),
       { status: status === 'approved' ? 4 : 5, reviewNote },
@@ -225,7 +226,6 @@ export const TaskCompletionRepository = {
   },
 
   approveAll: async (familyId: string): Promise<number> => {
-    if (AppConfig.isDemo) return 3;
     const response = await apiClient.post<ApiResponse<{ approvedCount: number }>>(
       resolvePath(MasterApiReference.Tasks.ApproveAllVerificationQueue, { familyId }),
     );
@@ -233,7 +233,8 @@ export const TaskCompletionRepository = {
   },
 
   getTaskStatuses: async (): Promise<TaskStatusOption[]> => {
-    return (await getMasters('TaskStatus')).map((item: MasterDataItem) => ({
+    const items = await getMasters('TaskStatus');
+    return items.map((item: MasterDataItem) => ({
       id: item.id,
       label: item.name,
       code: item.code,

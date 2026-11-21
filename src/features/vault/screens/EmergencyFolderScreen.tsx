@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useReducer, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ShieldAlert, WifiOff, Phone, Heart, AlertTriangle, Pill, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ShieldAlert, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { VaultRepository } from '../repositories/VaultRepository';
 import type { VaultDocument } from '../repositories/VaultRepository';
@@ -8,75 +8,82 @@ import DocumentCard from '../widgets/DocumentCard';
 import FFCard from '../../../shared/components/FFCard';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import FFButton from '../../../shared/components/FFButton';
+import EmergencyCacheBanner from '../../../core/connectivity/EmergencyCacheBanner';
 
-interface EmergencyMemberCard {
-  memberId: string;
-  memberName: string;
-  bloodGroup: string;
-  allergies: string[];
-  medications: string[];
-  emergencyContact: string;
-}
+type FolderState =
+  | { status: 'loading' | 'error' }
+  | { status: 'ready'; documents: VaultDocument[]; fromCache: boolean };
 
-const DEMO_EMERGENCY_CARDS: EmergencyMemberCard[] = [
-  {
-    memberId: 'm1',
-    memberName: 'Arjun',
-    bloodGroup: 'B+',
-    allergies: ['Penicillin', 'Peanuts'],
-    medications: ['Salbutamol inhaler'],
-    emergencyContact: '+91 98765 43210 (Priya)',
-  },
-  {
-    memberId: 'm2',
-    memberName: 'Priya',
-    bloodGroup: 'O+',
-    allergies: [],
-    medications: [],
-    emergencyContact: '+91 98765 43210 (Rajesh)',
-  },
-];
+type FilePreview = { url: string; canPreview: boolean };
 
 const EmergencyFolderScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [documents, setDocuments] = useState<VaultDocument[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const familyId = user?.familyId;
+  const [folder, setFolder] = useReducer((_previous: FolderState, next: FolderState) => next, { status: 'loading' });
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [selectedFile, setSelectedFile] = useState<VaultDocument | null>(null);
+  const [preview, setPreview] = useState<FilePreview | 'loading' | 'unavailable'>('loading');
 
   useEffect(() => {
-    const onOnline  = () => setIsOffline(false);
-    const onOffline = () => setIsOffline(true);
-    window.addEventListener('online',  onOnline);
-    window.addEventListener('offline', onOffline);
+    let active = true;
+    setFolder({ status: 'loading' });
+    setSelectedFile(null);
+    if (!familyId) {
+      setFolder({ status: 'error' });
+      return;
+    }
+    void VaultRepository.loadEmergencyDocuments(familyId)
+      .then(({ data, fromCache }) => { if (active) setFolder({ status: 'ready', documents: data, fromCache }); })
+      .catch(() => { if (active) setFolder({ status: 'error' }); });
+    return () => { active = false; };
+  }, [familyId, user?.id, loadAttempt]);
+
+  useEffect(() => {
+    if (!familyId || !selectedFile) return;
+    let active = true;
+    let url: string | undefined;
+    void VaultRepository.getSavedEmergencyFile(familyId, selectedFile)
+      .then(blob => {
+        if (!active) return;
+        if (!blob) {
+          setPreview('unavailable');
+          return;
+        }
+        url = URL.createObjectURL(blob);
+        setPreview({ url, canPreview: blob.type !== 'application/octet-stream' });
+      })
+      .catch(() => { if (active) setPreview('unavailable'); });
     return () => {
-      window.removeEventListener('online',  onOnline);
-      window.removeEventListener('offline', onOffline);
+      active = false;
+      if (url) URL.revokeObjectURL(url);
     };
-  }, []);
+  }, [familyId, user?.id, selectedFile]);
 
-  useEffect(() => {
-    const familyId = user?.familyId ?? 'demo';
-    VaultRepository.getEmergencyDocuments(familyId)
-      .then(setDocuments)
-      .finally(() => setIsLoading(false));
-  }, [user?.familyId]);
+  const documents = folder.status === 'ready' ? folder.documents : [];
+  const fromCache = folder.status === 'ready' && folder.fromCache;
+
+  const openDocument = (doc: VaultDocument) => {
+    if (fromCache) {
+      if (selectedFile?.documentId === doc.documentId) return;
+      setPreview('loading');
+      setSelectedFile(doc);
+    } else {
+      navigate('/vault/' + doc.documentId);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-bg-cream pb-24">
-      {/* Offline indicator */}
-      {isOffline && (
-        <div className="bg-accent text-primary px-4 py-2 flex items-center gap-2 font-body text-sm font-semibold">
-          <WifiOff className="w-4 h-4 flex-shrink-0" />
-          <span>Offline — showing cached emergency data</span>
-        </div>
-      )}
+      {fromCache && <EmergencyCacheBanner />}
 
       {/* Emergency header — alert red is intentional for emergency context */}
       <div className="bg-alert px-5 pt-12 pb-5 sticky top-0 z-40">
         <div className="flex items-center gap-3">
           {user && (
-            <button onClick={() => navigate(-1)} className="p-2 rounded-xl bg-white/10" aria-label="Go back">
+            <button onClick={() => navigate(-1)} className="grid min-h-12 min-w-12 place-items-center rounded-xl bg-white/10" aria-label="Go back">
               <ArrowLeft className="w-5 h-5 text-white" />
             </button>
           )}
@@ -85,74 +92,45 @@ const EmergencyFolderScreen: React.FC = () => {
             <h1 className="font-display font-bold text-lg text-white">Emergency Folder</h1>
           </div>
         </div>
-        <p className="font-body text-white/70 text-xs mt-2">View-only · No login required for shared links</p>
+        <p className="font-body text-white/70 text-xs mt-2">View-only emergency documents</p>
       </div>
 
       <main className="px-4 pt-4 pb-24 space-y-5 page-enter">
-        {/* Member emergency cards */}
-        <div className="space-y-3">
-          <FFSectionHeader icon={<Heart className="w-[18px] h-[18px]" />} title="Family Emergency Info" />
-          {DEMO_EMERGENCY_CARDS.map(card => (
-            <FFCard key={card.memberId} className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-display font-semibold text-base text-primary">{card.memberName}</span>
-                <span className="flex items-center gap-1.5 bg-alert/10 text-alert font-numbers font-medium text-sm px-3 py-1 rounded-full">
-                  <Heart className="w-3.5 h-3.5" fill="currentColor" />
-                  {card.bloodGroup}
-                </span>
-              </div>
 
-              {card.allergies.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-accent" />
-                    <p className="font-body font-semibold text-xs text-accent">Allergies</p>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {card.allergies.map(a => (
-                      <span key={a} className="font-body text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">{a}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {card.medications.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <Pill className="w-3.5 h-3.5 text-primary" />
-                    <p className="font-body font-semibold text-xs text-primary">Current Medications</p>
-                  </div>
-                  {card.medications.map(m => (
-                    <p key={m} className="font-body text-xs text-primary">{m}</p>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 pt-2 border-t border-black/5">
-                <Phone className="w-3.5 h-3.5 text-success flex-shrink-0" />
-                <a
-                  href={`tel:${card.emergencyContact.split('(')[0].trim()}`}
-                  className="font-body text-sm font-semibold text-success underline"
-                >
-                  {card.emergencyContact}
-                </a>
-              </div>
-            </FFCard>
-          ))}
-        </div>
+        {selectedFile && (
+          <FFCard className="p-4 space-y-3">
+            <h2 className="font-display font-semibold text-primary">{selectedFile.documentName}</h2>
+            {preview === 'loading' ? <FFShimmer className="h-12" /> : preview === 'unavailable' ? (
+              <p className="text-sm text-primary">This file has no saved copy. Reconnect and reload the emergency folder.</p>
+            ) : (
+              <a
+                href={preview.url}
+                target={preview.canPreview ? '_blank' : undefined}
+                rel="noopener noreferrer"
+                download={preview.canPreview ? undefined : selectedFile.documentName}
+                className="inline-flex min-h-12 items-center rounded-xl bg-primary px-4 text-sm font-semibold text-white"
+              >
+                {preview.canPreview ? 'Open saved file' : 'Download saved file'}
+              </a>
+            )}
+            <FFButton className="ml-2" variant="outline" onClick={() => setSelectedFile(null)}>Close</FFButton>
+          </FFCard>
+        )}
 
         {/* Priority documents */}
         <div className="space-y-3">
           <FFSectionHeader icon={<ShieldAlert className="w-[18px] h-[18px]" />} title={`Priority Documents (${documents.length}/5)`} />
 
-          {isLoading ? (
+          {folder.status === 'loading' ? (
             <div className="space-y-2">
               {[...Array(3)].map((_, i) => <FFShimmer key={i} className="h-16 rounded-ff" />)}
             </div>
+          ) : folder.status === 'error' ? (
+            <FFErrorState message="Unable to load priority documents." onRetry={() => setLoadAttempt(attempt => attempt + 1)} />
           ) : documents.length === 0 ? (
             <FFCard className="p-6 text-center">
               <p className="font-body text-sm text-gray-400">No documents tagged as emergency priority.</p>
-              {user && (
+              {user && !fromCache && (
                 <button
                   onClick={() => navigate('/vault')}
                   className="mt-3 flex items-center gap-1 font-body text-xs text-accent font-semibold mx-auto"
@@ -167,7 +145,7 @@ const EmergencyFolderScreen: React.FC = () => {
                 <DocumentCard
                   key={doc.documentId}
                   document={doc}
-                  onClick={() => user ? navigate(`/vault/${doc.documentId}`) : undefined}
+                  onClick={() => openDocument(doc)}
                 />
               ))}
             </div>

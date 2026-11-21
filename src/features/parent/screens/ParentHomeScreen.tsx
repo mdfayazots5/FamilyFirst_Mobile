@@ -1,15 +1,5 @@
 import React, { useEffect, useReducer } from 'react';
-import {
-  Award,
-  CalendarDays,
-  ChevronRight,
-  ClipboardCheck,
-  Flame,
-  RefreshCw,
-  ShieldAlert,
-  Star,
-  Users,
-} from 'lucide-react';
+import { CalendarDays, ChevronRight, ClipboardCheck, Flame, RefreshCw, ShieldAlert, Star, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
 import FFButton from '../../../shared/components/FFButton';
@@ -19,6 +9,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { DashboardData, DashboardRepository } from '../repositories/DashboardRepository';
+import { logger } from '../../../core/services/logger';
 
 type ParentHomeState =
   | { status: 'loading'; data: DashboardData | null; error: string | null }
@@ -66,7 +57,7 @@ const ParentHomeScreen: React.FC = () => {
       const data = await DashboardRepository.getDashboard(user.familyId);
       dispatch({ type: 'LOAD_SUCCESS', payload: data });
     } catch (error) {
-      console.error('Failed to load parent dashboard', error);
+      logger.error('Failed to load parent dashboard', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load the parent dashboard right now.' });
     }
   };
@@ -197,7 +188,7 @@ const ParentHomeScreen: React.FC = () => {
                     <FFCard
                       key={child.id}
                       hoverable
-                      onClick={() => navigate(`/parent/child/${child.id}`)}
+                      onClick={() => navigate(`/parent/children/${child.id}`)}
                       className="shadow-card p-5"
                     >
                       <div className="flex items-start justify-between gap-4">

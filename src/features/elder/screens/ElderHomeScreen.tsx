@@ -17,6 +17,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { CalendarEvent, CalendarRepository, EventType } from '../../calendar/repositories/CalendarRepository';
 import { ElderEventTypeOption, ElderRepository, GrandchildStatus } from '../repositories/ElderRepository';
+import { logger } from '../../../core/services/logger';
 
 type ElderTimelineFilter = 'All' | EventType;
 
@@ -85,7 +86,7 @@ const ElderHomeScreen: React.FC = () => {
         },
       });
     } catch (error) {
-      console.error('Failed to load elder home screen', error);
+      logger.error('Failed to load elder home screen', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load elder updates right now.' });
     }
   };

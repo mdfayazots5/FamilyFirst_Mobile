@@ -1,7 +1,13 @@
 import React from 'react';
 import { motion } from 'motion/react';
 
-interface FFButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+// motion.button redefines the animation/drag handlers with its own signatures, so the
+// DOM versions are omitted to keep the prop spread type-safe.
+type MotionConflictingProps =
+  | 'onAnimationStart' | 'onAnimationEnd' | 'onAnimationIteration'
+  | 'onDrag' | 'onDragStart' | 'onDragEnd';
+
+interface FFButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, MotionConflictingProps> {
   variant?: 'primary' | 'accent' | 'outline' | 'ghost' | 'alert';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
@@ -41,8 +47,8 @@ const FFButton: React.FC<FFButtonProps> = ({
         ${sizes[size]}
         ${className}
       `}
-      disabled={isLoading || props.disabled}
       {...props}
+      disabled={isLoading || props.disabled}
     >
       {isLoading ? (
         <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />

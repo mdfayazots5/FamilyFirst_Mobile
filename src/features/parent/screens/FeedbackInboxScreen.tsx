@@ -17,6 +17,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { Feedback, FeedbackRepository, FeedbackType } from '../../teacher/repositories/FeedbackRepository';
+import { logger } from '../../../core/services/logger';
 
 type InboxFilter = 'All' | 'Unread' | FeedbackType;
 
@@ -96,7 +97,7 @@ const FeedbackInboxScreen: React.FC = () => {
       const data = await FeedbackRepository.getFeedbackInbox(user.familyId);
       dispatch({ type: 'LOAD_SUCCESS', payload: data });
     } catch (error) {
-      console.error('Failed to load feedback inbox', error);
+      logger.error('Failed to load feedback inbox', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load feedback right now.' });
     }
   };

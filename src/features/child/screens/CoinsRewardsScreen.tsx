@@ -1,11 +1,5 @@
 import React, { useEffect, useReducer, useState } from 'react';
-import {
-  Coins,
-  Gift,
-  History,
-  RefreshCw,
-  ShoppingBag,
-} from 'lucide-react';
+import { Gift, History, RefreshCw, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
@@ -15,6 +9,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { CoinTransaction, Redemption, Reward, RewardRepository } from '../../parent/repositories/RewardRepository';
+import { logger } from '../../../core/services/logger';
 
 interface CoinsRewardsData {
   rewards: Reward[];
@@ -63,7 +58,7 @@ const CoinsRewardsScreen: React.FC = () => {
   const [selectedRewardId, setSelectedRewardId] = useState<string | null>(null);
 
   const loadScreen = async () => {
-    if (!user?.familyId || !user?.id) {
+    if (!user?.familyId || !user?.childProfileId) {
       dispatch({ type: 'LOAD_ERROR', error: 'Coins and rewards are not available right now.' });
       return;
     }
@@ -73,20 +68,20 @@ const CoinsRewardsScreen: React.FC = () => {
     try {
       const [rewards, history, redemptions] = await Promise.all([
         RewardRepository.getRewards(user.familyId),
-        RewardRepository.getCoinHistory(user.id),
+        RewardRepository.getCoinHistory(user.childProfileId),
         RewardRepository.getPendingRedemptions(user.familyId),
       ]);
 
       dispatch({ type: 'LOAD_SUCCESS', payload: { rewards, history, redemptions } });
     } catch (error) {
-      console.error('Failed to load child coins and rewards', error);
+      logger.error('Failed to load child coins and rewards', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load coins and rewards right now.' });
     }
   };
 
   useEffect(() => {
     void loadScreen();
-  }, [user?.familyId, user?.id]);
+  }, [user?.familyId, user?.childProfileId]);
 
   const screenData = state.data;
   const history = screenData?.history ?? [];
@@ -105,20 +100,20 @@ const CoinsRewardsScreen: React.FC = () => {
     .reduce((sum, item) => sum + item.amount, 0);
 
   const handleRedeem = async (reward: Reward) => {
-    if (!user?.familyId || !user?.id) {
+    if (!user?.familyId || !user?.childProfileId) {
       return;
     }
 
     setSelectedRewardId(reward.id);
 
     try {
-      const redemption = await RewardRepository.redeemReward(user.familyId, reward.id, user.id);
+      const redemption = await RewardRepository.redeemReward(user.familyId, reward.id, user.childProfileId);
       dispatch({
         type: 'REDEMPTIONS_UPDATED',
         payload: [redemption, ...(screenData?.redemptions ?? [])],
       });
     } catch (error) {
-      console.error('Failed to redeem reward for child', error);
+      logger.error('Failed to redeem reward for child', error);
     } finally {
       setSelectedRewardId(null);
     }

@@ -1,29 +1,14 @@
 import { TaskCompletionRepository } from '../../features/child/repositories/TaskCompletionRepository';
 
+/**
+ * Task photo upload facade (public API unchanged). The upload lives in
+ * TaskCompletionRepository.uploadPhoto, which performs a real presigned PUT and rejects on failure.
+ */
 export const S3UploadService = {
-  uploadImage: async (
+  uploadImage: (
     familyId: string,
     taskId: string,
     file: File,
     onProgress?: (progress: number) => void,
-  ): Promise<string> => {
-    // 1. Get presigned URL
-    const { presignedUrl, s3Key } = await TaskCompletionRepository.getUploadUrl(familyId, taskId);
-
-    // 2. Simulate upload progress
-    return new Promise((resolve, reject) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        if (onProgress) onProgress(progress);
-        
-        if (progress >= 100) {
-          clearInterval(interval);
-          // In demo mode, we return a random picsum URL as the "uploaded" image
-          // In real mode, we would actually PUT to the presignedUrl
-          resolve(`https://picsum.photos/seed/${s3Key}/800/600`);
-        }
-      }, 200);
-    });
-  }
+  ): Promise<string> => TaskCompletionRepository.uploadPhoto(familyId, taskId, file, onProgress),
 };

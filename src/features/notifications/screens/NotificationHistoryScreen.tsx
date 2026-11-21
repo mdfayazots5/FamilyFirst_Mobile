@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useReducer, useState } from 'react';
 import { Bell, CheckCheck, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
+import { useDeepLinkHandler } from '../../../core/router/DeepLinkHandler';
 import {
   AppNotification,
   NotificationRepository,
@@ -94,6 +95,7 @@ const formatTypeLabel = (value: string) => value.replace(/([A-Z])/g, ' $1').trim
 const NotificationHistoryScreen: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { handleDeepLink } = useDeepLinkHandler();
   const [state, dispatch] = useReducer(historyReducer, {
     status: 'loading',
     notifications: [],
@@ -175,7 +177,8 @@ const NotificationHistoryScreen: React.FC = () => {
       // Keep optimistic UI; next refresh will reconcile server state.
     }
 
-    navigate(notification.deepLinkPath);
+    // Server-supplied path: only same-app absolute paths are followed (no //host, no backslashes).
+    handleDeepLink(notification.deepLinkPath);
   };
 
   const handleMarkAllRead = async () => {

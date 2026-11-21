@@ -1,6 +1,7 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
-import { useAuth, UserRole } from '../auth/AuthContext';
+import { Routes, Route, Navigate, Outlet, useParams } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+import { UserRole } from '../auth/UserRole';
 import { AppConfig } from '../config/appConfig';
 import SplashScreen from '../../features/auth/SplashScreen';
 import PhoneLoginScreen from '../../features/auth/PhoneLoginScreen';
@@ -99,7 +100,7 @@ const EmergencyCardPublicRoute: React.FC = () => {
   return <EmergencyCardScreen shareToken={token} />;
 };
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserRole[] }> = ({
+const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: readonly UserRole[] }> = ({
   children,
   allowedRoles
 }) => {
@@ -109,17 +110,13 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && (!user || !allowedRoles.includes(user.role))) {
     return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
 };
 
-const ProfileRoute: React.FC = () => {
-  const { user } = useAuth();
-  return user?.role === UserRole.TEACHER ? <TeacherProfileScreen /> : <ParentProfileScreen />;
-};
 
 // Reads auth context directly so it always has the live user value,
 // regardless of when the parent AppRouter last rendered.
@@ -139,6 +136,9 @@ const RoleRedirect: React.FC = () => {
   }
 };
 
+const familyModuleRoles = Object.values(UserRole).filter(role => role !== UserRole.SUPER_ADMIN);
+const guardianRoles = [UserRole.PARENT, UserRole.FAMILY_ADMIN];
+
 const AppRouter: React.FC = () => {
   const { isAuthReady } = useAuth();
 
@@ -151,7 +151,10 @@ const AppRouter: React.FC = () => {
       <Route path="/otp-verify" element={<OtpVerifyScreen />} />
       <Route path="/child-login" element={<ChildLoginScreen />} />
 
-      <Route path="/family-setup" element={<FamilySetupWizard />} />
+      <Route path="/family-setup" element={<ProtectedRoute><FamilySetupWizard /></ProtectedRoute>} />
+
+      <Route path="vault/share/:token" element={<ShareDocumentViewScreen />} />
+      <Route path="medical/emergency-card/:token" element={<EmergencyCardPublicRoute />} />
 
       {/* Main App Shell */}
       <Route path="/" element={
@@ -161,148 +164,151 @@ const AppRouter: React.FC = () => {
       }>
         <Route index element={<RoleRedirect />} />
         
-        {/* Role Dashboards */}
-        <Route path="parent" element={<ParentHomeScreen />} />
-        <Route path="teacher" element={<TeacherHomeScreen />} />
-        <Route path="child" element={<ChildHomeScreen />} />
-        <Route path="elder" element={<ElderHomeScreen />} />
-        <Route path="admin" element={<AdminDashboardScreen />} />
-        
-        {/* Family & Profile Routes */}
-        <Route path="parent/members" element={<FamilyMembersScreen />} />
-        <Route path="parent/add-member" element={<AddMemberScreen />} />
-        <Route path="parent/join-code" element={<JoinCodeScreen />} />
-        <Route path="parent/children/:childId" element={<ChildDetailScreen />} />
-        
-        <Route path="profile" element={<ProfileRoute />} />
-        
-        {/* Teacher Specific Routes */}
-        <Route path="teacher/attendance/:sessionId" element={<AttendanceMarkingScreen />} />
-        <Route path="teacher/create-session" element={<CreateSessionScreen />} />
-        <Route path="teacher/feedback/new" element={<FeedbackSubmissionScreen />} />
-        <Route path="teacher/feedback/history" element={<FeedbackHistoryScreen />} />
-        
-        {/* Parent Feedback Routes */}
-        <Route path="parent/feedback" element={<FeedbackInboxScreen />} />
-        <Route path="parent/feedback/:feedbackId" element={<FeedbackDetailScreen />} />
-        
-        {/* Task & Routine Routes */}
-        <Route path="parent/routine/:childId" element={<RoutineBuilderScreen />} />
-        <Route path="parent/routine/:childId/add" element={<AddTaskScreen />} />
-        <Route path="parent/routine/:childId/edit/:taskId" element={<AddTaskScreen />} />
-        <Route path="parent/verification" element={<VerificationQueueScreen />} />
-        <Route path="parent/rewards" element={<RewardShopScreen />} />
-        <Route path="parent/goals" element={<FamilyGoalsScreen />} />
-        <Route path="parent/ledger" element={<FamilyLedgerScreen />} />
-        <Route path="parent/admin" element={<FamilyAdminPanelScreen />} />
-        
-        {/* Calendar Routes */}
-        <Route path="calendar" element={<FamilyCalendarScreen />} />
-        <Route path="calendar/create" element={<CreateEventScreen />} />
-        <Route path="calendar/edit/:eventId" element={<CreateEventScreen />} />
-        <Route path="calendar/event/:eventId" element={<EventDetailScreen />} />
-        
-        {/* Child Specific Routes */}
-        <Route path="child/tasks/:completionId" element={<TaskDetailScreen />} />
-        <Route path="child/coins" element={<CoinsRewardsScreen />} />
-        <Route path="child/scores" element={<MyScoresScreen />} />
-        <Route path="child/family" element={<ChildFamilyScreen />} />
-        <Route path="child/settings" element={<ChildSettingsScreen />} />
+        <Route element={<ProtectedRoute allowedRoles={[UserRole.PARENT, UserRole.FAMILY_ADMIN]}><Outlet /></ProtectedRoute>}>
+          <Route path="parent" element={<ParentHomeScreen />} />
+          <Route path="parent/members" element={<FamilyMembersScreen />} />
+          <Route path="parent/add-member" element={<AddMemberScreen />} />
+          <Route path="parent/join-code" element={<JoinCodeScreen />} />
+          <Route path="parent/children/:childId" element={<ChildDetailScreen />} />
+          <Route path="parent/feedback" element={<FeedbackInboxScreen />} />
+          <Route path="parent/feedback/:feedbackId" element={<FeedbackDetailScreen />} />
+          <Route path="parent/routine/:childId" element={<RoutineBuilderScreen />} />
+          <Route path="parent/routine/:childId/add" element={<AddTaskScreen />} />
+          <Route path="parent/routine/:childId/edit/:taskId" element={<AddTaskScreen />} />
+          <Route path="parent/verification" element={<VerificationQueueScreen />} />
+          <Route path="parent/rewards" element={<RewardShopScreen />} />
+          <Route path="parent/goals" element={<FamilyGoalsScreen />} />
+          <Route path="parent/ledger" element={<FamilyLedgerScreen />} />
+          <Route path="parent/settings" element={<ParentSettingsScreen />} />
+          <Route path="parent/profile" element={<ParentProfileScreen />} />
+        </Route>
 
-        {/* Elder Specific Routes */}
-        <Route path="elder/appreciate/:childId" element={<ElderSendAppreciationScreen />} />
-        <Route path="elder/settings" element={<ElderSettingsScreen />} />
+        <Route element={<ProtectedRoute allowedRoles={[UserRole.FAMILY_ADMIN]}><Outlet /></ProtectedRoute>}>
+          <Route path="parent/admin" element={<FamilyAdminPanelScreen />} />
+          <Route path="family-admin/modules" element={<ModuleVisibilityScreen />} />
+          <Route path="family-admin/notifications" element={<NotificationRulesScreen />} />
+          <Route path="family-admin/storage" element={<StorageConfigScreen />} />
+          <Route path="family-admin/alert-thresholds" element={<SafetyAlertThresholdsScreen />} />
+          <Route path="family-admin/emergency-access" element={<EmergencyAccessRulesScreen />} />
+          <Route path="family-admin/finance-privacy" element={<FinancePrivacyScreen />} />
+        </Route>
 
-        {/* Super Admin Specific Routes */}
-        <Route path="admin/families" element={<FamilyManagementScreen />} />
-        {AppConfig.features.subscriptionEnabled && <Route path="admin/plans" element={<PlansManagerScreen />} />}
-        <Route path="admin/task-templates" element={<TaskTemplatesScreen />} />
-        <Route path="admin/reward-catalog" element={<RewardCatalogScreen />} />
-        <Route path="admin/campaigns" element={<NotificationCampaignScreen />} />
-        <Route path="admin/config" element={<AppConfigScreen />} />
-        <Route path="admin/analytics" element={<AnalyticsScreen />} />
-        <Route path="admin/support" element={<SupportTicketsScreen />} />
-        <Route path="admin/content" element={<ContentManagerScreen />} />
+        <Route element={<ProtectedRoute allowedRoles={[UserRole.TEACHER]}><Outlet /></ProtectedRoute>}>
+          <Route path="teacher" element={<TeacherHomeScreen />} />
+          <Route path="teacher/attendance/:sessionId" element={<AttendanceMarkingScreen />} />
+          <Route path="teacher/create-session" element={<CreateSessionScreen />} />
+          <Route path="teacher/feedback/new" element={<FeedbackSubmissionScreen />} />
+          <Route path="teacher/feedback/history" element={<FeedbackHistoryScreen />} />
+          <Route path="teacher/settings" element={<TeacherSettingsScreen />} />
+          <Route path="teacher/profile" element={<TeacherProfileScreen />} />
+        </Route>
 
-        {/* Family Admin Routes */}
-        <Route path="family-admin/modules" element={<ModuleVisibilityScreen />} />
-        <Route path="family-admin/notifications" element={<NotificationRulesScreen />} />
-        <Route path="family-admin/storage" element={<StorageConfigScreen />} />
-        <Route path="family-admin/alert-thresholds" element={<SafetyAlertThresholdsScreen />} />
-        <Route path="family-admin/emergency-access" element={<EmergencyAccessRulesScreen />} />
-        <Route path="family-admin/finance-privacy" element={<FinancePrivacyScreen />} />
+        <Route element={<ProtectedRoute allowedRoles={[UserRole.CHILD]}><Outlet /></ProtectedRoute>}>
+          <Route path="child" element={<ChildHomeScreen />} />
+          <Route path="child/tasks/:completionId" element={<TaskDetailScreen />} />
+          <Route path="child/coins" element={<CoinsRewardsScreen />} />
+          <Route path="child/scores" element={<MyScoresScreen />} />
+          <Route path="child/family" element={<ChildFamilyScreen />} />
+          <Route path="child/settings" element={<ChildSettingsScreen />} />
+        </Route>
 
-        {/* Notification Routes */}
+        <Route element={<ProtectedRoute allowedRoles={[UserRole.ELDER]}><Outlet /></ProtectedRoute>}>
+          <Route path="elder" element={<ElderHomeScreen />} />
+          <Route path="elder/appreciate/:childId" element={<ElderSendAppreciationScreen />} />
+          <Route path="elder/settings" element={<ElderSettingsScreen />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}><Outlet /></ProtectedRoute>}>
+          <Route path="admin" element={<AdminDashboardScreen />} />
+          <Route path="admin/families" element={<FamilyManagementScreen />} />
+          {AppConfig.features.subscriptionEnabled && <Route path="admin/plans" element={<PlansManagerScreen />} />}
+          <Route path="admin/task-templates" element={<TaskTemplatesScreen />} />
+          <Route path="admin/reward-catalog" element={<RewardCatalogScreen />} />
+          <Route path="admin/campaigns" element={<NotificationCampaignScreen />} />
+          <Route path="admin/config" element={<AppConfigScreen />} />
+          <Route path="admin/analytics" element={<AnalyticsScreen />} />
+          <Route path="admin/support" element={<SupportTicketsScreen />} />
+          <Route path="admin/content" element={<ContentManagerScreen />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={familyModuleRoles}><Outlet /></ProtectedRoute>}>
+          {AppConfig.features.documentVault && (
+            <>
+              <Route path="vault" element={<VaultHomeScreen />} />
+              <Route path="vault/search" element={<DocumentSearchScreen />} />
+              <Route path="vault/upload" element={<DocumentUploadScreen />} />
+              <Route path="vault/expiry" element={<ExpiryDashboardScreen />} />
+              <Route path="vault/emergency" element={<EmergencyFolderScreen />} />
+              <Route path="vault/category/:categoryId" element={<CategoryViewScreen />} />
+              <Route path="vault/:documentId" element={<DocumentDetailScreen />} />
+            </>
+          )}
+          {AppConfig.features.medicalRecords && (
+            <>
+              <Route path="medical" element={<HealthHomeScreen />} />
+              <Route path="medical/new" element={<EditHealthProfileScreen createMode />} />
+              <Route path="medical/:memberId" element={<MemberHealthProfileScreen />} />
+              <Route path="medical/:memberId/edit" element={<EditHealthProfileScreen />} />
+              <Route path="medical/:memberId/emergency-card" element={<EmergencyCardScreen />} />
+              <Route path="medical/:memberId/vaccinations" element={<VaccinationTrackerScreen />} />
+            </>
+          )}
+        </Route>
+
+        {/* Profile + notifications are per-user data: any signed-in role. */}
+        <Route path="profile" element={<ProfileScreen />} />
         <Route path="notifications" element={<NotificationHistoryScreen />} />
         <Route path="notifications/preferences" element={<NotificationPreferencesScreen />} />
-        
-        {/* Document Vault Routes */}
-        {AppConfig.features.documentVault && (
-          <>
-            <Route path="vault" element={<VaultHomeScreen />} />
-            <Route path="vault/search" element={<DocumentSearchScreen />} />
-            <Route path="vault/upload" element={<DocumentUploadScreen />} />
-            <Route path="vault/expiry" element={<ExpiryDashboardScreen />} />
-            <Route path="vault/emergency" element={<EmergencyFolderScreen />} />
-            <Route path="vault/category/:categoryId" element={<CategoryViewScreen />} />
-            <Route path="vault/:documentId" element={<DocumentDetailScreen />} />
-          </>
-        )}
 
-        {/* Public share link — no auth required, renders specific shared document */}
-        <Route path="vault/share/:token" element={<ShareDocumentViewScreen />} />
+        {/* Calendar: every family role (no family scope for SuperAdmin). */}
+        <Route element={<ProtectedRoute allowedRoles={familyModuleRoles}><Outlet /></ProtectedRoute>}>
+          <Route path="calendar" element={<FamilyCalendarScreen />} />
+          <Route path="calendar/create" element={<CreateEventScreen />} />
+          <Route path="calendar/edit/:eventId" element={<CreateEventScreen />} />
+          <Route path="calendar/event/:eventId" element={<EventDetailScreen />} />
+        </Route>
 
-        {/* Medical & Health Records Routes */}
-        {AppConfig.features.medicalRecords && (
-          <>
-            <Route path="medical" element={<HealthHomeScreen />} />
-            <Route path="medical/:memberId" element={<MemberHealthProfileScreen />} />
-            <Route path="medical/:memberId/edit" element={<EditHealthProfileScreen />} />
-            <Route path="medical/:memberId/emergency-card" element={<EmergencyCardScreen />} />
-            <Route path="medical/:memberId/vaccinations" element={<VaccinationTrackerScreen />} />
-          </>
-        )}
+        {/* Safety, Reports, Finance: Parent/FamilyAdmin only — mirrors the backend gates (ProjectOverview §14.4, §16.4, §15). */}
+        <Route element={<ProtectedRoute allowedRoles={guardianRoles}><Outlet /></ProtectedRoute>}>
+          {AppConfig.features.safetyLocation && (
+            <>
+              <Route path="safety" element={<SafetyHomeScreen />} />
+              <Route path="safety/map" element={<FamilyMapScreen />} />
+              <Route path="safety/zones" element={<SafeZoneManagerScreen />} />
+              <Route path="safety/zones/add" element={<AddEditSafeZoneScreen />} />
+              <Route path="safety/zones/edit/:zoneId" element={<AddEditSafeZoneScreen />} />
+              <Route path="safety/alerts" element={<LocationAlertHistoryScreen />} />
+              <Route path="safety/sos-alert" element={<SosAlertScreen />} />
+              <Route path="safety/settings" element={<LocationSettingsScreen />} />
+            </>
+          )}
 
-        {/* Public emergency card link — no auth required */}
-        <Route path="medical/emergency-card/:token" element={<EmergencyCardPublicRoute />} />
+          <Route path="reports" element={<ScoresReportsScreen />} />
+          <Route path="reports/weekly" element={<WeeklyDigestScreen />} />
+          <Route path="reports/attendance" element={<AttendanceSummaryScreen />} />
+          <Route path="reports/monthly" element={<MonthlyReportScreen />} />
+          <Route path="reports/archive" element={<ReportArchiveScreen />} />
 
-        {/* Safety & Location Routes */}
+          {AppConfig.features.financeTracker && (
+            <>
+              <Route path="finance" element={<FinanceDashboardScreen />} />
+              <Route path="finance/transactions" element={<FinanceDashboardScreen />} />
+              <Route path="finance/categories" element={<FinanceDashboardScreen />} />
+              <Route path="finance/budget" element={<BudgetManagerScreen />} />
+              <Route path="finance/commitments" element={<FinanceDashboardScreen />} />
+              <Route path="finance/settings" element={<FinanceSettingsScreen />} />
+            </>
+          )}
+        </Route>
+
+        {/* SOS button: Child only (the backend accepts SOS from a Child JWT only). */}
         {AppConfig.features.safetyLocation && (
-          <>
-            <Route path="safety" element={<SafetyHomeScreen />} />
-            <Route path="safety/map" element={<FamilyMapScreen />} />
-            <Route path="safety/zones" element={<SafeZoneManagerScreen />} />
-            <Route path="safety/zones/add" element={<AddEditSafeZoneScreen />} />
-            <Route path="safety/zones/edit/:zoneId" element={<AddEditSafeZoneScreen />} />
-            <Route path="safety/alerts" element={<LocationAlertHistoryScreen />} />
-            <Route path="safety/sos-alert" element={<SosAlertScreen />} />
-            <Route path="safety/settings" element={<LocationSettingsScreen />} />
+          <Route element={<ProtectedRoute allowedRoles={[UserRole.CHILD]}><Outlet /></ProtectedRoute>}>
             <Route path="safety/emergency" element={<EmergencyButtonScreen />} />
-          </>
-        )}
-
-        {/* Report Routes */}
-        <Route path="reports" element={<ScoresReportsScreen />} />
-        <Route path="reports/weekly" element={<WeeklyDigestScreen />} />
-        <Route path="reports/attendance" element={<AttendanceSummaryScreen />} />
-        <Route path="reports/monthly" element={<MonthlyReportScreen />} />
-        <Route path="reports/archive" element={<ReportArchiveScreen />} />
-
-        {/* Finance & SMS Ledger Routes */}
-        {AppConfig.features.financeTracker && (
-          <>
-            <Route path="finance" element={<FinanceDashboardScreen />} />
-            <Route path="finance/transactions" element={<FinanceDashboardScreen />} />
-            <Route path="finance/categories" element={<FinanceDashboardScreen />} />
-            <Route path="finance/budget" element={<BudgetManagerScreen />} />
-            <Route path="finance/commitments" element={<FinanceDashboardScreen />} />
-            <Route path="finance/settings" element={<FinanceSettingsScreen />} />
-          </>
+          </Route>
         )}
         
         {/* Settings & Profile Routes */}
-        <Route path="parent/settings" element={<ParentSettingsScreen />} />
-        <Route path="teacher/settings" element={<TeacherSettingsScreen />} />
         {AppConfig.features.subscriptionEnabled && <Route path="profile/subscription" element={<SubscriptionScreen />} />}
       </Route>
 

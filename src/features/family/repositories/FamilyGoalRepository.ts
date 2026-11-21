@@ -1,6 +1,5 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
-import { AppConfig } from '../../../core/config/appConfig';
 import type { ApiResponse } from '../../../core/network/apiTypes';
 
 export interface FamilyGoal {
@@ -17,32 +16,6 @@ export interface FamilyGoal {
 
 export const FamilyGoalRepository = {
   getGoals: async (familyId: string): Promise<FamilyGoal[]> => {
-    if (AppConfig.isDemo) {
-      return [
-        {
-          id: 'g1',
-          title: 'Water Park Trip',
-          description: 'Reach 1000 total family coins this month!',
-          targetValue: 1000,
-          currentValue: 680,
-          unit: 'Coins',
-          deadline: new Date(Date.now() + 86400000 * 4).toISOString(),
-          reward: 'Full day at the Water Park!',
-          status: 'Active'
-        },
-        {
-          id: 'g2',
-          title: 'Pizza Night',
-          description: 'Everyone completes all tasks for 3 days in a row.',
-          targetValue: 3,
-          currentValue: 2,
-          unit: 'Days',
-          deadline: new Date(Date.now() + 86400000 * 2).toISOString(),
-          reward: 'Unlimited Pizza & Movie!',
-          status: 'Active'
-        }
-      ];
-    }
     const response = await apiClient.get<ApiResponse<FamilyGoal[]>>(
       resolvePath(MasterApiReference.Families.Goals, { familyId }),
     );
@@ -50,7 +23,6 @@ export const FamilyGoalRepository = {
   },
 
   createGoal: async (familyId: string, data: Partial<FamilyGoal>): Promise<FamilyGoal> => {
-    if (AppConfig.isDemo) return { id: `g_${Math.random()}`, status: 'Active', ...data } as FamilyGoal;
     const response = await apiClient.post<ApiResponse<FamilyGoal>>(
       resolvePath(MasterApiReference.Families.Goals, { familyId }),
       data,
@@ -59,7 +31,6 @@ export const FamilyGoalRepository = {
   },
 
   updateGoal: async (familyId: string, goalId: string, data: Partial<FamilyGoal>): Promise<FamilyGoal> => {
-    if (AppConfig.isDemo) return { id: goalId, ...data } as FamilyGoal;
     const response = await apiClient.put<ApiResponse<FamilyGoal>>(
       resolvePath(MasterApiReference.Families.Goal, { familyId, goalId }),
       data,

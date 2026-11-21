@@ -1,13 +1,5 @@
 import React, { useEffect, useReducer, useState } from 'react';
-import {
-  Camera,
-  CheckCircle2,
-  Eye,
-  RefreshCw,
-  ShieldCheck,
-  TriangleAlert,
-  X,
-} from 'lucide-react';
+import { Camera, CheckCircle2, Eye, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
@@ -17,6 +9,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { TaskCompletion, TaskCompletionRepository } from '../../child/repositories/TaskCompletionRepository';
+import { logger } from '../../../core/services/logger';
 
 type QueueState =
   | { status: 'loading'; data: TaskCompletion[] | null; error: string | null }
@@ -68,7 +61,7 @@ const VerificationQueueScreen: React.FC = () => {
       const data = await TaskCompletionRepository.getVerificationQueue(user.familyId);
       dispatch({ type: 'LOAD_SUCCESS', payload: data });
     } catch (error) {
-      console.error('Failed to load verification queue', error);
+      logger.error('Failed to load verification queue', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load verification requests right now.' });
     }
   };
@@ -91,7 +84,7 @@ const VerificationQueueScreen: React.FC = () => {
         payload: queue.filter((entry) => entry.id !== item.id),
       });
     } catch (error) {
-      console.error('Failed to review verification item', error);
+      logger.error('Failed to review verification item', error);
     }
   };
 
@@ -106,7 +99,7 @@ const VerificationQueueScreen: React.FC = () => {
       await TaskCompletionRepository.approveAll(user.familyId);
       dispatch({ type: 'QUEUE_UPDATED', payload: [] });
     } catch (error) {
-      console.error('Failed to approve all verification items', error);
+      logger.error('Failed to approve all verification items', error);
     } finally {
       setIsApprovingAll(false);
     }

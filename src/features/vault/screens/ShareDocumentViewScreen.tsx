@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Shield, Download, Lock, AlertCircle, Tag, Clock } from 'lucide-react';
-import { VaultRepository, DocumentDetail, CATEGORY_LABELS } from '../repositories/VaultRepository';
+import { VaultRepository, DocumentDetail } from '../repositories/VaultRepository';
 import ExpiryBadge from '../widgets/ExpiryBadge';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import { isEmergencyNetworkFailure } from '../../../core/cache/EmergencyOfflineStore';
+import { isImageFileUrl } from '../../../core/services/fileUrlType';
 
 const ShareDocumentViewScreen: React.FC = () => {
   const { token } = useParams<{ token: string }>();
@@ -21,7 +23,9 @@ const ShareDocumentViewScreen: React.FC = () => {
     }
     VaultRepository.getDocumentByShareToken(token)
       .then(setDoc)
-      .catch(() => setError('This share link has expired or been revoked.'))
+      .catch(error => setError(isEmergencyNetworkFailure(error)
+        ? 'Reconnect to verify and open this shared document.'
+        : 'This share link has expired or been revoked.'))
       .finally(() => setIsLoading(false));
   }, [token]);
 
@@ -63,10 +67,10 @@ const ShareDocumentViewScreen: React.FC = () => {
   const uploadDate = new Date(doc.uploadDate).toLocaleDateString('en-IN', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
-  const isImage = doc.fileUrl.match(/\.(jpg|jpeg|png|heic|heif)$/i);
+  const isImage = isImageFileUrl(doc.fileUrl);
 
   return (
-    <div className="min-h-screen bg-bg-cream pb-16">
+    <div className="min-h-screen bg-bg-cream pb-16 overflow-x-hidden">
       {/* Header */}
       <div className="bg-primary px-5 pt-12 pb-5">
         <div className="flex items-center gap-2 mb-1">
@@ -74,14 +78,14 @@ const ShareDocumentViewScreen: React.FC = () => {
           <span className="font-body text-xs text-white/60 font-semibold uppercase tracking-wide">Secure Shared Document</span>
         </div>
         <h1 className="font-display font-bold text-lg text-white truncate">{doc.documentName}</h1>
-        <p className="font-body text-xs text-white/50 mt-0.5">{CATEGORY_LABELS[doc.category]}</p>
+        <p className="font-body text-xs text-white/50 mt-0.5">{doc.categoryName}</p>
       </div>
 
       <main className="px-4 pt-4 pb-16 space-y-4">
         {/* Read-only notice */}
         <div className="flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-xl px-4 py-3">
           <Lock className="w-4 h-4 text-accent flex-shrink-0" />
-          <p className="font-body text-xs text-primary">
+          <p className="font-body text-xs text-primary min-w-0 flex-1 break-words">
             View-only access via secure link · No FamilyFirst account required
           </p>
         </div>
@@ -148,9 +152,9 @@ const ShareDocumentViewScreen: React.FC = () => {
 };
 
 const MetaRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="flex items-center justify-between">
-    <span className="font-body text-xs text-gray-400">{label}</span>
-    <span className="font-body text-sm text-primary">{value}</span>
+  <div className="flex items-start justify-between gap-3">
+    <span className="font-body text-xs text-gray-400 flex-shrink-0">{label}</span>
+    <span className="font-body text-sm text-primary text-right min-w-0 break-words">{value}</span>
   </div>
 );
 

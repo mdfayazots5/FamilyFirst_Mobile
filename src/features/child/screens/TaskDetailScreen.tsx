@@ -18,6 +18,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { TaskCompletion, TaskCompletionRepository } from '../repositories/TaskCompletionRepository';
+import { logger } from '../../../core/services/logger';
 
 type TaskDetailState =
   | { status: 'loading'; data: TaskCompletion | null; error: string | null }
@@ -59,10 +60,11 @@ const TaskDetailScreen: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadTask = async () => {
-    if (!user?.familyId || !user?.id || !completionId) {
+    if (!user?.familyId || !user?.childProfileId || !completionId) {
       dispatch({ type: 'LOAD_ERROR', error: 'Task details are not available right now.' });
       return;
     }
@@ -71,7 +73,7 @@ const TaskDetailScreen: React.FC = () => {
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const completions = await TaskCompletionRepository.getCompletions(user.familyId, user.id, today);
+      const completions = await TaskCompletionRepository.getCompletions(user.familyId, user.childProfileId, today);
       const task = completions.find((item) => item.id === completionId);
 
       if (!task) {
@@ -81,14 +83,14 @@ const TaskDetailScreen: React.FC = () => {
 
       dispatch({ type: 'LOAD_SUCCESS', payload: task });
     } catch (error) {
-      console.error('Failed to load child task detail', error);
+      logger.error('Failed to load child task detail', error);
       dispatch({ type: 'LOAD_ERROR', error: 'Unable to load this task right now.' });
     }
   };
 
   useEffect(() => {
     void loadTask();
-  }, [user?.familyId, user?.id, completionId]);
+  }, [user?.familyId, user?.childProfileId, completionId]);
 
   const task = state.data;
   const isComplete = task?.status === 'approved' || task?.status === 'submitted';
@@ -112,6 +114,8 @@ const TaskDetailScreen: React.FC = () => {
     }
 
     setIsSubmitting(true);
+    setSubmitError(null);
+    setUploadProgress(0);
 
     try {
       let photoUrl = task.photoUrl;
@@ -134,7 +138,8 @@ const TaskDetailScreen: React.FC = () => {
       dispatch({ type: 'TASK_UPDATED', payload: updated });
       navigate('/child');
     } catch (error) {
-      console.error('Failed to submit child task', error);
+      logger.error('Failed to submit child task', error);
+      setSubmitError('Your task could not be sent.');
     } finally {
       setIsSubmitting(false);
     }
@@ -243,6 +248,11 @@ const TaskDetailScreen: React.FC = () => {
 
                 {uploadProgress > 0 && uploadProgress < 100 ? (
                   <p className="mt-3 font-body text-sm text-slate-500">Upload progress: {uploadProgress}%</p>
+                ) : null}
+                {submitError ? (
+                  <p role="alert" className="mt-3 font-body text-sm text-alert">
+                    {submitError} Tap “Submit task” to try again.
+                  </p>
                 ) : null}
               </FFCard>
               <input

@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { MapPin } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { SafetyRepository, SafeZone } from '../repositories/SafetyRepository';
+import { SafetyLookupOption, SafetyRepository, SafeZone } from '../repositories/SafetyRepository';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
-
-const ZONE_TYPES = ['Home', 'School', 'Tuition', 'RelativesHouse', 'Workplace', 'PlaceOfWorship', 'Other'] as const;
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 const DEFAULT_RADIUS_BY_TYPE: Record<string, number> = {
   Home: 100, School: 200, Tuition: 100, RelativesHouse: 150,
@@ -52,12 +52,31 @@ const AddEditSafeZoneScreen: React.FC = () => {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingGps, setIsLoadingGps] = useState(false);
+  const familyId = user?.familyId;
+  const zoneTypesResource = useApiResource<SafetyLookupOption[]>(
+    () => SafetyRepository.getSafeZoneTypes(),
+    [],
+    'Safe zone types could not be loaded.',
+  );
+  const zoneTypes = zoneTypesResource.data ?? [];
+  const zoneTypesError = zoneTypesResource.error;
+
+  // Edit mode: load the zone (API data), then seed the form (form state).
+  const zoneResource = useApiResource(
+    isEditing && familyId
+      ? () => SafetyRepository.listZones(familyId).then(zones => zones.find(z => z.zoneId === zoneId) ?? null)
+      : null,
+    [isEditing, familyId, zoneId],
+    'This safe zone could not be loaded.',
+  );
+  const zoneLoadError = isEditing
+    ? (zoneResource.error ?? (!zoneResource.isLoading && zoneResource.data === null && familyId ? 'This safe zone no longer exists.' : null))
+    : null;
 
   useEffect(() => {
-    if (!isEditing || !user?.familyId) return;
-    SafetyRepository.listZones(user.familyId).then(zones => {
-      const zone = zones.find(z => z.zoneId === zoneId);
-      if (!zone) return;
+    const zone = zoneResource.data;
+    if (!zone) return;
+    {
       setForm({
         zoneName:           zone.zoneName,
         zoneType:           zone.zoneType,
@@ -70,8 +89,8 @@ const AddEditSafeZoneScreen: React.FC = () => {
         lateAlertTime:      zone.lateAlertTime ?? '08:30',
         overrideQuietHours: zone.overrideQuietHours,
       });
-    });
-  }, [isEditing, zoneId, user?.familyId]);
+    }
+  }, [zoneResource.data]);
 
   const useCurrentLocation = () => {
     setIsLoadingGps(true);
@@ -155,6 +174,9 @@ const AddEditSafeZoneScreen: React.FC = () => {
       />
 
       <div className="px-4 pt-5 pb-32 space-y-5">
+        {zoneLoadError && (
+          <FFErrorState message={zoneLoadError} onRetry={zoneResource.error ? zoneResource.reload : undefined} />
+        )}
         {/* Zone details */}
         <FFCard className="p-4 space-y-4">
           <p className="font-display font-semibold text-sm text-primary">Zone Details</p>
@@ -175,17 +197,20 @@ const AddEditSafeZoneScreen: React.FC = () => {
           <div>
             <label className={labelClass}>Zone Type</label>
             <div className="grid grid-cols-2 gap-2">
-              {ZONE_TYPES.map(type => (
+              {zoneTypesError ? (
+                <p className="col-span-2 text-sm text-alert">{zoneTypesError}</p>
+              ) : null}
+              {zoneTypes.map(option => (
                 <button
-                  key={type}
-                  onClick={() => handleZoneTypeChange(type)}
+                  key={option.id}
+                  onClick={() => handleZoneTypeChange(option.code)}
                   className={`py-2 px-3 rounded-xl font-body text-xs font-medium border transition-colors ${
-                    form.zoneType === type
+                    form.zoneType === option.code
                       ? 'bg-primary text-white border-primary'
                       : 'bg-white text-gray-600 border-black/5'
                   }`}
                 >
-                  {type}
+                  {option.label}
                 </button>
               ))}
             </div>

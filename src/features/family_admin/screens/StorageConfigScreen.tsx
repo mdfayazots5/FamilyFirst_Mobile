@@ -1,49 +1,61 @@
 import React, { useEffect, useState } from 'react';
 import { HardDrive, Cloud, Save } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { FamilyAdminL2Repository, StorageConfig } from '../repositories/FamilyAdminL2Repository';
+import {
+  FamilyAdminL2Repository,
+  StorageConfig,
+  STORAGE_MODE_OPTIONS,
+  STORAGE_QUOTA_ALERT_OPTIONS,
+  OFFLINE_CACHE_SIZE_OPTIONS,
+} from '../repositories/FamilyAdminL2Repository';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 
-const STORAGE_MODES = [
-  { id: 'AppManaged',  icon: <HardDrive className="w-4 h-4 text-primary" />, label: 'App Managed',  desc: 'Documents stored securely on FamilyFirst servers (AWS S3, India region).' },
-  { id: 'GoogleDrive', icon: <Cloud className="w-4 h-4 text-primary" />,     label: 'Google Drive', desc: 'All documents routed to your Google Drive. Requires Google sign-in.' },
-  { id: 'Hybrid',      icon: <Cloud className="w-4 h-4 text-primary" />,     label: 'Hybrid',       desc: 'Medical + Identity stay on app; other categories route to Google Drive.' },
-] as const;
-
-const QUOTA_OPTIONS = [75, 90, 95];
-const CACHE_OPTIONS = [500, 1000, 2000];
+// Presentation only — option data comes from the repository.
+const STORAGE_MODE_ICONS: Record<string, React.ReactNode> = {
+  AppManaged:  <HardDrive className="w-4 h-4 text-primary" />,
+  GoogleDrive: <Cloud className="w-4 h-4 text-primary" />,
+  Hybrid:      <Cloud className="w-4 h-4 text-primary" />,
+};
+const STORAGE_MODES = STORAGE_MODE_OPTIONS.map(m => ({ ...m, icon: STORAGE_MODE_ICONS[m.id] }));
+const QUOTA_OPTIONS = STORAGE_QUOTA_ALERT_OPTIONS;
+const CACHE_OPTIONS = OFFLINE_CACHE_SIZE_OPTIONS;
 
 const StorageConfigScreen: React.FC = () => {
   const { user } = useAuth();
-  const [config, setConfig]     = useState<StorageConfig | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const familyId = user?.familyId;
+  const resource = useApiResource<StorageConfig>(
+    familyId ? () => FamilyAdminL2Repository.getStorageConfig(familyId) : null,
+    [familyId],
+    'Storage settings could not be loaded.',
+  );
+  const config = resource.data;
+  const isLoading = resource.isLoading;
+  const loadError = familyId ? resource.error : 'Family details are not available.';
   const [isSaving, setIsSaving]   = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [form, setForm]         = useState<Partial<StorageConfig>>({});
 
-  const load = async () => {
-    if (!user?.familyId) return;
-    setIsLoading(true);
-    try {
-      const data = await FamilyAdminL2Repository.getStorageConfig(user.familyId);
-      setConfig(data);
-      setForm({ storageMode: data.storageMode, storageQuotaAlertThresholdPct: data.storageQuotaAlertThresholdPct, offlineCacheSizeMb: data.offlineCacheSizeMb });
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    if (config) {
+      setForm({ storageMode: config.storageMode, storageQuotaAlertThresholdPct: config.storageQuotaAlertThresholdPct, offlineCacheSizeMb: config.offlineCacheSizeMb });
     }
-  };
-
-  useEffect(() => { load(); }, [user?.familyId]);
+  }, [config]);
 
   const handleSave = async () => {
-    if (!user?.familyId || !form.storageMode) return;
+    if (!familyId || !form.storageMode) return;
     setIsSaving(true);
+    setSaveError(null);
     try {
-      const updated = await FamilyAdminL2Repository.updateStorageConfig(user.familyId, form);
-      setConfig(updated);
+      const updated = await FamilyAdminL2Repository.updateStorageConfig(familyId, form);
+      resource.setData(updated);
+    } catch {
+      setSaveError('Storage settings could not be saved. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -61,10 +73,13 @@ const StorageConfigScreen: React.FC = () => {
 
       <main className="px-4 py-5 space-y-4 page-enter">
 
+        {saveError && <p role="alert" className="font-body text-sm text-alert">{saveError}</p>}
         {isLoading ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => <FFShimmer key={i} className="h-28 rounded-ff" />)}
           </div>
+        ) : loadError ? (
+          <FFErrorState message={loadError} onRetry={familyId ? resource.reload : undefined} />
         ) : (
           <>
             {/* Storage usage */}

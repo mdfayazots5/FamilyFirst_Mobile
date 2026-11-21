@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Filter, Plus } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { VaultRepository, CATEGORY_LABELS } from '../repositories/VaultRepository';
+import { VaultRepository } from '../repositories/VaultRepository';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 import type { VaultDocument } from '../repositories/VaultRepository';
 import DocumentCard from '../widgets/DocumentCard';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
@@ -15,30 +16,24 @@ const CategoryViewScreen: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
   const { user } = useAuth();
   const cat = parseInt(categoryId ?? '1', 10);
-  const categoryName = CATEGORY_LABELS[cat] ?? 'Documents';
-
-  const [documents, setDocuments] = useState<VaultDocument[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const familyId = user?.familyId;
   const [sortBy, setSortBy] = useState<'date' | 'name' | 'expiry'>('date');
 
-  const load = async () => {
-    if (!user?.familyId) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await VaultRepository.listDocuments(user.familyId, {
-        category: cat, sortBy, pageSize: 50,
-      });
-      setDocuments(result.items);
-    } catch {
-      setError('Failed to load documents.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Category name from GetMasters('DocumentCategory') (P8 rule: no static labels in live mode).
+  const categories = useApiResource(() => VaultRepository.getDocumentCategories(), [], 'Categories unavailable.');
+  const categoryName = categories.data?.find(c => c.value === cat)?.name ?? 'Documents';
 
-  useEffect(() => { load(); }, [cat, sortBy]);
+  const resource = useApiResource<VaultDocument[]>(
+    familyId
+      ? () => VaultRepository.listDocuments(familyId, { category: cat, sortBy, pageSize: 50 }).then(r => r.items)
+      : null,
+    [familyId, cat, sortBy],
+    'Failed to load documents.',
+  );
+  const documents = resource.data ?? [];
+  const isLoading = resource.isLoading;
+  const error = familyId ? resource.error : 'Family details are not available.';
+  const load = resource.reload;
 
   return (
     <div className="min-h-screen bg-bg-cream pb-24">

@@ -44,6 +44,7 @@ const ProfileScreen: React.FC = () => {
       case UserRole.CHILD:
         return '/child/settings';
       case UserRole.PARENT:
+      case UserRole.FAMILY_ADMIN:
         return '/parent/settings';
       case UserRole.TEACHER:
         return '/teacher/settings';
@@ -55,6 +56,15 @@ const ProfileScreen: React.FC = () => {
   };
 
   const menuItems = [
+    ...(user?.role === UserRole.TEACHER || user?.role === UserRole.PARENT || user?.role === UserRole.FAMILY_ADMIN
+      ? [{
+          id: 'role-profile',
+          label: user.role === UserRole.TEACHER ? 'Teacher profile' : 'Parent profile',
+          description: 'Open your role-specific profile.',
+          icon: <User className="h-4 w-4" />,
+          path: user.role === UserRole.TEACHER ? '/teacher/profile' : '/parent/profile',
+        }]
+      : []),
     {
       id: 'settings',
       label: 'Settings',

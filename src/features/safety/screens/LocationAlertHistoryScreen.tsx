@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
 import { CheckCircle, Filter, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { SafetyRepository, LocationAlert } from '../repositories/SafetyRepository';
+import {
+  SAFETY_ALERT_FILTER_OPTIONS,
+  SafetyRepository,
+  LocationAlert,
+} from '../repositories/SafetyRepository';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import FFErrorState from '../../../shared/components/FFErrorState';
+import { useApiResource } from '../../../core/hooks/useApiResource';
 
 const ALERT_META: Record<string, { label: string; badge: string }> = {
   ZoneArrival:           { label: 'Arrived',        badge: 'text-success bg-success/10 border-success/20' },
@@ -18,44 +23,44 @@ const ALERT_META: Record<string, { label: string; badge: string }> = {
   LocationSharingPaused: { label: 'Sharing Paused', badge: 'text-gray-500 bg-black/5 border-black/10' },
 };
 
-const FILTER_OPTIONS = ['All', 'ZoneArrival', 'ZoneDeparture', 'LateAlert', 'SOS', 'BatteryWarning'];
+const FILTER_OPTIONS = SAFETY_ALERT_FILTER_OPTIONS;
 
 const LocationAlertHistoryScreen: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
-  const [alerts, setAlerts] = useState<LocationAlert[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const familyId = user?.familyId;
   const [filterType, setFilterType] = useState<string>('All');
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const load = async (type?: string) => {
-    if (!user?.familyId) return;
-    setIsLoading(true);
-    try {
-      const { items } = await SafetyRepository.listAlerts(user.familyId, {
-        alertType: (type ?? filterType) === 'All' ? undefined : (type ?? filterType),
-      });
-      setAlerts(items);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [user?.familyId]);
+  // Re-runs whenever the family or the selected filter changes; reload() re-fetches the current filter.
+  const resource = useApiResource<LocationAlert[]>(
+    familyId
+      ? () => SafetyRepository.listAlerts(familyId, { alertType: filterType === 'All' ? undefined : filterType })
+          .then(({ items }) => items)
+      : null,
+    [familyId, filterType],
+    'Alerts could not be loaded.',
+  );
+  const alerts = resource.data ?? [];
+  const isLoading = resource.isLoading;
+  const loadError = familyId ? resource.error : 'Family details are not available.';
+  const load = resource.reload;
 
   const handleFilterChange = (type: string) => {
     setFilterType(type);
     setShowFilters(false);
-    load(type);
   };
 
   const handleResolve = async (alertId: string) => {
-    if (!user?.familyId) return;
+    if (!familyId) return;
     setResolvingId(alertId);
+    setActionError(null);
     try {
-      await SafetyRepository.resolveAlert(user.familyId, alertId);
-      setAlerts(prev => prev.map(a => a.alertId === alertId ? { ...a, isResolved: true } : a));
+      await SafetyRepository.resolveAlert(familyId, alertId);
+      resource.setData(alerts.map(a => a.alertId === alertId ? { ...a, isResolved: true } : a));
+    } catch {
+      setActionError('The alert could not be resolved. Please try again.');
     } finally {
       setResolvingId(null);
     }
@@ -122,10 +127,13 @@ const LocationAlertHistoryScreen: React.FC = () => {
           </div>
         )}
 
+        {actionError && <p role="alert" className="font-body text-sm text-alert">{actionError}</p>}
         {isLoading ? (
           <div className="space-y-2">
             {[...Array(5)].map((_, i) => <FFShimmer key={i} className="h-16 rounded-ff" />)}
           </div>
+        ) : loadError ? (
+          <FFErrorState message={loadError} onRetry={familyId ? load : undefined} />
         ) : alerts.length === 0 ? (
           <FFEmptyState
             title="No alerts"
