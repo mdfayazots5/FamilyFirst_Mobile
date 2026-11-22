@@ -11,6 +11,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { CoinTransaction, Redemption, Reward, RewardRepository } from '../../parent/repositories/RewardRepository';
 import { logger } from '../../../core/services/logger';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 interface CoinsRewardsData {
   rewards: Reward[];
@@ -264,7 +265,7 @@ const CoinsRewardsScreen: React.FC = () => {
                           <div>
                             <p className="font-display text-base font-semibold text-primary">{item.description}</p>
                             <p className="mt-2 font-body text-sm text-slate-500">
-                              {new Date(item.date).toLocaleDateString()}
+                              {new Date(item.date).toLocaleDateString(APP_LOCALE)}
                             </p>
                           </div>
                           <span

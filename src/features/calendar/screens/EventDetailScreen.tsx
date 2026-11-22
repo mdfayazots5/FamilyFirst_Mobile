@@ -18,6 +18,7 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 type DetailState =
   | { status: 'loading'; event: CalendarEvent | null; error: null }
@@ -63,7 +64,7 @@ const formatDateTime = (value: string, isAllDay: boolean) => {
   }
 
   if (isAllDay) {
-    return parsed.toLocaleDateString(undefined, {
+    return parsed.toLocaleDateString(APP_LOCALE, {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
@@ -71,7 +72,7 @@ const formatDateTime = (value: string, isAllDay: boolean) => {
     });
   }
 
-  return parsed.toLocaleString(undefined, {
+  return parsed.toLocaleString(APP_LOCALE, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',

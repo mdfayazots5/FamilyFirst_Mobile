@@ -18,6 +18,7 @@ import {
 } from '../repositories/ChildRepository';
 import type { Feedback } from '../../teacher/repositories/FeedbackRepository';
 import { logger } from '../../../core/services/logger';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 type TabKey = 'tasks' | 'feedback';
 
@@ -387,7 +388,7 @@ const ChildDetailScreen: React.FC = () => {
                             </div>
                             <p className="mt-2 font-body text-sm text-slate-500">{item.message}</p>
                             <p className="mt-2 font-body text-xs text-slate-400">
-                              {new Date(item.date).toLocaleDateString()}
+                              {new Date(item.date).toLocaleDateString(APP_LOCALE)}
                             </p>
                           </div>
                           {!item.isRead ? (

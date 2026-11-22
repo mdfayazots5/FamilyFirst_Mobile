@@ -11,6 +11,7 @@ import FFCard from '../../../shared/components/FFCard';
 import FFButton from '../../../shared/components/FFButton';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 const emptyCampaign = { title: '', body: '', targetRole: 'All', scheduledFor: 'Immediate' };
 const roleLabels: Record<string, string> = { All: 'All users', Child: 'Children' };
@@ -55,7 +56,7 @@ const NotificationCampaignScreen = () => {
       }
       const recipients = `${recipientCount} ${recipientCount === 1 ? 'recipient' : 'recipients'}`;
       setNotice(scheduledFor
-        ? `Campaign scheduled for ${scheduledFor.toLocaleString()} · ${recipients}.`
+        ? `Campaign scheduled for ${scheduledFor.toLocaleString(APP_LOCALE)} · ${recipients}.`
         : `Campaign queued for ${recipients}.`);
       setCampaign(emptyCampaign);
     } catch (err) {

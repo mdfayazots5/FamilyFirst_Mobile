@@ -9,6 +9,7 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 type HistoryState =
   | { status: 'loading'; data: Feedback[]; error: null }
@@ -215,7 +216,7 @@ const FeedbackHistoryScreen: React.FC = () => {
                         {item.childName}
                       </p>
                       <p className="mt-1 text-sm text-gray-500">
-                        {new Date(item.date).toLocaleString()}
+                        {new Date(item.date).toLocaleString(APP_LOCALE)}
                       </p>
                     </div>
                     <div className="flex h-10 w-10 items-center justify-center rounded-ff-sm bg-primary/10 text-primary">

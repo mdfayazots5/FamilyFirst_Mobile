@@ -10,6 +10,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { DashboardData, DashboardRepository } from '../repositories/DashboardRepository';
 import { logger } from '../../../core/services/logger';
+import { formatEventTypeLabel } from '../../../core/utils/format';
 
 type ParentHomeState =
   | { status: 'loading'; data: DashboardData | null; error: string | null }
@@ -265,7 +266,7 @@ const ParentHomeScreen: React.FC = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-display text-base font-semibold text-primary">{event.title}</p>
-                          <p className="mt-1 font-body text-sm text-slate-500">{event.type}</p>
+                          <p className="mt-1 font-body text-sm text-slate-500">{formatEventTypeLabel(event.type)}</p>
                         </div>
                         <span className="rounded-full bg-accent/15 px-3 py-1 font-body text-xs text-primary">
                           {event.time}

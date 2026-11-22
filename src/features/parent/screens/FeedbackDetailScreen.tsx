@@ -20,6 +20,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { Feedback, FeedbackRepository, FeedbackType } from '../../teacher/repositories/FeedbackRepository';
 import { logger } from '../../../core/services/logger';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 type DetailState =
   | { status: 'loading'; data: Feedback | null; error: string | null }
@@ -190,7 +191,7 @@ const FeedbackDetailScreen: React.FC = () => {
                   <div>
                     <p className="font-body text-sm leading-6 text-slate-600">{feedback.message}</p>
                     <p className="mt-3 font-body text-xs text-slate-400">
-                      Shared on {new Date(feedback.date).toLocaleString()}
+                      Shared on {new Date(feedback.date).toLocaleString(APP_LOCALE)}
                     </p>
                   </div>
                 </div>
@@ -252,7 +253,7 @@ const FeedbackDetailScreen: React.FC = () => {
                 </div>
                 {feedback.acknowledgedAt ? (
                   <p className="mt-3 font-body text-xs text-slate-400">
-                    Last acknowledged on {new Date(feedback.acknowledgedAt).toLocaleString()}
+                    Last acknowledged on {new Date(feedback.acknowledgedAt).toLocaleString(APP_LOCALE)}
                   </p>
                 ) : null}
               </FFCard>

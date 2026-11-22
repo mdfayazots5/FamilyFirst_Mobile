@@ -4,6 +4,7 @@ import { UserRole } from '../../../core/auth/UserRole';
 import type { ApiResponse } from '../../../core/network/apiTypes';
 import { logger } from '../../../core/services/logger';
 import { CalendarRepository } from '../../calendar/repositories/CalendarRepository';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 export interface ChildSummary {
   id: string;            // ChildProfileId — used by /parent/children/:childId
@@ -77,8 +78,8 @@ const todayIso = (): string => {
 const formatEventTime = (iso: string, isAllDay: boolean): string => {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
-  const day = date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-  return isAllDay ? day : `${day}, ${date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  const day = date.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' });
+  return isAllDay ? day : `${day}, ${date.toLocaleTimeString(APP_LOCALE, { hour: 'numeric', minute: '2-digit' })}`;
 };
 
 /** A failure in a secondary section should leave the rest of the dashboard available. */

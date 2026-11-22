@@ -18,6 +18,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { Feedback, FeedbackRepository, FeedbackType } from '../../teacher/repositories/FeedbackRepository';
 import { logger } from '../../../core/services/logger';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 type InboxFilter = 'All' | 'Unread' | FeedbackType;
 
@@ -229,7 +230,7 @@ const FeedbackInboxScreen: React.FC = () => {
                     </div>
                     <p className="mt-4 font-body text-sm leading-6 text-slate-600">{item.message}</p>
                     <div className="mt-4 flex items-center justify-between font-body text-xs text-slate-400">
-                      <span>{new Date(item.date).toLocaleDateString()}</span>
+                      <span>{new Date(item.date).toLocaleDateString(APP_LOCALE)}</span>
                       <span>{item.severity}</span>
                     </div>
                   </FFCard>

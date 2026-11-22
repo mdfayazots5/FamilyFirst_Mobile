@@ -10,6 +10,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { TaskCompletion, TaskCompletionRepository } from '../../child/repositories/TaskCompletionRepository';
 import { logger } from '../../../core/services/logger';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 type QueueState =
   | { status: 'loading'; data: TaskCompletion[] | null; error: string | null }
@@ -179,7 +180,7 @@ const VerificationQueueScreen: React.FC = () => {
                       </div>
                       <p className="mt-2 font-body text-sm text-slate-500">
                         Child profile {item.childProfileId} • submitted{' '}
-                        {item.submittedAt ? new Date(item.submittedAt).toLocaleString() : 'recently'}
+                        {item.submittedAt ? new Date(item.submittedAt).toLocaleString(APP_LOCALE) : 'recently'}
                       </p>
 
                       <div className="mt-4 overflow-hidden rounded-ff border border-black/5 bg-slate-50">

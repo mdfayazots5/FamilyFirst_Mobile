@@ -18,6 +18,7 @@ import FFShimmer from '../../../shared/components/FFShimmer';
 import { CalendarEvent, CalendarRepository, EventType } from '../../calendar/repositories/CalendarRepository';
 import { ElderEventTypeOption, ElderRepository, GrandchildStatus } from '../repositories/ElderRepository';
 import { logger } from '../../../core/services/logger';
+import { APP_LOCALE, formatEventTypeLabel } from '../../../core/utils/format';
 
 type ElderTimelineFilter = 'All' | EventType;
 
@@ -272,9 +273,9 @@ const ElderHomeScreen: React.FC = () => {
                   {filteredEvents.slice(0, 3).map((event) => (
                     <FFCard key={event.id} className="p-5 shadow-card">
                       <p className="font-display text-lg font-semibold text-primary">{event.title}</p>
-                      <p className="mt-2 font-body text-sm text-slate-500">{event.type}</p>
+                      <p className="mt-2 font-body text-sm text-slate-500">{formatEventTypeLabel(event.type)}</p>
                       <p className="mt-2 font-body text-sm text-slate-500">
-                        {new Date(event.startDateTime).toLocaleDateString()}
+                        {new Date(event.startDateTime).toLocaleDateString(APP_LOCALE)}
                       </p>
                     </FFCard>
                   ))}

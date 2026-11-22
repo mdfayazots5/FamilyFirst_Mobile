@@ -10,6 +10,7 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 type SessionState =
   | { status: 'loading'; data: AttendanceSession[]; error: null }
@@ -35,7 +36,7 @@ const sessionReducer = (state: SessionState, action: SessionAction): SessionStat
 };
 
 const formatDate = (value: Date) =>
-  value.toLocaleDateString(undefined, {
+  value.toLocaleDateString(APP_LOCALE, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -47,7 +48,7 @@ const formatSessionDate = (value: string) => {
     return value;
   }
 
-  return parsed.toLocaleDateString(undefined, {
+  return parsed.toLocaleDateString(APP_LOCALE, {
     month: 'short',
     day: 'numeric',
   });

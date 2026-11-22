@@ -14,6 +14,7 @@ import FFEmptyState from '../../../shared/components/FFEmptyState';
 import FFErrorState from '../../../shared/components/FFErrorState';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import { useApiResource } from '../../../core/hooks/useApiResource';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 const FamilyManagementScreen: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -160,7 +161,7 @@ const FamilyResults: React.FC<{ query: string; filterStatus: AdminFamilyFilter }
                 ) : null}
                 <span className="font-body text-xs text-gray-400 flex items-center gap-1">
                   <Calendar className="w-3 h-3" />
-                  {new Date(family.createdAt).toLocaleDateString()}
+                  {new Date(family.createdAt).toLocaleDateString(APP_LOCALE)}
                 </span>
               </div>
             </div>

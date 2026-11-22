@@ -16,6 +16,7 @@ import FFShimmer from '../../../shared/components/FFShimmer';
 import RewardIcon from '../../../shared/components/RewardIcon';
 import { Redemption, Reward, RewardRepository } from '../repositories/RewardRepository';
 import { logger } from '../../../core/services/logger';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 type RewardTab = 'active' | 'pending';
 
@@ -244,7 +245,7 @@ const RewardShopScreen: React.FC = () => {
                               </span>
                             </div>
                             <p className="mt-2 font-body text-sm text-slate-500">
-                              Requested by {item.childName} on {new Date(item.requestedAt).toLocaleDateString()}
+                              Requested by {item.childName} on {new Date(item.requestedAt).toLocaleDateString(APP_LOCALE)}
                             </p>
                             {item.parentNote ? (
                               <p className="mt-2 font-body text-sm text-slate-500">{item.parentNote}</p>

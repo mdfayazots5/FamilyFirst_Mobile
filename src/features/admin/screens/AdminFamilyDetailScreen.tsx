@@ -8,6 +8,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { AdminRepository } from '../repositories/AdminRepository';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 export default function AdminFamilyDetailScreen() {
   const { familyId } = useParams();
@@ -46,7 +47,7 @@ export default function AdminFamilyDetailScreen() {
             <dl className="grid grid-cols-2 gap-4">
               {[
                 ['City', family.city || 'Not provided'],
-                ['Created', new Date(family.createdAt).toLocaleDateString()],
+                ['Created', new Date(family.createdAt).toLocaleDateString(APP_LOCALE)],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0">
                   <dt className="text-xs text-slate-600">{label}</dt>
@@ -65,7 +66,7 @@ export default function AdminFamilyDetailScreen() {
                     <li key={member.memberId} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
                       <div className="min-w-0">
                         <p className="break-words text-sm font-semibold text-primary">{member.fullName}</p>
-                        <p className="text-xs text-slate-600">{member.role} · Joined {new Date(member.joinedAt).toLocaleDateString()}</p>
+                        <p className="text-xs text-slate-600">{member.role} · Joined {new Date(member.joinedAt).toLocaleDateString(APP_LOCALE)}</p>
                       </div>
                       <FFBadge variant={member.isActive ? 'success' : 'gray'}>{member.isActive ? 'Active' : 'Inactive'}</FFBadge>
                     </li>

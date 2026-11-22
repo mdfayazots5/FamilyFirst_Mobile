@@ -11,6 +11,7 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 type NewGoal = {
   title: string;
@@ -325,7 +326,7 @@ const FamilyGoalsScreen: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                           <Calendar className="h-4 w-4" />
-                          <span>{new Date(goal.deadline).toLocaleDateString()}</span>
+                          <span>{new Date(goal.deadline).toLocaleDateString(APP_LOCALE)}</span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                           <TrendingUp className="h-4 w-4" />

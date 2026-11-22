@@ -19,6 +19,7 @@ import { CalendarEvent, CalendarRepository } from '../../calendar/repositories/C
 import { FamilyGoal, FamilyGoalRepository } from '../../family/repositories/FamilyGoalRepository';
 import { Appreciation, ElderRepository, GrandchildStatus } from '../../elder/repositories/ElderRepository';
 import { logger } from '../../../core/services/logger';
+import { APP_LOCALE, formatEventTypeLabel } from '../../../core/utils/format';
 
 interface ChildFamilyData {
   goals: FamilyGoal[];
@@ -210,7 +211,7 @@ const ChildFamilyScreen: React.FC = () => {
                         <p className="font-display text-base font-semibold text-primary">{item.authorName}</p>
                         <p className="mt-2 font-body text-sm leading-6 text-slate-600">{item.message}</p>
                         <p className="mt-3 font-body text-xs text-slate-400">
-                          {new Date(item.createdAt).toLocaleDateString()}
+                          {new Date(item.createdAt).toLocaleDateString(APP_LOCALE)}
                         </p>
                       </FFCard>
                     ))}
@@ -259,9 +260,9 @@ const ChildFamilyScreen: React.FC = () => {
                   {screenData.events.slice(0, 3).map((event) => (
                     <FFCard key={event.id} className="shadow-card p-4">
                       <p className="font-display text-base font-semibold text-primary">{event.title}</p>
-                      <p className="mt-2 font-body text-sm text-slate-500">{event.type}</p>
+                      <p className="mt-2 font-body text-sm text-slate-500">{formatEventTypeLabel(event.type)}</p>
                       <p className="mt-2 font-body text-xs text-slate-400">
-                        {new Date(event.startDateTime).toLocaleDateString()}
+                        {new Date(event.startDateTime).toLocaleDateString(APP_LOCALE)}
                       </p>
                     </FFCard>
                   ))}

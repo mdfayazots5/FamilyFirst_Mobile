@@ -13,6 +13,7 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 interface ExtendedTransaction extends CoinTransaction {
   childName: string;
@@ -249,7 +250,7 @@ const FamilyLedgerScreen: React.FC = () => {
                             <span>{transaction.childName}</span>
                             <span className="text-gray-300">•</span>
                             <Calendar className="h-3.5 w-3.5" />
-                            <span>{new Date(transaction.date).toLocaleDateString()}</span>
+                            <span>{new Date(transaction.date).toLocaleDateString(APP_LOCALE)}</span>
                           </div>
                         </div>
                       </div>

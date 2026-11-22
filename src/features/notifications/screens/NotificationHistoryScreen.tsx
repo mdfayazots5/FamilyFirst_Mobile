@@ -15,6 +15,7 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 type HistoryState =
   | {
@@ -87,7 +88,7 @@ const formatTime = (value: string) => {
     return `${differenceInHours}h ago`;
   }
 
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString(APP_LOCALE, { month: 'short', day: 'numeric' });
 };
 
 const formatTypeLabel = (value: string) => value.replace(/([A-Z])/g, ' $1').trim();
