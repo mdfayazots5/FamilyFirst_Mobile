@@ -208,6 +208,17 @@ export const FamilyRepository = {
     }
   },
 
+  /** PUT /families/{familyId}/members/{memberId}/pin — Parent/FamilyAdmin sets a Child/Elder 4-digit PIN. */
+  setMemberPin: async (familyId: string, memberId: string, pin: string): Promise<void> => {
+    const response = await apiClient.put<ApiResponse<boolean>>(
+      resolvePath(MasterApiReference.Families.MemberPin, { familyId, memberId }),
+      { pin },
+    );
+    if (!requireApiData(response.data, 'FamilyRepository.setMemberPin')) {
+      throw new Error('The PIN could not be saved.');
+    }
+  },
+
   getRoleOptions: async (): Promise<FamilyInviteRoleOption[]> => {
     const roles = await getMasters('Role');
     const options = roles.flatMap(({ id, name, code }) => {

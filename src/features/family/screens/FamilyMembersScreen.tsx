@@ -1,5 +1,5 @@
 import React, { useEffect, useReducer, useState } from 'react';
-import { Baby, GraduationCap, Heart, Shield, Users } from 'lucide-react';
+import { Baby, GraduationCap, Heart, KeyRound, Shield, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import FFAvatar from '../../../shared/components/FFAvatar';
@@ -13,6 +13,7 @@ import FFShimmer from '../../../shared/components/FFShimmer';
 import { FamilyMember, FamilyRepository } from '../repositories/FamilyRepository';
 import { useAuth, UserRole } from '../../../core/auth/AuthContext';
 import FamilyMemberEditor from './FamilyMemberEditor';
+import MemberPinEditor from './MemberPinEditor';
 
 type State = {
   members: FamilyMember[];
@@ -62,13 +63,19 @@ const roleIcon = (role: UserRole) => {
 
 const roleLabel = (role: UserRole) => role.replace(/_/g, ' ');
 
+/** PIN sign-in exists only for Children and Elders. */
+const isPinRole = (role: UserRole) => role === UserRole.CHILD || role === UserRole.ELDER;
+
 const FamilyMembersScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [state, dispatch] = useReducer(reducer, initialState);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pinEditingId, setPinEditingId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const isFamilyAdmin = user?.role === UserRole.FAMILY_ADMIN;
+  // Parents and FamilyAdmins set Child / Elder sign-in PINs (PUT …/members/{memberId}/pin).
+  const canManagePins = isFamilyAdmin || user?.role === UserRole.PARENT;
 
   const loadMembers = async () => {
     if (!user?.familyId) {
@@ -192,15 +199,37 @@ const FamilyMembersScreen: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      {isFamilyAdmin && member.memberId && editingId === null && (
-                        <FFButton size="sm" variant="outline" onClick={() => {
-                          setNotice('');
-                          setEditingId(member.memberId ?? null);
-                        }}>
-                          Edit<span className="sr-only"> {member.displayName || member.name}</span>
-                        </FFButton>
-                      )}
+                      <div className="flex shrink-0 items-center gap-2">
+                        {canManagePins && member.memberId && isPinRole(member.role) && editingId === null && pinEditingId === null && (
+                          <FFButton size="sm" variant="ghost" icon={<KeyRound className="h-4 w-4" />} onClick={() => {
+                            setNotice('');
+                            setPinEditingId(member.memberId ?? null);
+                          }}>
+                            Set PIN<span className="sr-only"> for {member.displayName || member.name}</span>
+                          </FFButton>
+                        )}
+                        {isFamilyAdmin && member.memberId && editingId === null && pinEditingId === null && (
+                          <FFButton size="sm" variant="outline" onClick={() => {
+                            setNotice('');
+                            setEditingId(member.memberId ?? null);
+                          }}>
+                            Edit<span className="sr-only"> {member.displayName || member.name}</span>
+                          </FFButton>
+                        )}
+                      </div>
                     </div>
+                    {canManagePins && user?.familyId && member.memberId && pinEditingId === member.memberId && (
+                      <MemberPinEditor
+                        familyId={user.familyId}
+                        member={member}
+                        memberId={member.memberId}
+                        onCancel={() => setPinEditingId(null)}
+                        onSaved={() => {
+                          setPinEditingId(null);
+                          setNotice(`PIN saved for ${member.displayName || member.name}.`);
+                        }}
+                      />
+                    )}
                     {isFamilyAdmin && user?.familyId && member.memberId && editingId === member.memberId && (
                       <FamilyMemberEditor
                         familyId={user.familyId}

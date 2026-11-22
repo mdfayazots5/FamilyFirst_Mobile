@@ -35,6 +35,7 @@ export const MasterApiReference = {
     Root: '/families',
     Members: '/families/:familyId/members',
     Member: '/families/:familyId/members/:memberId',
+    MemberPin: '/families/:familyId/members/:memberId/pin',
     Dashboard: '/families/:familyId/dashboard',
     Goals: '/families/:familyId/goals',
     Goal: '/families/:familyId/goals/:goalId',
