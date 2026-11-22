@@ -11,7 +11,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { CoinTransaction, Redemption, Reward, RewardRepository } from '../../parent/repositories/RewardRepository';
 import { logger } from '../../../core/services/logger';
-import { APP_LOCALE } from '../../../core/utils/format';
+import { APP_LOCALE, toLocalIsoDate } from '../../../core/utils/format';
 
 interface CoinsRewardsData {
   rewards: Reward[];
@@ -92,7 +92,7 @@ const CoinsRewardsScreen: React.FC = () => {
     0,
   );
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalIsoDate();
   const earnedToday = history
     .filter((item) => item.type === 'Earned' && item.date.startsWith(today))
     .reduce((sum, item) => sum + item.amount, 0);

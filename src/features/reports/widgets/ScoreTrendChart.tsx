@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import type { ScoreHistoryPoint } from '../repositories/ReportsRepository';
 import { PILLAR_LABELS, PILLAR_MAX } from './ScoreRadarWidget';
+import { APP_LOCALE } from '../../../core/utils/format';
 
 interface ScoreTrendChartProps {
   data: ScoreHistoryPoint[];
@@ -27,7 +28,7 @@ const PILLAR_STROKES = {
 
 const ScoreTrendChart: React.FC<ScoreTrendChartProps> = ({ data }) => {
   const chartData = data.map(d => ({
-    date: new Date(d.date).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+    date: new Date(d.date).toLocaleDateString(APP_LOCALE, { month: 'short', day: 'numeric' }),
     [PILLAR_LABELS.study]: d.pillars.study,
     [PILLAR_LABELS.cleanliness]: d.pillars.cleanliness,
     [PILLAR_LABELS.discipline]: d.pillars.discipline,

@@ -15,11 +15,12 @@ import FFShimmer from '../../../shared/components/FFShimmer';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFErrorState from '../../../shared/components/FFErrorState';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
+import { toLocalIsoDate } from '../../../core/utils/format';
 
 const PERIOD_DAYS = 30;
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const toIsoDate = (d: Date) => d.toISOString().split('T')[0];
+const toIsoDate = (d: Date) => toLocalIsoDate(d);
 
 /** Longest run of consecutive Present session-days (days with no session are skipped, not breaks). */
 const bestPresentStreak = (heatmap: AttendanceHeatmapEntry[]) => {

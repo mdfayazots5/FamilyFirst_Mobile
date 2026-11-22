@@ -7,6 +7,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import FFErrorState from '../../../shared/components/FFErrorState';
 import { useApiResource } from '../../../core/hooks/useApiResource';
+import { toLocalIsoDate } from '../../../core/utils/format';
 
 const STATUS_ORDER = { Overdue: 0, Due: 1, Given: 2, NotApplicable: 3 };
 
@@ -41,7 +42,7 @@ const VaccinationTrackerScreen: React.FC = () => {
     setMarkingId(vaccinationId);
     setActionError(null);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalIsoDate();
       const updated = await MedicalRepository.updateVaccinationStatus(
         familyId, memberId, vaccinationId, { status: 'Given', givenDate: today },
       );

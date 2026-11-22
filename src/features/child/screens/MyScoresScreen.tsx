@@ -16,6 +16,7 @@ import FFShimmer from '../../../shared/components/FFShimmer';
 import { ChildDetail, ChildRepository } from '../../parent/repositories/ChildRepository';
 import { TaskCompletion, TaskCompletionRepository } from '../repositories/TaskCompletionRepository';
 import { logger } from '../../../core/services/logger';
+import { toLocalIsoDate } from '../../../core/utils/format';
 
 interface ScoresData {
   child: ChildDetail;
@@ -64,7 +65,7 @@ const MyScoresScreen: React.FC = () => {
     dispatch({ type: 'LOAD_START', preserve: state.data });
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalIsoDate();
       const [child, completions] = await Promise.all([
         ChildRepository.getChildDetail(user.familyId, user.childProfileId),
         TaskCompletionRepository.getCompletions(user.familyId, user.childProfileId, today),

@@ -19,6 +19,7 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
+import { toLocalIsoDate } from '../../../core/utils/format';
 
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const timeBlocks: Array<{ value: TimeBlock; label: string; detail: string }> = [
@@ -99,7 +100,7 @@ const AddTaskScreen: React.FC = () => {
   const [pillarTag, setPillarTag] = useState<PillarTag>('Discipline');
   const [isRecurring, setIsRecurring] = useState(true);
   const [recurringDays, setRecurringDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [activeFromDate, setActiveFromDate] = useState(new Date().toISOString().split('T')[0]);
+  const [activeFromDate, setActiveFromDate] = useState(toLocalIsoDate());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showTemplateSheet, setShowTemplateSheet] = useState(false);
@@ -171,7 +172,7 @@ const AddTaskScreen: React.FC = () => {
     setPillarTag(task.pillarTag);
     setIsRecurring(task.isRecurring);
     setRecurringDays(task.recurringDays);
-    setActiveFromDate(task.activeFromDate ?? new Date().toISOString().split('T')[0]);
+    setActiveFromDate(task.activeFromDate ?? toLocalIsoDate());
   }, [bootstrapState]);
 
   const toggleDay = (dayValue: number) => {

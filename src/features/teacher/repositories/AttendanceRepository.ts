@@ -1,6 +1,8 @@
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import apiClient from '../../../core/network/apiClient';
 import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import { requireApiData } from '../../../core/network/apiTypes';
+import { toLocalIsoDate } from '../../../core/utils/format';
 import { getMasters } from '../../../core/repositories/MasterDataRepository';
 
 export type AttendanceStatus = 'Present' | 'Absent' | 'Late' | 'LeftEarly';
@@ -15,6 +17,17 @@ export interface AttendanceSession {
   studentCount: number;
   isSubmitted: boolean;
   submittedAt?: string;
+}
+
+/** API AttendanceSessionDto (camelCase JSON). */
+interface AttendanceSessionDto {
+  sessionId: string;
+  sessionName: string;
+  subjectName: string;
+  scheduledDate: string;
+  startTime: string;
+  isSubmitted: boolean;
+  submittedAt?: string | null;
 }
 
 /** Input for createSession — what CreateSessionScreen sends. */
@@ -43,12 +56,30 @@ export interface CommentTemplate {
 }
 
 export const AttendanceRepository = {
+  /**
+   * GET …/attendance/sessions?date=YYYY-MM-DD (DateOnly — the literal "today" returns 400).
+   * Maps AttendanceSessionDto (sessionId, subjectName, …). The DTO has no student count, so it is the
+   * number of attendance records in each session.
+   */
   getTodaySessions: async (familyId: string): Promise<AttendanceSession[]> => {
-    const response = await apiClient.get<ApiResponse<AttendanceSession[]>>(
+    const response = await apiClient.get<ApiResponse<AttendanceSessionDto[]>>(
       resolvePath(MasterApiReference.Attendance.ListSessions, { familyId }),
-      { params: { date: 'today' } }
+      { params: { date: toLocalIsoDate() } }
     );
-    return response.data.data ?? [];
+    const sessions = requireApiData(response.data, 'AttendanceRepository.getTodaySessions');
+    return Promise.all(sessions.map(async (dto) => {
+      const records = await AttendanceRepository.getSessionRecords(familyId, dto.sessionId).catch(() => []);
+      return {
+        id: dto.sessionId,
+        sessionName: dto.sessionName,
+        subject: dto.subjectName,
+        scheduledDate: dto.scheduledDate,
+        startTime: dto.startTime,
+        studentCount: records.length,
+        isSubmitted: dto.isSubmitted,
+        submittedAt: dto.submittedAt ?? undefined,
+      };
+    }));
   },
 
   getSessionRecords: async (familyId: string, sessionId: string): Promise<AttendanceRecord[]> => {
@@ -81,11 +112,33 @@ export const AttendanceRepository = {
     return response.data.data ?? [];
   },
 
+  /**
+   * POST …/attendance/sessions — API CreateSessionRequest uses SubjectName (not subject) and TimeOnly
+   * values, so the screen input is mapped explicitly (audit finding F-P5-3).
+   */
   createSession: async (familyId: string, sessionData: CreateSessionInput): Promise<AttendanceSession> => {
-    const response = await apiClient.post<ApiResponse<AttendanceSession>>(
+    const toTimeOnly = (value?: string) => (value && /^\d{2}:\d{2}$/.test(value) ? `${value}:00` : value || undefined);
+    const response = await apiClient.post<ApiResponse<AttendanceSessionDto>>(
       resolvePath(MasterApiReference.Attendance.CreateSession, { familyId }),
-      sessionData
+      {
+        sessionName: sessionData.sessionName,
+        subjectName: sessionData.subject,
+        scheduledDate: sessionData.scheduledDate,
+        startTime: toTimeOnly(sessionData.startTime),
+        endTime: toTimeOnly(sessionData.endTime),
+        isRecurring: sessionData.isRecurring,
+      },
     );
-    return response.data.data as AttendanceSession;
+    const dto = requireApiData(response.data, 'AttendanceRepository.createSession');
+    return {
+      id: dto.sessionId,
+      sessionName: dto.sessionName,
+      subject: dto.subjectName,
+      scheduledDate: dto.scheduledDate,
+      startTime: dto.startTime,
+      studentCount: 0,
+      isSubmitted: dto.isSubmitted,
+      submittedAt: dto.submittedAt ?? undefined,
+    };
   }
 };

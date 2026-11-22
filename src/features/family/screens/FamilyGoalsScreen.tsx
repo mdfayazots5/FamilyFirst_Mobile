@@ -11,7 +11,7 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
-import { APP_LOCALE } from '../../../core/utils/format';
+import { APP_LOCALE, toLocalIsoDate } from '../../../core/utils/format';
 
 type NewGoal = {
   title: string;
@@ -45,7 +45,7 @@ const initialNewGoal = (): NewGoal => ({
   description: '',
   targetValue: '100',
   unit: 'Points',
-  deadline: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+  deadline: toLocalIsoDate(new Date(Date.now() + 7 * 86400000)),
   reward: '',
 });
 

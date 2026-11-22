@@ -7,6 +7,7 @@ import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import { toLocalIsoDate } from '../../../core/utils/format';
 
 const CreateSessionScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ const CreateSessionScreen: React.FC = () => {
 
   const [subject, setSubject] = useState('');
   const [batch, setBatch] = useState('');
-  const [scheduledDate, setScheduledDate] = useState(new Date().toISOString().split('T')[0]);
+  const [scheduledDate, setScheduledDate] = useState(toLocalIsoDate());
   const [startTime, setStartTime] = useState('16:00');
   const [endTime, setEndTime] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);

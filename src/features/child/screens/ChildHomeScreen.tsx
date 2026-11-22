@@ -19,6 +19,7 @@ import FFShimmer from '../../../shared/components/FFShimmer';
 import { RewardRepository } from '../../parent/repositories/RewardRepository';
 import { TaskCompletion, TaskCompletionRepository } from '../repositories/TaskCompletionRepository';
 import { logger } from '../../../core/services/logger';
+import { toLocalIsoDate } from '../../../core/utils/format';
 
 interface ChildHomeData {
   completions: TaskCompletion[];
@@ -68,7 +69,7 @@ const ChildHomeScreen: React.FC = () => {
     dispatch({ type: 'LOAD_START', preserve: state.data });
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalIsoDate();
       const [completions, history] = await Promise.all([
         TaskCompletionRepository.getCompletions(user.familyId, user.childProfileId, today),
         RewardRepository.getCoinHistory(user.childProfileId),

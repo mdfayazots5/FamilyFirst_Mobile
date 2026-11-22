@@ -3,6 +3,7 @@ import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiRefe
 import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
 import { getMasters } from '../../../core/repositories/MasterDataRepository';
 import { TaskRepository, type TimeBlock } from '../../tasks/repositories/TaskRepository';
+import { toLocalIsoDate } from '../../../core/utils/format';
 
 export type CompletionStatus = 'pending' | 'submitted' | 'approved' | 'flagged' | 'missed';
 
@@ -214,7 +215,7 @@ export const TaskCompletionRepository = {
     const response = await apiClient.get<ApiResponse<TaskCompletionDto[]>>(
       resolvePath(MasterApiReference.Tasks.VerificationQueue, { familyId }),
     );
-    const taskDetails = await buildTaskDetailsMap(familyId, '', new Date().toISOString().split('T')[0]);
+    const taskDetails = await buildTaskDetailsMap(familyId, '', toLocalIsoDate());
     return (response.data.data ?? []).map((completion) => mapTaskCompletionDto(completion, taskDetails));
   },
 

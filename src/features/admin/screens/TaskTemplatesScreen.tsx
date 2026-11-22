@@ -11,6 +11,7 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { PILLAR_TAG_OPTIONS } from '../../tasks/repositories/TaskRepository';
 import { AdminRepository, type TaskTemplate } from '../repositories/AdminRepository';
+import { toLocalIsoDate } from '../../../core/utils/format';
 
 const timeBlocks = [
   { value: 1, label: 'Morning' },
@@ -185,7 +186,7 @@ function TemplateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated
           </label>
           <label className="text-sm font-semibold text-primary">
             Active from
-            <input name="activeFrom" type="date" className={inputClass} required defaultValue={new Date().toISOString().slice(0, 10)} />
+            <input name="activeFrom" type="date" className={inputClass} required defaultValue={toLocalIsoDate()} />
           </label>
           <label className="text-sm font-semibold text-primary sm:col-span-2">
             Instructions

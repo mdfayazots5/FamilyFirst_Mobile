@@ -18,7 +18,7 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import { FFCardSkeleton } from '../../../shared/components/FFShimmer';
-import { APP_LOCALE } from '../../../core/utils/format';
+import { APP_LOCALE, toLocalIsoDate } from '../../../core/utils/format';
 
 type CalendarState =
   | { status: 'loading'; events: CalendarEvent[]; error: null }
@@ -202,7 +202,7 @@ const FamilyCalendarScreen: React.FC = () => {
 
     for (let day = 1; day <= daysInMonth; day += 1) {
       const cellDate = new Date(year, month, day);
-      const dateKey = cellDate.toISOString().split('T')[0];
+      const dateKey = toLocalIsoDate(cellDate);
       const dayEvents = monthEvents.filter((event) => event.startDateTime.startsWith(dateKey));
       const isToday = new Date().toDateString() === cellDate.toDateString();
 

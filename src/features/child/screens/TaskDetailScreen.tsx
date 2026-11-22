@@ -19,6 +19,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { TaskCompletion, TaskCompletionRepository } from '../repositories/TaskCompletionRepository';
 import { logger } from '../../../core/services/logger';
+import { toLocalIsoDate } from '../../../core/utils/format';
 
 type TaskDetailState =
   | { status: 'loading'; data: TaskCompletion | null; error: string | null }
@@ -72,7 +73,7 @@ const TaskDetailScreen: React.FC = () => {
     dispatch({ type: 'LOAD_START', preserve: state.data });
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalIsoDate();
       const completions = await TaskCompletionRepository.getCompletions(user.familyId, user.childProfileId, today);
       const task = completions.find((item) => item.id === completionId);
 
@@ -131,7 +132,7 @@ const TaskDetailScreen: React.FC = () => {
       }
 
       const updated = await TaskCompletionRepository.submitCompletion(user.familyId, task.taskId, {
-        scheduledDate: new Date().toISOString().split('T')[0],
+        scheduledDate: toLocalIsoDate(),
         photoUrl,
       });
 

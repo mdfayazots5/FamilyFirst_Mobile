@@ -306,7 +306,7 @@ const TeacherHomeScreen: React.FC = () => {
                         {session.subject}
                       </p>
                       <p className="mt-1 text-sm text-gray-500">
-                        Submitted {session.submittedAt ? new Date(session.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'today'}
+                        Submitted {session.submittedAt ? new Date(session.submittedAt).toLocaleTimeString(APP_LOCALE, { hour: '2-digit', minute: '2-digit' }) : 'today'}
                       </p>
                     </div>
                     <span className="rounded-full bg-success/10 px-3 py-1 text-[10px] font-body font-bold uppercase tracking-wider text-success">

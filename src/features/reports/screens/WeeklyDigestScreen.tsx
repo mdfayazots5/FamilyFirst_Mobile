@@ -21,6 +21,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
 import FFErrorState from '../../../shared/components/FFErrorState';
 import { logger } from '../../../core/services/logger';
+import { toLocalIsoDate } from '../../../core/utils/format';
 
 const normalizeLookupValue = (value: string) =>
   value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
@@ -43,7 +44,7 @@ const WeeklyDigestScreen: React.FC = () => {
   const [weekStartDate] = useState(() => {
     const today = new Date();
     const lastSunday = new Date(today.setDate(today.getDate() - today.getDay()));
-    return lastSunday.toISOString().split('T')[0];
+    return toLocalIsoDate(lastSunday);
   });
 
   // API data via the shared reducer hook — loading → success → error-with-retry.

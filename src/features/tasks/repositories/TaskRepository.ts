@@ -2,6 +2,7 @@ import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
 import { getMasters } from '../../../core/repositories/MasterDataRepository';
+import { toLocalIsoDate } from '../../../core/utils/format';
 export type TimeBlock = 'Morning' | 'School' | 'Evening' | 'Night';
 export type PillarTag = 'Study' | 'Cleanliness' | 'Discipline' | 'ScreenControl' | 'Responsibility';
 
@@ -180,7 +181,7 @@ const toTaskRequestDto = (data: Partial<TaskItem>): TaskRequestDto => {
     PillarTag: data.pillarTag ?? null,
     IsRecurring: isRecurring,
     RecurringDays: isRecurring ? recurringDays : null,
-    ActiveFromDate: data.activeFromDate ?? new Date().toISOString().split('T')[0],
+    ActiveFromDate: data.activeFromDate ?? toLocalIsoDate(),
   };
 };
 
@@ -194,7 +195,7 @@ const mapLookupItems = (items: MasterDataItem[]): TaskLookupOption[] =>
 export const TaskRepository = {
   getTasks: async (familyId: string, childId: string, date?: string): Promise<TaskItem[]> => {
     const params: Record<string, string> = {
-      date: date ?? new Date().toISOString().split('T')[0],
+      date: date ?? toLocalIsoDate(),
     };
 
     if (childId.trim()) {
