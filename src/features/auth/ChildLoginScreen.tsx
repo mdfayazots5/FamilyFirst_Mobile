@@ -1,4 +1,5 @@
 import React, { useReducer } from 'react';
+import axios from 'axios';
 import { Baby, Heart, KeyRound, LogIn, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -117,8 +118,14 @@ const ChildLoginScreen: React.FC = () => {
       handleAuthResponse(response);
       navigate('/', { replace: true });
     } catch (caughtError: unknown) {
+      // Show the API's own message (wrong PIN / locked out), never Axios' "Request failed with status code 401".
+      const apiData = axios.isAxiosError<{ message?: string; errors?: { message?: string }[] }>(caughtError)
+        ? caughtError.response?.data
+        : undefined;
       const message =
-        caughtError instanceof Error ? caughtError.message : 'That PIN did not match. Try again.';
+        apiData?.errors?.[0]?.message
+        || apiData?.message
+        || 'That PIN did not match. Please try again or ask a parent for help.';
       dispatch({ type: 'SUBMIT_ERROR', error: message });
     }
   };
