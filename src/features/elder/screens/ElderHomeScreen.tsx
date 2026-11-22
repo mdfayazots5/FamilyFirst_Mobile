@@ -71,11 +71,22 @@ const ElderHomeScreen: React.FC = () => {
     dispatch({ type: 'LOAD_START', preserve: state.data });
 
     try {
-      const [grandchildren, events, eventTypes] = await Promise.all([
+      // Each section loads independently: one unavailable section must not blank the whole screen.
+      const results = await Promise.allSettled([
         ElderRepository.getGrandchildren(user.familyId),
         CalendarRepository.getUpcomingEvents(user.familyId, 30),
         ElderRepository.getCalendarEventTypes(),
-      ]);
+      ] as const);
+      if (results.every((result) => result.status === 'rejected')) {
+        throw new Error('All elder sections failed to load.');
+      }
+      results.forEach((result) => {
+        if (result.status === 'rejected') logger.error('Elder home section failed to load', result.reason);
+      });
+      const [grandchildrenResult, eventsResult, eventTypesResult] = results;
+      const grandchildren = grandchildrenResult.status === 'fulfilled' ? grandchildrenResult.value : [];
+      const events = eventsResult.status === 'fulfilled' ? eventsResult.value : [];
+      const eventTypes = eventTypesResult.status === 'fulfilled' ? eventTypesResult.value : [];
 
       dispatch({
         type: 'LOAD_SUCCESS',

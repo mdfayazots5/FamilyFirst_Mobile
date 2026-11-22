@@ -112,11 +112,12 @@ export const ElderRepository = {
   },
 
   getAppreciations: async (familyId: string): Promise<Appreciation[]> => {
-    const response = await apiClient.get<ApiResponse<FeedbackDto[]>>(
+    // API returns PaginatedList<FeedbackDto> — read data.items (Drift Entry 085 rule).
+    const response = await apiClient.get<ApiResponse<{ items?: FeedbackDto[] }>>(
       resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
       { params: { type: 1, page: 1, pageSize: 50 } },
     );
-    return (response.data.data ?? []).map(mapFeedbackToAppreciation);
+    return (response.data.data?.items ?? []).map(mapFeedbackToAppreciation);
   },
 
   getCalendarEventTypes: async (): Promise<ElderEventTypeOption[]> => {

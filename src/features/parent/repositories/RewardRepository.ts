@@ -32,6 +32,28 @@ export interface CoinTransaction {
   date: string;
 }
 
+/** API CoinTransactionDto (camelCase JSON). */
+interface CoinTransactionDto {
+  transactionId: string;
+  transactionType: string;
+  amount: number;
+  referenceType?: string | null;
+  note?: string | null;
+  createdAt: string;
+}
+
+// API types: Earned (in), Spent (reward redemption), Deducted (manual parent deduction).
+const isCoinOutflow = (type: string | undefined): boolean =>
+  ['spent', 'deducted'].includes((type ?? '').toLowerCase());
+
+const mapCoinTransactionDto = (dto: CoinTransactionDto): CoinTransaction => ({
+  id: dto.transactionId,
+  amount: Math.abs(dto.amount),
+  type: isCoinOutflow(dto.transactionType) ? 'Spent' : 'Earned',
+  description: dto.note || dto.referenceType || (isCoinOutflow(dto.transactionType) ? 'Coins spent' : 'Coins earned'),
+  date: dto.createdAt,
+});
+
 export interface RewardLookupOption {
   id: string;
   label: string;
@@ -136,11 +158,16 @@ export const RewardRepository = {
     return (response.data.data ?? []).map(mapRewardDto);
   },
 
+  /**
+   * GET /api/children/{childId}/coin-history → ApiResponse<PaginatedList<CoinTransactionDto>> (Drift Entry 088).
+   * Reads data.items and maps the API fields (transactionId, transactionType, note, createdAt).
+   */
   getCoinHistory: async (childId: string): Promise<CoinTransaction[]> => {
-    const response = await apiClient.get<ApiResponse<CoinTransaction[]>>(
+    const response = await apiClient.get<ApiResponse<{ items?: CoinTransactionDto[] }>>(
       resolvePath(MasterApiReference.Rewards.CoinHistory, { childId }),
+      { params: { pageNumber: 1, pageSize: 100 } },
     );
-    return response.data.data ?? [];
+    return (response.data.data?.items ?? []).map(mapCoinTransactionDto);
   },
 
   redeemReward: async (familyId: string, rewardId: string, childProfileId: string): Promise<Redemption> => {

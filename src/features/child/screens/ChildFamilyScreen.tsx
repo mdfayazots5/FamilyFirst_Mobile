@@ -70,19 +70,31 @@ const ChildFamilyScreen: React.FC = () => {
     dispatch({ type: 'LOAD_START', preserve: state.data });
 
     try {
-      const [goals, appreciations, siblings, events] = await Promise.all([
+      // Each section loads independently: one unavailable section must not blank the whole screen.
+      const results = await Promise.allSettled([
         FamilyGoalRepository.getGoals(user.familyId),
         ElderRepository.getAppreciations(user.familyId),
         ElderRepository.getGrandchildren(user.familyId),
         CalendarRepository.getUpcomingEvents(user.familyId, 7),
-      ]);
+      ] as const);
+      if (results.every((result) => result.status === 'rejected')) {
+        throw new Error('All family sections failed to load.');
+      }
+      results.forEach((result) => {
+        if (result.status === 'rejected') logger.error('Child family section failed to load', result.reason);
+      });
+      const [goalsResult, appreciationsResult, siblingsResult, eventsResult] = results;
+      const goals = goalsResult.status === 'fulfilled' ? goalsResult.value : [];
+      const appreciations = appreciationsResult.status === 'fulfilled' ? appreciationsResult.value : [];
+      const siblings = siblingsResult.status === 'fulfilled' ? siblingsResult.value : [];
+      const events = eventsResult.status === 'fulfilled' ? eventsResult.value : [];
 
       dispatch({
         type: 'LOAD_SUCCESS',
         payload: {
           goals,
           appreciations,
-          siblings: siblings.filter((item) => item.id !== user.id),
+          siblings: siblings.filter((item) => item.id !== user.childProfileId),
           events,
         },
       });

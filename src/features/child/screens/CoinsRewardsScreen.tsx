@@ -2,6 +2,7 @@ import React, { useEffect, useReducer, useState } from 'react';
 import { Gift, History, RefreshCw, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import FFButton from '../../../shared/components/FFButton';
+import RewardIcon from '../../../shared/components/RewardIcon';
 import FFCard from '../../../shared/components/FFCard';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
 import FFErrorState from '../../../shared/components/FFErrorState';
@@ -201,16 +202,24 @@ const CoinsRewardsScreen: React.FC = () => {
                       const isPending = screenData.redemptions.some(
                         (item) => item.rewardId === reward.id && item.status === 'Pending',
                       );
+                      const coinsNeeded = Math.max(0, reward.coinCost - currentCoins);
+                      const statusLabel = isPending ? 'Pending' : coinsNeeded > 0 ? `${coinsNeeded} more coins` : 'Ready';
+                      const statusClass = isPending
+                        ? 'bg-accent/15 text-primary'
+                        : coinsNeeded > 0
+                          ? 'bg-slate-100 text-slate-600'
+                          : 'bg-success/10 text-success';
 
                       return (
                         <FFCard key={reward.id} className="shadow-card p-5">
                           <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <span className="flex h-12 w-12 items-center justify-center rounded-ff-sm bg-accent/15 text-2xl">
-                                {reward.icon}
+                            <div className="flex min-w-0 items-center gap-3">
+                              {/* icon is a code (e.g. "movie_night") — render the mapped icon, never the raw text. */}
+                              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-ff-sm bg-accent/15 text-accent">
+                                <RewardIcon code={reward.icon} />
                               </span>
-                              <div>
-                                <p className="font-display text-lg font-semibold text-primary">{reward.name}</p>
+                              <div className="min-w-0">
+                                <p className="break-words font-display text-lg font-semibold text-primary">{reward.name}</p>
                                 <p className="font-body text-sm text-slate-500">{reward.category}</p>
                               </div>
                             </div>
@@ -222,12 +231,8 @@ const CoinsRewardsScreen: React.FC = () => {
                             {reward.description ?? 'A fun family reward to work toward.'}
                           </p>
                           <div className="mt-4 flex items-center justify-between gap-3">
-                            <span
-                              className={`rounded-full px-3 py-1 font-body text-xs ${
-                                isPending ? 'bg-accent/15 text-primary' : 'bg-success/10 text-success'
-                              }`}
-                            >
-                              {isPending ? 'Pending' : 'Ready'}
+                            <span className={`rounded-full px-3 py-1 font-body text-xs ${statusClass}`}>
+                              {statusLabel}
                             </span>
                             <FFButton
                               onClick={() => void handleRedeem(reward)}
