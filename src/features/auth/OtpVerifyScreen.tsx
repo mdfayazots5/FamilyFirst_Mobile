@@ -9,11 +9,11 @@ import FFPageHeader from '../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../shared/components/FFSectionHeader';
 import FFShimmer from '../../shared/components/FFShimmer';
 import { AuthRepository } from '../../core/repositories/AuthRepository';
+import { INDIA_COUNTRY_CODE } from '../../core/utils/indianPhone';
 import { useAuth } from '../../core/auth/AuthContext';
 
 type OtpLocationState = {
   phoneNumber?: string;
-  countryCode?: string;
   otpToken?: string;
 };
 
@@ -21,7 +21,7 @@ const OtpVerifyScreen: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { handleAuthResponse } = useAuth();
-  const { phoneNumber, countryCode = '+91', otpToken } = (location.state as OtpLocationState) ?? {};
+  const { phoneNumber, otpToken } = (location.state as OtpLocationState) ?? {};
   const otpTokenRef = useRef(otpToken ?? '');
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
@@ -96,7 +96,7 @@ const OtpVerifyScreen: React.FC = () => {
     setResendMessage(null);
 
     try {
-      const response = await AuthRepository.sendOtp(phoneNumber, countryCode);
+      const response = await AuthRepository.sendOtp(phoneNumber, INDIA_COUNTRY_CODE);
       otpTokenRef.current = response.otpToken;
       setOtp(['', '', '', '', '', '']);
       setResendMessage('A fresh code has been sent to your phone.');
@@ -114,7 +114,7 @@ const OtpVerifyScreen: React.FC = () => {
     <div className="min-h-screen bg-bg-cream page-enter">
       <FFPageHeader
         title="Verify phone"
-        subtitle={phoneNumber ? `${countryCode} ${phoneNumber}` : 'Enter your 6-digit code'}
+        subtitle={phoneNumber ? `${INDIA_COUNTRY_CODE} ${phoneNumber}` : 'Enter your 6-digit code'}
         showBack
         onBack={() => navigate('/login')}
       />

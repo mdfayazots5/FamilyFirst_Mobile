@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { HardDrive, Cloud, Save } from 'lucide-react';
+import { CheckCircle2, HardDrive, Cloud, Save } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
 import {
   FamilyAdminL2Repository,
@@ -37,8 +37,8 @@ const StorageConfigScreen: React.FC = () => {
   const config = resource.data;
   const isLoading = resource.isLoading;
   const loadError = familyId ? resource.error : 'Family details are not available.';
-  const [isSaving, setIsSaving]   = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const isSaving = saveStatus === 'saving';
   const [form, setForm]         = useState<Partial<StorageConfig>>({});
 
   useEffect(() => {
@@ -47,17 +47,26 @@ const StorageConfigScreen: React.FC = () => {
     }
   }, [config]);
 
+  const isDirty = !!config && (
+    form.storageMode !== config.storageMode ||
+    form.storageQuotaAlertThresholdPct !== config.storageQuotaAlertThresholdPct ||
+    form.offlineCacheSizeMb !== config.offlineCacheSizeMb
+  );
+
+  const edit = (change: Partial<StorageConfig>) => {
+    setSaveStatus('idle');
+    setForm(previous => ({ ...previous, ...change }));
+  };
+
   const handleSave = async () => {
-    if (!familyId || !form.storageMode) return;
-    setIsSaving(true);
-    setSaveError(null);
+    if (!familyId || !form.storageMode || !isDirty || isSaving) return;
+    setSaveStatus('saving');
     try {
       const updated = await FamilyAdminL2Repository.updateStorageConfig(familyId, form);
       resource.setData(updated);
+      setSaveStatus('saved');
     } catch {
-      setSaveError('Storage settings could not be saved. Please try again.');
-    } finally {
-      setIsSaving(false);
+      setSaveStatus('error');
     }
   };
 
@@ -73,7 +82,6 @@ const StorageConfigScreen: React.FC = () => {
 
       <main className="px-4 py-5 space-y-4 page-enter">
 
-        {saveError && <p role="alert" className="font-body text-sm text-alert">{saveError}</p>}
         {isLoading ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => <FFShimmer key={i} className="h-28 rounded-ff" />)}
@@ -81,7 +89,8 @@ const StorageConfigScreen: React.FC = () => {
         ) : loadError ? (
           <FFErrorState message={loadError} onRetry={familyId ? resource.reload : undefined} />
         ) : (
-          <>
+          <fieldset disabled={isSaving} className="min-w-0 space-y-4">
+            <legend className="sr-only">Storage settings</legend>
             {/* Storage usage */}
             {config && (
               <FFCard className="p-4 space-y-2">
@@ -110,7 +119,7 @@ const StorageConfigScreen: React.FC = () => {
                 {STORAGE_MODES.map(mode => (
                   <button
                     key={mode.id}
-                    onClick={() => setForm(f => ({ ...f, storageMode: mode.id }))}
+                    onClick={() => edit({ storageMode: mode.id })}
                     className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-colors ${
                       form.storageMode === mode.id
                         ? 'border-primary bg-primary/5'
@@ -135,7 +144,7 @@ const StorageConfigScreen: React.FC = () => {
                 {QUOTA_OPTIONS.map(pct => (
                   <button
                     key={pct}
-                    onClick={() => setForm(f => ({ ...f, storageQuotaAlertThresholdPct: pct }))}
+                    onClick={() => edit({ storageQuotaAlertThresholdPct: pct })}
                     className={`flex-1 py-2 rounded-xl font-body text-sm font-semibold border transition-colors ${
                       form.storageQuotaAlertThresholdPct === pct
                         ? 'bg-primary text-white border-primary'
@@ -156,7 +165,7 @@ const StorageConfigScreen: React.FC = () => {
                 {CACHE_OPTIONS.map(mb => (
                   <button
                     key={mb}
-                    onClick={() => setForm(f => ({ ...f, offlineCacheSizeMb: mb }))}
+                    onClick={() => edit({ offlineCacheSizeMb: mb })}
                     className={`flex-1 py-2 rounded-xl font-body text-sm font-semibold border transition-colors ${
                       form.offlineCacheSizeMb === mb
                         ? 'bg-primary text-white border-primary'
@@ -169,15 +178,24 @@ const StorageConfigScreen: React.FC = () => {
               </div>
             </FFCard>
 
+            <div role="status" className={saveStatus === 'saved' ? 'flex items-center gap-2 rounded-ff-sm bg-success/10 px-4 py-2.5 text-sm font-semibold text-success' : 'sr-only'}>
+              {saveStatus === 'saved' ? <><CheckCircle2 size={17} aria-hidden="true" />Storage configuration saved.</> : null}
+            </div>
+            {saveStatus === 'error' ? (
+              <p role="alert" className="rounded-ff-sm border border-alert/20 bg-alert/5 px-4 py-2.5 text-sm text-alert">
+                Storage settings could not be saved. Your edits are still here. Try saving again.
+              </p>
+            ) : null}
             <FFButton
               icon={<Save className="w-4 h-4" />}
               isLoading={isSaving}
+              disabled={!isDirty}
               className="w-full"
               onClick={handleSave}
             >
               Save Configuration
             </FFButton>
-          </>
+          </fieldset>
         )}
 
       </main>

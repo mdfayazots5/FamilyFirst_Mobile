@@ -13,7 +13,6 @@ import ParentHomeScreen from '../../features/parent/screens/ParentHomeScreen';
 import ChildDetailScreen from '../../features/parent/screens/ChildDetailScreen';
 import FamilySetupWizard from '../../features/family/screens/FamilySetupWizard';
 import FamilyMembersScreen from '../../features/family/screens/FamilyMembersScreen';
-import JoinCodeScreen from '../../features/family/screens/JoinCodeScreen';
 import AddMemberScreen from '../../features/family/screens/AddMemberScreen';
 import ParentProfileScreen from '../../features/parent/screens/ParentProfileScreen';
 import TeacherHomeScreen from '../../features/teacher/screens/TeacherHomeScreen';
@@ -43,7 +42,7 @@ import ElderSendAppreciationScreen from '../../features/elder/screens/ElderSendA
 import ElderSettingsScreen from '../../features/elder/screens/ElderSettingsScreen';
 import AdminDashboardScreen from '../../features/admin/screens/AdminDashboardScreen';
 import FamilyManagementScreen from '../../features/admin/screens/FamilyManagementScreen';
-import PlansManagerScreen from '../../features/admin/screens/PlansManagerScreen';
+import AdminFamilyDetailScreen from '../../features/admin/screens/AdminFamilyDetailScreen';
 import TaskTemplatesScreen from '../../features/admin/screens/TaskTemplatesScreen';
 import RewardCatalogScreen from '../../features/admin/screens/RewardCatalogScreen';
 import NotificationCampaignScreen from '../../features/admin/screens/NotificationCampaignScreen';
@@ -60,7 +59,6 @@ import ReportArchiveScreen from '../../features/reports/screens/ReportArchiveScr
 import ChildSettingsScreen from '../../features/child/screens/ChildSettingsScreen';
 import ParentSettingsScreen from '../../features/parent/screens/ParentSettingsScreen';
 import TeacherSettingsScreen from '../../features/teacher/screens/TeacherSettingsScreen';
-import SubscriptionScreen from '../../features/profile/screens/SubscriptionScreen';
 import AnalyticsScreen from '../../features/admin/screens/AnalyticsScreen';
 import SupportTicketsScreen from '../../features/admin/screens/SupportTicketsScreen';
 import ContentManagerScreen from '../../features/admin/screens/ContentManagerScreen';
@@ -167,15 +165,15 @@ const AppRouter: React.FC = () => {
         <Route element={<ProtectedRoute allowedRoles={[UserRole.PARENT, UserRole.FAMILY_ADMIN]}><Outlet /></ProtectedRoute>}>
           <Route path="parent" element={<ParentHomeScreen />} />
           <Route path="parent/members" element={<FamilyMembersScreen />} />
-          <Route path="parent/add-member" element={<AddMemberScreen />} />
-          <Route path="parent/join-code" element={<JoinCodeScreen />} />
           <Route path="parent/children/:childId" element={<ChildDetailScreen />} />
           <Route path="parent/feedback" element={<FeedbackInboxScreen />} />
           <Route path="parent/feedback/:feedbackId" element={<FeedbackDetailScreen />} />
           <Route path="parent/routine/:childId" element={<RoutineBuilderScreen />} />
           <Route path="parent/routine/:childId/add" element={<AddTaskScreen />} />
           <Route path="parent/routine/:childId/edit/:taskId" element={<AddTaskScreen />} />
-          <Route path="parent/verification" element={<VerificationQueueScreen />} />
+          <Route path="parent/verification" element={
+            <ProtectedRoute allowedRoles={[UserRole.PARENT, UserRole.FAMILY_ADMIN]}><VerificationQueueScreen /></ProtectedRoute>
+          } />
           <Route path="parent/rewards" element={<RewardShopScreen />} />
           <Route path="parent/goals" element={<FamilyGoalsScreen />} />
           <Route path="parent/ledger" element={<FamilyLedgerScreen />} />
@@ -185,6 +183,7 @@ const AppRouter: React.FC = () => {
 
         <Route element={<ProtectedRoute allowedRoles={[UserRole.FAMILY_ADMIN]}><Outlet /></ProtectedRoute>}>
           <Route path="parent/admin" element={<FamilyAdminPanelScreen />} />
+          <Route path="parent/add-member" element={<AddMemberScreen />} />
           <Route path="family-admin/modules" element={<ModuleVisibilityScreen />} />
           <Route path="family-admin/notifications" element={<NotificationRulesScreen />} />
           <Route path="family-admin/storage" element={<StorageConfigScreen />} />
@@ -221,7 +220,7 @@ const AppRouter: React.FC = () => {
         <Route element={<ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}><Outlet /></ProtectedRoute>}>
           <Route path="admin" element={<AdminDashboardScreen />} />
           <Route path="admin/families" element={<FamilyManagementScreen />} />
-          {AppConfig.features.subscriptionEnabled && <Route path="admin/plans" element={<PlansManagerScreen />} />}
+          <Route path="admin/families/:familyId" element={<AdminFamilyDetailScreen />} />
           <Route path="admin/task-templates" element={<TaskTemplatesScreen />} />
           <Route path="admin/reward-catalog" element={<RewardCatalogScreen />} />
           <Route path="admin/campaigns" element={<NotificationCampaignScreen />} />
@@ -308,8 +307,6 @@ const AppRouter: React.FC = () => {
           </Route>
         )}
         
-        {/* Settings & Profile Routes */}
-        {AppConfig.features.subscriptionEnabled && <Route path="profile/subscription" element={<SubscriptionScreen />} />}
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -23,7 +23,7 @@ export const MasterApiReference = {
     Dashboard: '/admin/dashboard',
     Analytics: '/admin/analytics/overview',
     Families: '/admin/families',
-    Plans: '/admin/plans',
+    FamilyDetail: '/admin/families/:familyId',
     RewardCatalog: '/admin/rewards/catalog',
     RewardCatalogItem: '/admin/rewards/catalog/:rewardId',
     TaskTemplates: '/admin/task-templates',
@@ -34,9 +34,7 @@ export const MasterApiReference = {
   Families: {
     Root: '/families',
     Members: '/families/:familyId/members',
-    JoinCode: '/families/:familyId/join-code',
-    RegenerateJoinCode: '/families/:familyId/join-code/regenerate',
-    ChildrenByJoinCode: '/families/children',
+    Member: '/families/:familyId/members/:memberId',
     Dashboard: '/families/:familyId/dashboard',
     Goals: '/families/:familyId/goals',
     Goal: '/families/:familyId/goals/:goalId',
@@ -74,6 +72,7 @@ export const MasterApiReference = {
     Redemption: '/families/:familyId/rewards/redemptions/:redemptionId',
   },
   Children: {
+    List: '/families/:familyId/children',
     Detail: '/families/:familyId/children/:childId',
     ScoreHistory: '/children/:childId/score-history',
     Update: '/children/:childId',

@@ -10,6 +10,13 @@ import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { FamilyRepository } from '../repositories/FamilyRepository';
+import {
+  INDIA_COUNTRY_CODE,
+  INDIAN_MOBILE_ERROR,
+  INDIAN_MOBILE_LENGTH,
+  isValidIndianMobile,
+  toIndianMobileDigits,
+} from '../../../core/utils/indianPhone';
 
 type ChildDraft = {
   id: string;
@@ -30,7 +37,6 @@ type WizardState = {
   elderPhone: string;
   isLoading: boolean;
   error: string | null;
-  joinCode: string;
 };
 
 type WizardAction =
@@ -39,8 +45,7 @@ type WizardAction =
   | { type: 'ADD_CHILD' }
   | { type: 'REMOVE_CHILD'; id: string }
   | { type: 'SET_LOADING'; isLoading: boolean }
-  | { type: 'SET_ERROR'; error: string | null }
-  | { type: 'SET_JOIN_CODE'; joinCode: string };
+  | { type: 'SET_ERROR'; error: string | null };
 
 const initialState: WizardState = {
   step: 1,
@@ -53,7 +58,6 @@ const initialState: WizardState = {
   elderPhone: '',
   isLoading: false,
   error: null,
-  joinCode: '',
 };
 
 const reducer = (state: WizardState, action: WizardAction): WizardState => {
@@ -88,8 +92,6 @@ const reducer = (state: WizardState, action: WizardAction): WizardState => {
       return { ...state, isLoading: action.isLoading };
     case 'SET_ERROR':
       return { ...state, error: action.error };
-    case 'SET_JOIN_CODE':
-      return { ...state, joinCode: action.joinCode };
     default:
       return state;
   }
@@ -117,12 +119,16 @@ const FamilySetupWizard: React.FC = () => {
       return;
     }
 
+    if (state.elderPhone && !isValidIndianMobile(state.elderPhone)) {
+      dispatch({ type: 'SET_ERROR', error: INDIAN_MOBILE_ERROR });
+      return;
+    }
+
     dispatch({ type: 'SET_LOADING', isLoading: true });
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
-      const family = await FamilyRepository.createFamily(state.familyName.trim(), state.city.trim());
-      dispatch({ type: 'SET_JOIN_CODE', joinCode: family.joinCode });
+      await FamilyRepository.createFamily(state.familyName.trim(), state.city.trim());
       dispatch({ type: 'SET_STEP', step: 4 });
     } catch (caughtError: unknown) {
       const message =
@@ -147,7 +153,7 @@ const FamilySetupWizard: React.FC = () => {
           <FFCard variant="primary" className="space-y-3 p-6 text-white">
             <p className="font-display text-xl font-bold text-white">Start your family space</p>
             <p className="text-sm text-white/75">
-              Set up your home, add children, and keep the join code ready for other members.
+              Set up your home, then add children, elders, and other members.
             </p>
           </FFCard>
 
@@ -269,14 +275,20 @@ const FamilySetupWizard: React.FC = () => {
                 <label htmlFor="elderPhone" className="block text-xs font-semibold text-gray-500">
                   Elder phone
                 </label>
-                <input
-                  id="elderPhone"
-                  type="tel"
-                  value={state.elderPhone}
-                  onChange={(event) => dispatch({ type: 'SET_FIELD', field: 'elderPhone', value: event.target.value })}
-                  placeholder="+91 98765 43210"
-                  className="min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-primary outline-none transition focus:border-accent"
-                />
+                <div className="flex min-h-12 w-full items-center rounded-xl border border-black/10 bg-white transition focus-within:border-accent">
+                  <span className="border-r border-black/10 px-4 py-3 text-sm font-semibold text-primary">{INDIA_COUNTRY_CODE}</span>
+                  <input
+                    id="elderPhone"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    maxLength={INDIAN_MOBILE_LENGTH}
+                    value={state.elderPhone}
+                    onChange={(event) => dispatch({ type: 'SET_FIELD', field: 'elderPhone', value: toIndianMobileDigits(event.target.value) })}
+                    placeholder="98765 43210"
+                    className="min-h-12 w-full rounded-r-xl bg-transparent px-4 py-3 text-sm text-primary outline-none"
+                  />
+                </div>
               </div>
 
               {state.isLoading ? (
@@ -303,17 +315,18 @@ const FamilySetupWizard: React.FC = () => {
 
           {state.step === 4 ? (
             <FFCard className="space-y-5 p-4 sm:p-5 lg:p-6">
-              <FFSectionHeader icon={<CheckCircle2 />} title="Ready to invite" />
+              <FFSectionHeader icon={<CheckCircle2 />} title="Family created" />
               <FFCard variant="warm" className="p-5 text-center">
-                <p className="text-xs font-semibold text-gray-500">Your family join code</p>
-                <p className="mt-3 font-display text-2xl font-bold text-primary">{state.joinCode}</p>
+                <p className="font-display text-xl font-bold text-primary">{state.familyName.trim()}</p>
+                <p className="mt-2 text-sm text-gray-500">Your family space is ready.</p>
               </FFCard>
               <p className="text-sm text-gray-500">
-                Share this code with parents, elders, teachers, and children so they can join your family.
+                Add parents, children, elders, and teachers with their 10-digit mobile number. Children and elders
+                then sign in on a parent&apos;s device with their own PIN.
               </p>
               <div className="flex gap-3">
-                <FFButton variant="outline" className="flex-1" onClick={() => navigate('/parent/join-code')}>
-                  View invite code
+                <FFButton variant="outline" className="flex-1" onClick={() => navigate('/parent/add-member')}>
+                  Add a member
                 </FFButton>
                 <FFButton className="flex-1" onClick={() => navigate('/parent/members')}>
                   Open family members

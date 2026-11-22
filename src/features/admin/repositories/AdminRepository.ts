@@ -1,42 +1,31 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
-import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 import { requireApiData } from '../../../core/network/apiTypes';
-import { getMasters } from '../../../core/repositories/MasterDataRepository';
+import type { PillarTag } from '../../tasks/repositories/TaskRepository';
 
 export interface AdminDashboardStats {
   totalFamilies: number;
   activeFamilies: number;
-  monthlyRevenue: number;
-  churnRate: number;
   newSignupsToday: number;
-  revenueTrend: number; // percentage
 }
 
 /** Input for sendCampaign — what NotificationCampaignScreen sends. */
 export interface NotificationCampaignInput {
   title: string;
   body: string;
-  targetRole: string;
-  scheduledFor: string;
+  roles: string[];
+  scheduledFor: string | null;
 }
 
 export interface AdminFamily {
   id: string;
   name: string;
-  plan: string;
-  status: 'Active' | 'Trial' | 'Churned' | 'Flagged';
+  city: string;
+  status: 'Active' | 'Flagged';
   memberCount: number;
   createdAt: string;
   lastActive: string;
-}
-
-export interface SubscriptionPlan {
-  id: string;
-  name: string;
-  price: number;
-  maxChildren: number;
-  features: string[];
 }
 
 export interface RewardCatalogItem {
@@ -46,28 +35,39 @@ export interface RewardCatalogItem {
   category: string;
   icon: string;
   description?: string;
+  isEnabled: boolean;
 }
 
-export interface AdminLookupOption {
-  id: string;
-  label: string;
-  code: string;
-}
 
-export interface TaskTemplate {
-  id: string;
+export interface CreateTaskTemplateInput {
   taskName: string;
   category: string;
-  iconCode: string;
+  ageGroup?: string;
+  instructions?: string;
+  iconCode?: string;
+  timeBlock: 1 | 3 | 4;
+  durationMinutes: number;
   coinValue: number;
-  ageGroup: string;
+  isPhotoRequired: boolean;
+  pillarTag?: PillarTag;
+  isRecurring: boolean;
+  recurringDays: number[];
+  activeFromDate: string;
+}
+
+export interface TaskTemplate extends Omit<CreateTaskTemplateInput, 'ageGroup' | 'instructions' | 'iconCode' | 'pillarTag'> {
+  templateId: string;
+  ageGroup: string | null;
+  instructions: string | null;
+  iconCode: string | null;
+  pillarTag: PillarTag | null;
 }
 
 export interface FeatureFlag {
-  id: string;
-  name: string;
-  description: string;
-  isEnabled: boolean;
+  flagKey: string;
+  flagValue: string;
+  description: string | null;
+  updatedAt: string;
 }
 
 export interface AdminAnalyticsOverview {
@@ -107,38 +107,12 @@ export interface AdminContentItem {
 }
 
 // [VERIFY - candidate master data]
-export const ADMIN_FAMILY_STATUS_OPTIONS: readonly string[] = ['All', 'Active', 'Trial', 'Churned', 'Flagged'];
+export const ADMIN_FAMILY_STATUS_OPTIONS = ['All', 'Active', 'Flagged'] as const;
+export type AdminFamilyFilter = typeof ADMIN_FAMILY_STATUS_OPTIONS[number];
 // [VERIFY - candidate master data]
 export const ADMIN_CAMPAIGN_ROLE_OPTIONS: readonly string[] = ['All', 'Parent', 'Child', 'Teacher', 'Elder'];
 // [VERIFY - candidate master data]
 export const ADMIN_CAMPAIGN_SCHEDULE_OPTIONS: readonly string[] = ['Immediate', 'In 1 Hour', 'Tomorrow'];
-
-interface AdminPlanDto {
-  PlanId?: number;
-  planId?: number;
-  PlanName?: string;
-  planName?: string;
-  PlanCode?: string;
-  planCode?: string;
-  PriceMonthly?: number;
-  priceMonthly?: number;
-  MaxChildren?: number;
-  maxChildren?: number;
-  MaxTeachers?: number;
-  maxTeachers?: number;
-  HasElderMode?: boolean;
-  hasElderMode?: boolean;
-  HasWeeklyDigest?: boolean;
-  hasWeeklyDigest?: boolean;
-  HasAdvancedReports?: boolean;
-  hasAdvancedReports?: boolean;
-  StorageQuotaMb?: number;
-  storageQuotaMb?: number;
-  TrialDays?: number;
-  trialDays?: number;
-  IsActive?: boolean;
-  isActive?: boolean;
-}
 
 interface RewardCatalogDto {
   RewardId?: string;
@@ -153,32 +127,62 @@ interface RewardCatalogDto {
   iconCode?: string;
   Description?: string | null;
   description?: string | null;
+  IsEnabled?: boolean;
+  isEnabled?: boolean;
 }
 
-const mapLookupItems = (items: MasterDataItem[]): AdminLookupOption[] =>
-  items.map((item) => ({
-    id: item.id,
-    label: item.name,
-    code: item.code,
-  }));
+/** GET /api/admin/families → ApiResponse<PaginatedList<AdminFamilySummaryDto>> */
+interface AdminFamilySummaryDto {
+  familyId: string;
+  familyName: string;
+  city?: string | null;
+  isActive: boolean;          // false = family blocked by SuperAdmin
+  memberCount: number;
+  createdAt: string;
+}
 
-const mapPlanDto = (plan: AdminPlanDto): SubscriptionPlan => {
-  const features = [
-    (plan.HasElderMode ?? plan.hasElderMode) ? 'Elder Mode' : null,
-    (plan.HasWeeklyDigest ?? plan.hasWeeklyDigest) ? 'Weekly Digest' : null,
-    (plan.HasAdvancedReports ?? plan.hasAdvancedReports) ? 'Advanced Reports' : null,
-    `${plan.MaxTeachers ?? plan.maxTeachers ?? 0} Teachers`,
-    `${plan.StorageQuotaMb ?? plan.storageQuotaMb ?? 0} MB Storage`,
-  ].filter(Boolean) as string[];
+/** GET /api/admin/dashboard → ApiResponse<AdminDashboardDto> */
+interface AdminDashboardDto {
+  totalFamilies: number;
+  activeFamilies: number;
+  signupsToday: number;
+}
 
-  return {
-    id: String(plan.PlanId ?? plan.planId ?? ''),
-    name: plan.PlanName ?? plan.planName ?? '',
-    price: plan.PriceMonthly ?? plan.priceMonthly ?? 0,
-    maxChildren: plan.MaxChildren ?? plan.maxChildren ?? 0,
-    features,
-  };
-};
+interface AdminFamilyPage {
+  items: AdminFamilySummaryDto[];
+  pageNumber: number;
+  pageSize: number;
+  totalPages: number;
+  totalCount: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+}
+
+export interface AdminFamilyDetail {
+  familyName: string;
+  city?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  members: {
+    memberId: string;
+    fullName: string;
+    role: string;
+    isActive: boolean;
+    joinedAt: string;
+  }[];
+}
+
+const mapFamilyDto = (dto: AdminFamilySummaryDto): AdminFamily => ({
+  id: dto.familyId,
+  name: dto.familyName ?? '',
+  city: dto.city ?? '',
+  status: dto.isActive ? 'Active' : 'Flagged',
+  memberCount: dto.memberCount ?? 0,
+  createdAt: dto.createdAt,
+  // API exposes no last-activity timestamp [VERIFY]; createdAt is the only date available.
+  lastActive: dto.createdAt,
+});
+
 
 const mapRewardCatalogDto = (reward: RewardCatalogDto): RewardCatalogItem => ({
   id: reward.RewardId ?? reward.rewardId ?? '',
@@ -187,12 +191,18 @@ const mapRewardCatalogDto = (reward: RewardCatalogDto): RewardCatalogItem => ({
   category: reward.Category ?? reward.category ?? '',
   icon: reward.IconCode ?? reward.iconCode ?? '🎁',
   description: reward.Description ?? reward.description ?? undefined,
+  isEnabled: reward.IsEnabled ?? reward.isEnabled ?? false,
 });
 
 export const AdminRepository = {
   getDashboardStats: async (): Promise<AdminDashboardStats> => {
-    const response = await apiClient.get<ApiResponse<AdminDashboardStats>>(MasterApiReference.Admin.Dashboard);
-    return response.data.data as AdminDashboardStats;
+    const response = await apiClient.get<ApiResponse<AdminDashboardDto>>(MasterApiReference.Admin.Dashboard);
+    const dto = requireApiData(response.data, 'AdminRepository.getDashboardStats');
+    return {
+      totalFamilies: dto.totalFamilies ?? 0,
+      activeFamilies: dto.activeFamilies ?? 0,
+      newSignupsToday: dto.signupsToday ?? 0,
+    };
   },
 
   getAnalyticsOverview: async (): Promise<AdminAnalyticsOverview> => {
@@ -217,43 +227,65 @@ export const AdminRepository = {
     return [];
   },
 
-  getFamilies: async (params?: Record<string, string | number | boolean>): Promise<AdminFamily[]> => {
-    const response = await apiClient.get<ApiResponse<AdminFamily[]>>(MasterApiReference.Admin.Families, { params });
-    return response.data.data ?? [];
+  getFamilies: async (
+    params: { query?: string; status?: Exclude<AdminFamilyFilter, 'All'>; page: number },
+    signal?: AbortSignal,
+  ) => {
+    const response = await apiClient.get<ApiResponse<AdminFamilyPage>>(MasterApiReference.Admin.Families, { params, signal });
+    const page = requireApiData(response.data, 'AdminRepository.getFamilies');
+    return { ...page, items: page.items.map(mapFamilyDto) };
   },
 
-  getPlans: async (): Promise<SubscriptionPlan[]> => {
-    const response = await apiClient.get<ApiResponse<AdminPlanDto[]>>(MasterApiReference.Admin.Plans);
-    return (response.data.data ?? []).map(mapPlanDto);
+  getFamilyDetail: async (familyId: string): Promise<AdminFamilyDetail> => {
+    const response = await apiClient.get<ApiResponse<AdminFamilyDetail>>(
+      resolvePath(MasterApiReference.Admin.FamilyDetail, { familyId }),
+    );
+    return requireApiData(response.data, 'AdminRepository.getFamilyDetail');
   },
 
   getTaskTemplates: async (): Promise<TaskTemplate[]> => {
     const response = await apiClient.get<ApiResponse<TaskTemplate[]>>(MasterApiReference.Admin.TaskTemplates);
-    return response.data.data ?? [];
+    return requireApiData(response.data, 'AdminRepository.getTaskTemplates');
+  },
+
+  createTaskTemplate: async (template: CreateTaskTemplateInput): Promise<TaskTemplate> => {
+    const response = await apiClient.post<ApiResponse<TaskTemplate>>(MasterApiReference.Admin.TaskTemplates, template);
+    return requireApiData(response.data, 'AdminRepository.createTaskTemplate');
   },
 
   getFeatureFlags: async (): Promise<FeatureFlag[]> => {
     const response = await apiClient.get<ApiResponse<FeatureFlag[]>>(MasterApiReference.Admin.FeatureFlags);
-    return response.data.data ?? [];
+    return requireApiData(response.data, 'AdminRepository.getFeatureFlags');
   },
 
-  updateFeatureFlag: async (flagId: string, isEnabled: boolean): Promise<void> => {
-    await apiClient.put<ApiResponse<null>>(
-      resolvePath(MasterApiReference.Admin.FeatureFlag, { flagId }),
-      { isEnabled },
+  updateFeatureFlag: async (flagId: string, flagValue: string | boolean): Promise<FeatureFlag> => {
+    const response = await apiClient.put<ApiResponse<FeatureFlag>>(
+      resolvePath(MasterApiReference.Admin.FeatureFlag, { flagId: encodeURIComponent(flagId) }),
+      { flagValue: String(flagValue) },
     );
+    return requireApiData(response.data, 'AdminRepository.updateFeatureFlag');
   },
 
-  sendCampaign: async (data: NotificationCampaignInput): Promise<void> => {
-    await apiClient.post<ApiResponse<null>>(MasterApiReference.Admin.NotificationCampaign, data);
+  sendCampaign: async (data: NotificationCampaignInput): Promise<{ recipientCount: number }> => {
+    const response = await apiClient.post<ApiResponse<{ recipientCount: number }>>(MasterApiReference.Admin.NotificationCampaign, data);
+    return requireApiData(response.data, 'AdminRepository.sendCampaign');
   },
 
   getRewardCatalog: async (): Promise<RewardCatalogItem[]> => {
     const response = await apiClient.get<ApiResponse<RewardCatalogDto[]>>(MasterApiReference.Admin.RewardCatalog);
-    return (response.data.data ?? []).map(mapRewardCatalogDto);
+    return requireApiData(response.data, 'AdminRepository.getRewardCatalog').map(mapRewardCatalogDto);
   },
 
-  getPlanOptions: async (): Promise<AdminLookupOption[]> => {
-    return mapLookupItems(await getMasters('Plan'));
+  createCatalogReward: async (reward: { rewardName: string; coinCost: number; category: string; description?: string }) => {
+    const response = await apiClient.post<ApiResponse<RewardCatalogDto>>(MasterApiReference.Admin.RewardCatalog, reward);
+    return mapRewardCatalogDto(requireApiData(response.data, 'AdminRepository.createCatalogReward'));
+  },
+
+  updateCatalogReward: async (rewardId: string, reward: { rewardName: string; coinCost: number; isEnabled: boolean }) => {
+    const response = await apiClient.put<ApiResponse<RewardCatalogDto>>(
+      resolvePath(MasterApiReference.Admin.RewardCatalogItem, { rewardId }),
+      reward,
+    );
+    return mapRewardCatalogDto(requireApiData(response.data, 'AdminRepository.updateCatalogReward'));
   },
 };

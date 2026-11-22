@@ -8,12 +8,18 @@ import FFErrorState from '../../shared/components/FFErrorState';
 import FFPageHeader from '../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../shared/components/FFSectionHeader';
 import FFShimmer from '../../shared/components/FFShimmer';
-import { AuthRepository, COUNTRY_PHONE_OPTIONS } from '../../core/repositories/AuthRepository';
+import { AuthRepository } from '../../core/repositories/AuthRepository';
+import {
+  INDIA_COUNTRY_CODE,
+  INDIAN_MOBILE_ERROR,
+  INDIAN_MOBILE_LENGTH,
+  isValidIndianMobile,
+  toIndianMobileDigits,
+} from '../../core/utils/indianPhone';
 import { useAuth } from '../../core/auth/AuthContext';
 
 const PhoneLoginScreen: React.FC = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [countryCode, setCountryCode] = useState('+91');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,8 +30,8 @@ const PhoneLoginScreen: React.FC = () => {
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (phoneNumber.length !== 10) {
-      setError('Enter a valid 10-digit phone number.');
+    if (!isValidIndianMobile(phoneNumber)) {
+      setError(INDIAN_MOBILE_ERROR);
       return;
     }
 
@@ -38,7 +44,7 @@ const PhoneLoginScreen: React.FC = () => {
     setError(null);
 
     try {
-      const authResponse = await AuthRepository.loginWithPassword(phoneNumber, countryCode, password);
+      const authResponse = await AuthRepository.loginWithPassword(phoneNumber, INDIA_COUNTRY_CODE, password);
       handleAuthResponse(authResponse);
       navigate('/', { replace: true });
     } catch (caughtError: unknown) {
@@ -73,38 +79,24 @@ const PhoneLoginScreen: React.FC = () => {
 
             <form className="space-y-5" onSubmit={handleLogin}>
               <div className="space-y-2">
-                <label htmlFor="countryCode" className="block text-xs font-semibold text-gray-500">
-                  Country
-                </label>
-                <select
-                  id="countryCode"
-                  value={countryCode}
-                  onChange={(event) => setCountryCode(event.target.value)}
-                  className="min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-primary outline-none transition focus:border-accent"
-                >
-                  {COUNTRY_PHONE_OPTIONS.map((country) => (
-                    <option key={country.code} value={country.code}>
-                      {country.label} ({country.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
                 <label htmlFor="phoneNumber" className="block text-xs font-semibold text-gray-500">
-                  Phone number
+                  Mobile number
                 </label>
-                <input
-                  id="phoneNumber"
-                  type="tel"
-                  inputMode="numeric"
-                  autoComplete="tel-national"
-                  autoFocus
-                  placeholder="98765 43210"
-                  value={phoneNumber}
-                  onChange={(event) => setPhoneNumber(event.target.value.replace(/\D/g, '').slice(0, 10))}
-                  className="min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-primary outline-none transition focus:border-accent"
-                />
+                <div className="flex min-h-12 w-full items-center rounded-xl border border-black/10 bg-white transition focus-within:border-accent">
+                  <span className="border-r border-black/10 px-4 py-3 text-sm font-semibold text-primary">{INDIA_COUNTRY_CODE}</span>
+                  <input
+                    id="phoneNumber"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    autoFocus
+                    maxLength={INDIAN_MOBILE_LENGTH}
+                    placeholder="98765 43210"
+                    value={phoneNumber}
+                    onChange={(event) => setPhoneNumber(toIndianMobileDigits(event.target.value))}
+                    className="min-h-12 w-full rounded-r-xl bg-transparent px-4 py-3 text-sm text-primary outline-none"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -156,10 +148,10 @@ const PhoneLoginScreen: React.FC = () => {
           <FFCard variant="warm" className="space-y-4 p-4 sm:p-5 lg:p-6">
             <FFSectionHeader icon={<KeyRound />} title="Other sign-in options" />
             <p className="text-sm text-gray-500">
-              Children and elders can continue with their PIN instead of a password.
+              Children and elders sign in with their PIN on a parent&apos;s device after the parent signs in.
             </p>
             <FFButton variant="outline" className="w-full" onClick={() => navigate('/child-login')}>
-              Continue with PIN
+              How children and elders sign in
             </FFButton>
           </FFCard>
 

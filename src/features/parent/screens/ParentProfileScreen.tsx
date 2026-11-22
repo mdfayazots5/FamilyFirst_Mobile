@@ -3,15 +3,14 @@ import {
   Award,
   Bell,
   ChevronRight,
-  CreditCard,
   LogOut,
+  Repeat,
   Settings,
   Shield,
   Users,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../../core/auth/AuthContext';
-import { AppConfig } from '../../../core/config/appConfig';
+import { useAuth, UserRole } from '../../../core/auth/AuthContext';
 import FFAvatar from '../../../shared/components/FFAvatar';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
@@ -131,19 +130,19 @@ const ParentProfileScreen: React.FC = () => {
               <p className="mt-2 font-body text-sm text-slate-500">Approve redemptions and tune family rewards.</p>
             </FFCard>
 
-            <FFCard hoverable onClick={() => navigate('/parent/verification')} className="shadow-card p-4">
-              <Shield size={20} className="text-primary" />
-              <p className="mt-4 font-display text-lg font-semibold text-primary">Verification queue</p>
-              <p className="mt-2 font-body text-sm text-slate-500">Review proof-based task submissions.</p>
-            </FFCard>
-
-            {AppConfig.features.subscriptionEnabled ? (
-              <FFCard hoverable onClick={() => navigate('/profile/subscription')} className="shadow-card p-4">
-                <CreditCard size={20} className="text-primary" />
-                <p className="mt-4 font-display text-lg font-semibold text-primary">Subscription</p>
-                <p className="mt-2 font-body text-sm text-slate-500">View your current plan and billing details.</p>
+            {user?.role === UserRole.PARENT || user?.role === UserRole.FAMILY_ADMIN ? (
+              <FFCard hoverable onClick={() => navigate('/parent/verification')} className="shadow-card p-4">
+                <Shield size={20} className="text-primary" />
+                <p className="mt-4 font-display text-lg font-semibold text-primary">Verification queue</p>
+                <p className="mt-2 font-body text-sm text-slate-500">Review proof-based task submissions.</p>
               </FFCard>
             ) : null}
+
+            <FFCard hoverable onClick={() => navigate('/child-login')} className="shadow-card p-4">
+              <Repeat size={20} className="text-primary" />
+              <p className="mt-4 font-display text-lg font-semibold text-primary">Switch to child / elder</p>
+              <p className="mt-2 font-body text-sm text-slate-500">Hand this device over for a PIN sign-in.</p>
+            </FFCard>
           </div>
         </section>
 

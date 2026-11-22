@@ -2,9 +2,7 @@ import React, { createContext, useContext, useState } from 'react';
 
 interface ElderSettingsContextType {
   fontSize: string;
-  language: string;
   setFontSize: (size: string) => void;
-  setLanguage: (lang: string) => void;
   scale: number;
 }
 
@@ -12,22 +10,16 @@ const ElderSettingsContext = createContext<ElderSettingsContextType | undefined>
 
 export const ElderSettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [fontSize, setFontSizeState] = useState(localStorage.getItem('elderFontSize') || '1.3');
-  const [language, setLanguageState] = useState(localStorage.getItem('elderLanguage') || 'English');
 
   const setFontSize = (size: string) => {
     setFontSizeState(size);
     localStorage.setItem('elderFontSize', size);
   };
 
-  const setLanguage = (lang: string) => {
-    setLanguageState(lang);
-    localStorage.setItem('elderLanguage', lang);
-  };
-
   const scale = parseFloat(fontSize);
 
   return (
-    <ElderSettingsContext.Provider value={{ fontSize, language, setFontSize, setLanguage, scale }}>
+    <ElderSettingsContext.Provider value={{ fontSize, setFontSize, scale }}>
       <div style={{ fontSize: `${16 * scale}px` }} className="min-h-screen">
         {children}
       </div>

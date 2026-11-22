@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Bell,
-  Languages,
   Lock,
   Palette,
   Volume2,
@@ -18,7 +17,6 @@ const ChildSettingsScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [language, setLanguage] = useState('English');
   const [selectedAvatar, setSelectedAvatar] = useState('A');
 
   return (
@@ -81,32 +79,6 @@ const ChildSettingsScreen: React.FC = () => {
               >
                 {soundEnabled ? 'On' : 'Off'}
               </button>
-            </div>
-          </FFCard>
-
-          <FFCard className="shadow-card p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <span className="rounded-ff-sm bg-primary/5 p-3 text-primary">
-                  <Languages size={18} />
-                </span>
-                <div>
-                  <p className="font-display text-lg font-semibold text-primary">Language</p>
-                  <p className="mt-1 font-body text-sm text-slate-500">
-                    Choose the language you want to read in the app.
-                  </p>
-                </div>
-              </div>
-              <select
-                value={language}
-                onChange={(event) => setLanguage(event.target.value)}
-                className="min-h-12 rounded-ff border border-black/10 bg-white px-4 font-body text-sm text-primary"
-              >
-                <option>English</option>
-                <option>Hindi</option>
-                <option>Marathi</option>
-                <option>Tamil</option>
-              </select>
             </div>
           </FFCard>
         </section>

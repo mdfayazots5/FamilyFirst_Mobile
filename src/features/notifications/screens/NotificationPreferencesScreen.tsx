@@ -218,6 +218,7 @@ const NotificationPreferencesScreen: React.FC = () => {
   const [reloadToken, reload] = useReducer((value: number) => value + 1, 0);
 
   useEffect(() => {
+    let cancelled = false;
     const loadPreferences = async () => {
       if (!user?.id) {
         dispatch({
@@ -231,16 +232,19 @@ const NotificationPreferencesScreen: React.FC = () => {
 
       try {
         const prefs = await NotificationRepository.getPreferences(user.id);
-        dispatch({ type: 'LOAD_SUCCESS', payload: prefs });
+        if (!cancelled) dispatch({ type: 'LOAD_SUCCESS', payload: prefs });
       } catch {
-        dispatch({
-          type: 'LOAD_ERROR',
-          error: 'Your notification settings could not be loaded right now. Please try again.',
-        });
+        if (!cancelled) {
+          dispatch({
+            type: 'LOAD_ERROR',
+            error: 'Your notification settings could not be loaded right now. Please try again.',
+          });
+        }
       }
     };
 
     void loadPreferences();
+    return () => { cancelled = true; };
   }, [reloadToken, user?.id]);
 
   const handleSave = async () => {

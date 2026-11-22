@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, BookOpen, Globe, LogOut, Save, User } from 'lucide-react';
+import { Bell, BookOpen, LogOut, Save, SlidersHorizontal, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
 import FFBadge from '../../../shared/components/FFBadge';
@@ -14,7 +14,6 @@ const TeacherSettingsScreen: React.FC = () => {
 
   const [name, setName] = useState(user?.name || 'Teacher');
   const [subject, setSubject] = useState('');
-  const [language, setLanguage] = useState('English');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -102,25 +101,8 @@ const TeacherSettingsScreen: React.FC = () => {
         </section>
 
         <section className="space-y-3">
-          <FFSectionHeader icon={<Globe />} title="Preferences" />
+          <FFSectionHeader icon={<SlidersHorizontal />} title="Preferences" />
           <FFCard className="space-y-4 p-4">
-            <label className="block space-y-2">
-              <span className="text-xs font-body font-semibold uppercase tracking-wider text-gray-400">
-                Language
-              </span>
-              <select
-                value={language}
-                onChange={(event) => setLanguage(event.target.value)}
-                className="min-h-12 w-full rounded-xl border border-black/5 bg-white px-4 text-sm text-primary outline-none transition-colors focus:border-primary/20"
-              >
-                <option value="English">English</option>
-                <option value="Hindi">Hindi</option>
-                <option value="Tamil">Tamil</option>
-                <option value="Telugu">Telugu</option>
-                <option value="Marathi">Marathi</option>
-              </select>
-            </label>
-
             <div className="flex items-center justify-between gap-4 rounded-ff-sm bg-[#FDF9F4] p-4">
               <div className="min-w-0">
                 <p className="font-display text-sm font-semibold text-primary">Notifications</p>

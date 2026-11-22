@@ -1,6 +1,7 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import { requireApiData } from '../../../core/network/apiTypes';
 import { getMasters } from '../../../core/repositories/MasterDataRepository';
 export type FeedbackType = 'Appreciation' | 'Complaint' | 'Observation' | 'Homework' | 'Urgent' | 'WeeklySummary';
 export type Severity = 'Low' | 'Medium' | 'Urgent';
@@ -186,6 +187,24 @@ const mapFeedbackDto = (feedback: FeedbackDto): Feedback => ({
   weeklyData: parseWeeklySummary(feedback.WeeklySummaryJson ?? feedback.weeklySummaryJson),
 });
 
+interface FeedbackPage {
+  items: FeedbackDto[];
+  hasNextPage: boolean;
+}
+
+const listFeedback = async (familyId: string, filters: { childId?: string; teacherId?: string }): Promise<Feedback[]> => {
+  const path = resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId });
+  const items: FeedbackDto[] = [];
+
+  for (let page = 1; ; page += 1) {
+    const { data } = await apiClient.get<ApiResponse<FeedbackPage | FeedbackDto[]>>(path, { params: { ...filters, page } });
+    const result = requireApiData(data, 'Feedback list');
+    if (Array.isArray(result)) return [...items, ...result].map(mapFeedbackDto);
+    items.push(...result.items);
+    if (!result.hasNextPage) return items.map(mapFeedbackDto);
+  }
+};
+
 export const FeedbackRepository = {
   submitFeedback: async (familyId: string, data: SubmitFeedbackInput): Promise<Feedback> => {
     const response = await apiClient.post<ApiResponse<FeedbackDto>>(
@@ -208,20 +227,17 @@ export const FeedbackRepository = {
     return mapFeedbackDto(response.data.data as FeedbackDto);
   },
 
-  getFeedbackHistory: async (familyId: string, teacherId: string): Promise<Feedback[]> => {
-    const response = await apiClient.get<ApiResponse<FeedbackDto[]>>(
-      resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
-      { params: { teacherId } },
-    );
-    return (response.data.data ?? []).map(mapFeedbackDto);
-  },
+  getFeedbackHistory: (familyId: string, teacherId: string): Promise<Feedback[]> =>
+    listFeedback(familyId, { teacherId }),
 
-  getFeedbackInbox: async (familyId: string, childId?: string): Promise<Feedback[]> => {
-    const response = await apiClient.get<ApiResponse<FeedbackDto[]>>(
-      resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
-      { params: { childId } },
+  getFeedbackInbox: (familyId: string, childId?: string): Promise<Feedback[]> =>
+    listFeedback(familyId, { childId }),
+
+  getFeedback: async (familyId: string, feedbackId: string): Promise<Feedback> => {
+    const { data } = await apiClient.get<ApiResponse<FeedbackDto>>(
+      resolvePath(MasterApiReference.Feedback.FamilyFeedbackItem, { familyId, feedbackId }),
     );
-    return (response.data.data ?? []).map(mapFeedbackDto);
+    return mapFeedbackDto(requireApiData(data, 'Feedback detail'));
   },
 
   acknowledgeFeedback: async (feedbackId: string, parentResponseText: string): Promise<Feedback> => {

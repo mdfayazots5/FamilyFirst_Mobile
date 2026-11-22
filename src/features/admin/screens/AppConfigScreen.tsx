@@ -1,218 +1,228 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, ShieldAlert, Globe, Smartphone, Save } from 'lucide-react';
-import { AdminRepository, FeatureFlag } from '../repositories/AdminRepository';
-import FFCard from '../../../shared/components/FFCard';
+import { useRef, useState } from 'react';
+import { isAxiosError } from 'axios';
+import { Globe, Settings, ShieldAlert } from 'lucide-react';
+import { useApiResource } from '../../../core/hooks/useApiResource';
+import type { ApiResponse } from '../../../core/network/apiTypes';
+import FFBadge from '../../../shared/components/FFBadge';
 import FFButton from '../../../shared/components/FFButton';
-import FFShimmer from '../../../shared/components/FFShimmer';
+import FFCard from '../../../shared/components/FFCard';
 import FFErrorState from '../../../shared/components/FFErrorState';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
+import FFShimmer from '../../../shared/components/FFShimmer';
+import { AdminRepository, type FeatureFlag } from '../repositories/AdminRepository';
 
-const AppConfigScreen: React.FC = () => {
-  const [flags, setFlags]       = useState<FeatureFlag[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError]         = useState<string | null>(null);
-  const [isSaving]   = useState(false);
-  const [pendingCritical, setPendingCritical] = useState<string | null>(null);
+const maintenanceKey = 'maintenancemode';
+const minimumVersionKey = 'minimumappversion';
+const flagLabels: Record<string, string> = {
+  globalnotifications: 'Global notifications',
+  globalreports: 'Global reports',
+};
 
-  const fetchFlags = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+export default function AppConfigScreen() {
+  const flags = useApiResource(AdminRepository.getFeatureFlags, [], 'Could not load configuration. Please try again.');
+  const [confirmMaintenance, setConfirmMaintenance] = useState(false);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ key: string; message: string; error: boolean }>();
+  const pendingSave = useRef(false);
+  const maintenance = flags.data?.find(flag => flag.flagKey.toLowerCase() === maintenanceKey);
+  const minimumVersion = flags.data?.find(flag => flag.flagKey.toLowerCase() === minimumVersionKey);
+  const storedFlags = flags.data?.filter(flag => flag !== maintenance && flag !== minimumVersion) ?? [];
+  const maintenanceEnabled = maintenance?.flagValue.trim().toLowerCase() === 'true';
+
+  const save = async (flag: FeatureFlag, value: string | boolean, message: string) => {
+    if (pendingSave.current || !flags.data) return;
+    pendingSave.current = true;
+    setSavingKey(flag.flagKey);
+    setNotice(undefined);
+    const showSaved = (data: FeatureFlag[]) => {
+      flags.setData(data);
+      setConfirmMaintenance(false);
+      setNotice({ key: flag.flagKey, message, error: false });
+    };
     try {
-      setFlags(await AdminRepository.getFeatureFlags());
-    } catch {
-      setError('Could not load configuration. Please try again.');
+      const saved = await AdminRepository.updateFeatureFlag(flag.flagKey, value);
+      showSaved(flags.data.map(item => item.flagKey === flag.flagKey ? saved : item));
+    } catch (error) {
+      const response = isAxiosError<ApiResponse<unknown>>(error) ? error.response?.data : undefined;
+      const status = isAxiosError(error) ? error.response?.status : undefined;
+      let failureMessage = response?.errors?.[0]?.message || response?.message;
+
+      if (status === undefined || status >= 500) {
+        // A missing or failed response can arrive after the database commits the update.
+        const current = await AdminRepository.getFeatureFlags().catch(() => null);
+        const stored = current?.find(item => item.flagKey === flag.flagKey)?.flagValue.trim();
+        if (current && stored === String(value)) {
+          showSaved(current);
+          return;
+        }
+
+        failureMessage ??= current
+          ? 'The API returned a different value. Please try again.'
+          : 'Could not confirm the save. Recheck the setting before trying again.';
+      }
+
+      setNotice({
+        key: flag.flagKey,
+        message: failureMessage || 'Could not save this setting. Please try again.',
+        error: true,
+      });
     } finally {
-      setIsLoading(false);
+      pendingSave.current = false;
+      setSavingKey(null);
     }
-  }, []);
-
-  useEffect(() => { fetchFlags(); }, [fetchFlags]);
-
-  const handleToggle = async (id: string, currentState: boolean) => {
-    // Maintenance mode enabling requires inline confirmation — no window.confirm
-    if (id === 'f1' && !currentState) {
-      setPendingCritical(id);
-      return;
-    }
-    await performToggle(id, currentState);
   };
 
-  const performToggle = async (id: string, currentState: boolean) => {
-    setPendingCritical(null);
-    setFlags(prev => prev.map(f => f.id === id ? { ...f, isEnabled: !currentState } : f));
-    try {
-      await AdminRepository.updateFeatureFlag(id, !currentState);
-    } catch {
-      setFlags(prev => prev.map(f => f.id === id ? { ...f, isEnabled: currentState } : f));
-    }
+  const renderNotice = (key: string) => notice?.key === key && (
+    <p role={notice.error ? 'alert' : 'status'} className={`text-sm ${notice.error ? 'text-alert' : 'text-success'}`}>
+      {notice.message}
+    </p>
+  );
+
+  const refresh = () => {
+    setNotice(undefined);
+    setConfirmMaintenance(false);
+    flags.reload();
   };
 
   return (
-    <div className="px-4 py-5 space-y-6 pb-24 page-enter">
+    <div className="space-y-6 px-4 py-5 pb-24 page-enter">
+      <h1 className="font-display text-xl font-bold text-primary">Platform configuration</h1>
+      {flags.isLoading ? (
+        <FFShimmer className="h-40 rounded-ff" />
+      ) : flags.error ? (
+        <FFErrorState message={flags.error} onRetry={refresh} />
+      ) : (
+        <>
+          <section className="space-y-3" aria-label="Feature flags">
+            <FFSectionHeader icon={<Settings />} title="Feature flags" />
+            {maintenance && (
+              <FFCard className="space-y-4 p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ShieldAlert className="h-4 w-4 text-primary" aria-hidden="true" />
+                      <h2 className="font-display text-sm font-semibold text-primary">Maintenance mode</h2>
+                      <FFBadge variant={maintenanceEnabled ? 'alert' : 'gray'}>{maintenanceEnabled ? 'On' : 'Off'}</FFBadge>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">Pauses normal API traffic. Super Admin access and sign-in remain available.</p>
+                  </div>
+                  {!confirmMaintenance && (
+                    <FFButton type="button" size="sm" variant="outline" disabled={savingKey !== null}
+                      isLoading={savingKey === maintenance.flagKey}
+                      aria-label={maintenanceEnabled ? 'Disable maintenance mode' : 'Enable maintenance mode'}
+                      onClick={() => {
+                        if (maintenanceEnabled) void save(maintenance, false, 'Maintenance mode disabled.');
+                        else {
+                          setNotice(undefined);
+                          setConfirmMaintenance(true);
+                        }
+                      }}>
+                      {maintenanceEnabled ? 'Disable maintenance mode' : 'Enable maintenance mode'}
+                    </FFButton>
+                  )}
+                </div>
+                {confirmMaintenance && (
+                  <div className="space-y-3 rounded-xl border border-alert/20 bg-alert/5 p-3">
+                    <p className="text-sm text-primary">Enable maintenance mode and pause normal API traffic?</p>
+                    <div className="flex flex-wrap gap-2">
+                      <FFButton type="button" size="sm" variant="alert" isLoading={savingKey === maintenance.flagKey}
+                        disabled={savingKey !== null} aria-label="Confirm maintenance mode"
+                        onClick={() => void save(maintenance, true, 'Maintenance mode enabled.')}>
+                        Confirm enable
+                      </FFButton>
+                      <FFButton type="button" size="sm" variant="outline" disabled={savingKey !== null}
+                        onClick={() => { setConfirmMaintenance(false); setNotice(undefined); }}>
+                        Cancel
+                      </FFButton>
+                    </div>
+                  </div>
+                )}
+                {renderNotice(maintenance.flagKey)}
+              </FFCard>
+            )}
+            {storedFlags.length > 0 && (
+              <FFCard className="p-4 sm:p-5">
+                <h2 className="font-display text-sm font-semibold text-primary">Stored flags</h2>
+                <p className="mt-1 text-sm text-slate-600">These values are shown for reference. This screen only changes maintenance mode and the minimum app version.</p>
+                <dl className="mt-2 divide-y divide-primary/10">
+                  {storedFlags.map(flag => (
+                    <div key={flag.flagKey} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3 text-sm">
+                      <dt className="break-all font-semibold text-primary">{flagLabels[flag.flagKey.toLowerCase()] ?? flag.flagKey}</dt>
+                      <dd className="min-w-0 break-all text-slate-600">{flag.flagValue}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </FFCard>
+            )}
+            {!maintenance && !storedFlags.length && <FFCard className="p-4 text-sm text-slate-600">No feature flags are configured.</FFCard>}
+          </section>
 
-      {/* Maintenance mode confirmation banner */}
-      {pendingCritical && (
-        <FFCard className="p-4 border border-alert/20">
-          <div className="flex items-start gap-3">
-            <ShieldAlert className="w-5 h-5 text-alert flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="font-display font-semibold text-sm text-primary">Enable Maintenance Mode?</p>
-              <p className="font-body text-xs text-gray-500 mt-1">
-                This will block all user access until you turn it off.
-              </p>
-              <div className="flex gap-2 mt-3">
-                <FFButton
-                  variant="alert"
-                  size="sm"
-                  onClick={() => {
-                    const flag = flags.find(f => f.id === pendingCritical);
-                    if (flag) performToggle(flag.id, flag.isEnabled);
-                  }}
-                >
-                  Enable
-                </FFButton>
-                <FFButton variant="outline" size="sm" onClick={() => setPendingCritical(null)}>
-                  Cancel
-                </FFButton>
-              </div>
-            </div>
-          </div>
-        </FFCard>
+          <section className="space-y-3" aria-label="System settings">
+            <FFSectionHeader icon={<Settings />} title="System settings" />
+            <FFCard className="space-y-3 p-4 sm:p-5">
+              {minimumVersion ? (
+                <>
+                  <VersionForm
+                    key={minimumVersion.flagValue}
+                    current={minimumVersion.flagValue}
+                    disabled={savingKey !== null || confirmMaintenance}
+                    isSaving={savingKey === minimumVersion.flagKey}
+                    onSave={value => void save(minimumVersion, value, 'Minimum app version saved.')}
+                  />
+                  {renderNotice(minimumVersion.flagKey)}
+                </>
+              ) : <p className="text-sm text-slate-600">Minimum app version is missing from the API configuration.</p>}
+            </FFCard>
+          </section>
+        </>
       )}
 
-      {/* Feature Flags */}
-      <div className="space-y-3">
-        <FFSectionHeader
-          icon={<Settings className="w-[18px] h-[18px]" />}
-          title="Feature Flags"
-        />
-
-        {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[...Array(6)].map((_, i) => <FFShimmer key={i} className="h-24 rounded-ff" />)}
+      <section className="space-y-3" aria-label="System status">
+        <FFSectionHeader icon={<Globe />} title="System status" />
+        <FFCard className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
+          <div>
+            <h2 className="font-display text-sm font-semibold text-primary">Configuration API</h2>
+            <p className="mt-1 text-sm text-slate-600">Status from the latest configuration request.</p>
           </div>
-        ) : error ? (
-          <FFErrorState message={error} onRetry={fetchFlags} />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {flags.map(flag => (
-              <FFCard
-                key={flag.id}
-                className={`p-4 transition-all ${flag.isEnabled ? '' : 'opacity-60'}`}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className={`w-10 h-10 rounded-ff-sm flex items-center justify-center transition-colors ${
-                    flag.isEnabled ? 'bg-primary/10 text-primary' : 'bg-black/5 text-gray-400'
-                  }`}>
-                    {flag.id === 'f1' ? <ShieldAlert className="w-5 h-5" /> : <Settings className="w-5 h-5" />}
-                  </div>
-                  <button
-                    onClick={() => handleToggle(flag.id, flag.isEnabled)}
-                    className={`w-12 h-6 rounded-full transition-all relative p-0.5 flex-shrink-0 ${
-                      flag.isEnabled ? 'bg-primary' : 'bg-black/10'
-                    }`}
-                    aria-label={`Toggle ${flag.name}`}
-                  >
-                    <div className={`w-5 h-5 bg-white rounded-full transition-all shadow-sm ${
-                      flag.isEnabled ? 'translate-x-6' : 'translate-x-0'
-                    }`} />
-                  </button>
-                </div>
-                <p className="font-display font-semibold text-sm text-primary">{flag.name}</p>
-                <p className="font-body text-xs text-gray-400 mt-0.5 leading-relaxed">{flag.description}</p>
-              </FFCard>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <FFBadge variant={flags.isLoading ? 'gray' : flags.error ? 'alert' : 'success'}>
+              {flags.isLoading ? 'Checking' : flags.error ? 'Request failed' : 'Responding'}
+            </FFBadge>
+            <FFButton type="button" size="sm" variant="outline" disabled={flags.isLoading || savingKey !== null} onClick={refresh}>
+              Recheck
+            </FFButton>
           </div>
-        )}
-      </div>
-
-      {/* System Settings */}
-      <div className="space-y-3">
-        <FFSectionHeader
-          icon={<Settings className="w-[18px] h-[18px]" />}
-          title="System Settings"
-        />
-        <FFCard className="p-4 space-y-4">
-          <div className="space-y-1.5">
-            <label className="font-body font-semibold text-xs text-gray-500 uppercase tracking-wider">
-              App Version
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                defaultValue="1.2.0"
-                className="flex-1 h-12 px-4 bg-white border border-black/5 rounded-xl font-body text-sm text-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
-              />
-              <FFButton size="sm" variant="outline">Update</FFButton>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="font-body font-semibold text-xs text-gray-500 uppercase tracking-wider">
-              Coin Multiplier
-            </label>
-            <input
-              type="number"
-              defaultValue="1.0"
-              step="0.1"
-              className="w-full h-12 px-4 bg-white border border-black/5 rounded-xl font-body text-sm text-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="font-body font-semibold text-xs text-gray-500 uppercase tracking-wider">
-              Support Email
-            </label>
-            <input
-              type="email"
-              defaultValue="support@familyfirst.app"
-              className="w-full h-12 px-4 bg-white border border-black/5 rounded-xl font-body text-sm text-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
-            />
-          </div>
-          <FFButton icon={<Save className="w-4 h-4" />} isLoading={isSaving} className="w-full">
-            Save Settings
-          </FFButton>
         </FFCard>
-      </div>
-
-      {/* System Status */}
-      <div className="space-y-3">
-        <FFSectionHeader
-          icon={<Globe className="w-[18px] h-[18px]" />}
-          title="System Status"
-        />
-        <div className="space-y-2">
-          <StatusRow icon={<Globe className="w-4 h-4" />}     label="API Server"    status="Healthy"  variant="success" />
-          <StatusRow icon={<Smartphone className="w-4 h-4" />} label="Push Service"  status="Healthy"  variant="success" />
-          <StatusRow icon={<ShieldAlert className="w-4 h-4" />} label="Auth Service" status="Degraded" variant="alert" />
-        </div>
-      </div>
-
+      </section>
     </div>
   );
-};
-
-interface StatusRowProps {
-  icon: React.ReactNode;
-  label: string;
-  status: string;
-  variant: 'success' | 'alert';
 }
 
-const StatusRow: React.FC<StatusRowProps> = ({ icon, label, status, variant }) => (
-  <FFCard className="p-3">
-    <div className="flex items-center gap-3">
-      <div className="w-9 h-9 rounded-ff-sm bg-black/5 flex items-center justify-center text-gray-400 flex-shrink-0">
-        {icon}
-      </div>
-      <p className="font-body text-sm text-primary flex-1 min-w-0">{label}</p>
-      <span className={`font-body text-xs font-semibold px-2.5 py-1 rounded-full ${
-        variant === 'success'
-          ? 'bg-success/10 text-success'
-          : 'bg-alert/10 text-alert'
-      }`}>
-        {status}
-      </span>
-    </div>
-  </FFCard>
-);
+function VersionForm({ current, disabled, isSaving, onSave }: {
+  current: string;
+  disabled: boolean;
+  isSaving: boolean;
+  onSave: (value: string) => void;
+}) {
+  const [version, setVersion] = useState(current);
+  const value = version.trim();
 
-export default AppConfigScreen;
+  return (
+    <form className="space-y-2" onSubmit={event => {
+      event.preventDefault();
+      if (!disabled && value !== current) onSave(value);
+    }}>
+      <label htmlFor="minimum-app-version" className="font-display text-sm font-semibold text-primary">Minimum app version</label>
+      <p id="version-description" className="text-sm text-slate-600">Stored version for release tracking. Older clients can still connect.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input id="minimum-app-version" aria-describedby="version-description" type="text"
+          pattern="[0-9]+[.][0-9]+[.][0-9]+" title="Enter three numbers separated by periods, such as 1.2.0."
+          maxLength={32} required disabled={disabled} value={version} onChange={event => setVersion(event.target.value)}
+          className="min-h-12 w-full rounded-xl border border-primary/20 px-3 text-sm text-primary sm:w-48" />
+        <FFButton type="submit" size="sm" aria-label="Save minimum app version" disabled={disabled || value === current} isLoading={isSaving}>
+          Save version
+        </FFButton>
+      </div>
+    </form>
+  );
+}

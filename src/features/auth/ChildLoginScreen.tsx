@@ -1,5 +1,5 @@
 import React, { useReducer } from 'react';
-import { Baby, Heart, KeyRound, Search, UserRound } from 'lucide-react';
+import { Baby, Heart, KeyRound, LogIn, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import FFButton from '../../shared/components/FFButton';
@@ -11,64 +11,53 @@ import FFPageHeader from '../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../shared/components/FFSectionHeader';
 import FFShimmer from '../../shared/components/FFShimmer';
 import { AuthRepository } from '../../core/repositories/AuthRepository';
-import { useAuth } from '../../core/auth/AuthContext';
+import { SecureStorageService } from '../../core/storage/SecureStorageService';
+import { logger } from '../../core/services/logger';
+import { useAuth, UserRole } from '../../core/auth/AuthContext';
+import { useApiResource } from '../../core/hooks/useApiResource';
+import { FamilyRepository, type FamilyMember } from '../family/repositories/FamilyRepository';
 
-type Step = 'JOIN_CODE' | 'NAME_PICKER' | 'PIN_PAD';
+/**
+ * Child / Elder PIN sign-in — "parent hands over the device" (founder decision 2026-11-22;
+ * the family join code was removed). Route: /child-login (unchanged).
+ *
+ * 1. A Parent or FamilyAdmin is signed in on this device and opens this screen.
+ * 2. Their family's Child and Elder members are listed (GET /families/{familyId}/members).
+ * 3. The child/elder taps their name and enters their 4-digit PIN (POST /auth/verify-pin { userId, pin }).
+ * 4. On success the parent session is revoked and replaced by the child/elder session.
+ *
+ * Without a signed-in parent the screen only explains the hand-over — nobody can list a family's
+ * members anonymously.
+ */
 
-type JoinCodeChild = {
-  id: string;
-  name: string;
-  age: number;
-};
-
-type ChildLoginState = {
-  step: Step;
-  joinCode: string;
-  children: JoinCodeChild[];
-  selectedChild: JoinCodeChild | null;
+type PinState = {
+  selected: FamilyMember | null;
   pin: string;
-  isLoading: boolean;
+  isSubmitting: boolean;
   error: string | null;
 };
 
-type ChildLoginAction =
-  | { type: 'SET_STEP'; step: Step }
-  | { type: 'SET_JOIN_CODE'; joinCode: string }
-  | { type: 'SET_CHILDREN'; children: JoinCodeChild[] }
-  | { type: 'SET_SELECTED_CHILD'; child: JoinCodeChild | null }
+type PinAction =
+  | { type: 'SELECT'; member: FamilyMember | null }
   | { type: 'SET_PIN'; pin: string }
-  | { type: 'SET_LOADING'; isLoading: boolean }
-  | { type: 'SET_ERROR'; error: string | null }
-  | { type: 'RESET_PIN' };
+  | { type: 'SUBMIT_START' }
+  | { type: 'SUBMIT_ERROR'; error: string }
+  | { type: 'CLEAR_ERROR' };
 
-const initialState: ChildLoginState = {
-  step: 'JOIN_CODE',
-  joinCode: '',
-  children: [],
-  selectedChild: null,
-  pin: '',
-  isLoading: false,
-  error: null,
-};
+const initialPinState: PinState = { selected: null, pin: '', isSubmitting: false, error: null };
 
-const reducer = (state: ChildLoginState, action: ChildLoginAction): ChildLoginState => {
+const pinReducer = (state: PinState, action: PinAction): PinState => {
   switch (action.type) {
-    case 'SET_STEP':
-      return { ...state, step: action.step, error: null };
-    case 'SET_JOIN_CODE':
-      return { ...state, joinCode: action.joinCode, error: null };
-    case 'SET_CHILDREN':
-      return { ...state, children: action.children, error: null };
-    case 'SET_SELECTED_CHILD':
-      return { ...state, selectedChild: action.child, error: null };
+    case 'SELECT':
+      return { ...initialPinState, selected: action.member };
     case 'SET_PIN':
       return { ...state, pin: action.pin, error: null };
-    case 'SET_LOADING':
-      return { ...state, isLoading: action.isLoading };
-    case 'SET_ERROR':
-      return { ...state, error: action.error };
-    case 'RESET_PIN':
-      return { ...state, pin: '' };
+    case 'SUBMIT_START':
+      return { ...state, isSubmitting: true, error: null };
+    case 'SUBMIT_ERROR':
+      return { ...state, isSubmitting: false, pin: '', error: action.error };
+    case 'CLEAR_ERROR':
+      return { ...state, error: null };
     default:
       return state;
   }
@@ -76,78 +65,66 @@ const reducer = (state: ChildLoginState, action: ChildLoginAction): ChildLoginSt
 
 const pinNumbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'delete'] as const;
 
+const HANDOVER_ROLES: readonly UserRole[] = [UserRole.PARENT, UserRole.FAMILY_ADMIN];
+const PIN_ROLES: readonly UserRole[] = [UserRole.CHILD, UserRole.ELDER];
+
 const ChildLoginScreen: React.FC = () => {
-  const [state, dispatch] = useReducer(reducer, initialState);
   const navigate = useNavigate();
-  const { handleAuthResponse } = useAuth();
+  const { user, isAuthenticated, handleAuthResponse } = useAuth();
+  const [state, dispatch] = useReducer(pinReducer, initialPinState);
+
+  const canHandOver = isAuthenticated && !!user && HANDOVER_ROLES.includes(user.role) && !!user.familyId;
+  const familyId = canHandOver ? user?.familyId : undefined;
+
+  const members = useApiResource<FamilyMember[]>(
+    familyId
+      ? async () => (await FamilyRepository.getMembers(familyId))
+          .filter((member) => PIN_ROLES.includes(member.role) && !!member.userId)
+      : null,
+    [familyId],
+    'We could not load your family members. Please try again.',
+  );
 
   const handleBack = () => {
-    if (state.step === 'JOIN_CODE') {
-      navigate('/login');
+    if (state.selected) {
+      dispatch({ type: 'SELECT', member: null });
       return;
     }
-
-    if (state.step === 'PIN_PAD') {
-      dispatch({ type: 'RESET_PIN' });
-      dispatch({ type: 'SET_STEP', step: 'NAME_PICKER' });
-      return;
-    }
-
-    dispatch({ type: 'SET_STEP', step: 'JOIN_CODE' });
-  };
-
-  const handleVerifyJoinCode = async () => {
-    if (state.joinCode.trim().length < 4) {
-      dispatch({ type: 'SET_ERROR', error: 'Enter the family join code to continue.' });
-      return;
-    }
-
-    dispatch({ type: 'SET_LOADING', isLoading: true });
-    dispatch({ type: 'SET_ERROR', error: null });
-
-    try {
-      const children = await AuthRepository.getChildrenByJoinCode(state.joinCode.trim().toUpperCase());
-      dispatch({ type: 'SET_CHILDREN', children });
-      dispatch({ type: 'SET_STEP', step: 'NAME_PICKER' });
-    } catch (caughtError: unknown) {
-      const message =
-        caughtError instanceof Error ? caughtError.message : 'We could not find that family right now.';
-      dispatch({ type: 'SET_ERROR', error: message });
-    } finally {
-      dispatch({ type: 'SET_LOADING', isLoading: false });
-    }
-  };
-
-  const handleSelectChild = (child: JoinCodeChild) => {
-    dispatch({ type: 'SET_SELECTED_CHILD', child });
-    dispatch({ type: 'SET_PIN', pin: '' });
-    dispatch({ type: 'SET_STEP', step: 'PIN_PAD' });
+    navigate(-1);
   };
 
   const handlePinSubmit = async (finalPin: string) => {
-    if (!state.selectedChild || finalPin.length !== 4) {
+    const userId = state.selected?.userId;
+    if (!userId || finalPin.length !== 4) {
       return;
     }
 
-    dispatch({ type: 'SET_LOADING', isLoading: true });
-    dispatch({ type: 'SET_ERROR', error: null });
+    dispatch({ type: 'SUBMIT_START' });
+    const parentRefreshToken = SecureStorageService.getRefreshToken();
+    const parentAccessToken = SecureStorageService.getAccessToken();
 
     try {
-      const response = await AuthRepository.verifyPin(state.selectedChild.id, finalPin);
+      const response = await AuthRepository.verifyPin(userId, finalPin);
+
+      // Hand-over: end the parent session on this device before the child/elder session starts.
+      SecureStorageService.clearAll();
+      if (parentRefreshToken) {
+        void AuthRepository.logout(parentRefreshToken, parentAccessToken ?? undefined).catch((error: unknown) => {
+          logger.error('Parent session revoke failed during PIN hand-over', error);
+        });
+      }
+
       handleAuthResponse(response);
       navigate('/', { replace: true });
     } catch (caughtError: unknown) {
       const message =
         caughtError instanceof Error ? caughtError.message : 'That PIN did not match. Try again.';
-      dispatch({ type: 'SET_ERROR', error: message });
-      dispatch({ type: 'RESET_PIN' });
-    } finally {
-      dispatch({ type: 'SET_LOADING', isLoading: false });
+      dispatch({ type: 'SUBMIT_ERROR', error: message });
     }
   };
 
   const handlePinChange = (nextDigit: string) => {
-    if (state.pin.length >= 4) {
+    if (state.pin.length >= 4 || state.isSubmitting) {
       return;
     }
 
@@ -159,15 +136,13 @@ const ChildLoginScreen: React.FC = () => {
     }
   };
 
-  const handleDelete = () => {
-    dispatch({ type: 'SET_PIN', pin: state.pin.slice(0, -1) });
-  };
+  const memberLabel = (member: FamilyMember) => (member.role === UserRole.ELDER ? 'Elder' : 'Child');
 
   return (
     <div className="min-h-screen bg-bg-cream page-enter">
       <FFPageHeader
-        title="Family PIN sign in"
-        subtitle={state.step === 'PIN_PAD' ? 'Enter your 4-digit PIN' : 'For children and elders'}
+        title="Child and elder sign in"
+        subtitle={state.selected ? 'Enter your 4-digit PIN' : 'Sign in with a PIN on this device'}
         showBack
         onBack={handleBack}
       />
@@ -186,73 +161,33 @@ const ChildLoginScreen: React.FC = () => {
             <div>
               <p className="font-display text-xl font-bold text-white">A simple family sign in</p>
               <p className="mt-1 text-sm text-white/75">
-                Pick a family profile, then enter the PIN linked to that member.
+                A parent opens this screen, then the child or elder taps their name and enters their own PIN.
               </p>
             </div>
           </FFCard>
 
-          {state.step === 'JOIN_CODE' ? (
+          {!canHandOver ? (
             <FFCard className="space-y-5 p-4 sm:p-5 lg:p-6">
-              <FFSectionHeader icon={<Search />} title="Find your family" />
-              <p className="text-sm text-gray-500">
-                Enter the join code shared by your parent or family admin.
-              </p>
-
-              <div className="space-y-2">
-                <label htmlFor="joinCode" className="block text-xs font-semibold text-gray-500">
-                  Family join code
-                </label>
-                <input
-                  id="joinCode"
-                  type="text"
-                  autoFocus
-                  value={state.joinCode}
-                  onChange={(event) =>
-                    dispatch({
-                      type: 'SET_JOIN_CODE',
-                      joinCode: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10),
-                    })
-                  }
-                  placeholder="Example: TEST01"
-                  className="min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-center text-lg font-bold tracking-wide text-primary outline-none transition focus:border-accent"
-                />
-              </div>
-
-              <FFButton
-                className="w-full"
-                onClick={handleVerifyJoinCode}
-                isLoading={state.isLoading}
-                disabled={state.joinCode.trim().length < 4}
-              >
-                Find profiles
+              <FFSectionHeader icon={<LogIn />} title="Ask a parent to sign in" />
+              <ol className="list-decimal space-y-2 pl-5 text-sm text-gray-600">
+                <li>A parent signs in on this device with their mobile number.</li>
+                <li>They open <span className="font-semibold text-primary">Settings → Switch to child / elder</span>.</li>
+                <li>You tap your name and enter your 4-digit PIN.</li>
+              </ol>
+              <FFButton className="w-full" onClick={() => navigate('/login')}>
+                Parent sign in
               </FFButton>
-
-              {state.isLoading ? (
-                <div className="space-y-3">
-                  <FFShimmer height="3rem" borderRadius="0.75rem" className="shimmer" />
-                  <FFShimmer height="5rem" borderRadius="1rem" className="shimmer" />
-                  <FFShimmer height="5rem" borderRadius="1rem" className="shimmer" />
-                </div>
-              ) : null}
-
-              {state.error ? (
-                <FFErrorState
-                  title="Join code not found"
-                  message={state.error}
-                  onRetry={() => dispatch({ type: 'SET_ERROR', error: null })}
-                />
-              ) : null}
             </FFCard>
           ) : null}
 
-          {state.step === 'NAME_PICKER' ? (
+          {canHandOver && !state.selected ? (
             <FFCard className="space-y-5 p-4 sm:p-5 lg:p-6">
-              <FFSectionHeader icon={<UserRound />} title="Choose your profile" />
+              <FFSectionHeader icon={<UserRound />} title="Who is using this device?" />
               <p className="text-sm text-gray-500">
-                Tap your name to continue with your family PIN.
+                Hand the device over, then tap the name of the child or elder who is signing in.
               </p>
 
-              {state.isLoading ? (
+              {members.isLoading ? (
                 <div className="space-y-3">
                   {Array.from({ length: 3 }).map((_, index) => (
                     <FFShimmer key={index} height="5.5rem" borderRadius="1rem" className="shimmer" />
@@ -260,42 +195,36 @@ const ChildLoginScreen: React.FC = () => {
                 </div>
               ) : null}
 
-              {!state.isLoading && state.error ? (
-                <FFErrorState
-                  title="Could not load profiles"
-                  message={state.error}
-                  onRetry={() => dispatch({ type: 'SET_ERROR', error: null })}
-                />
+              {!members.isLoading && members.error ? (
+                <FFErrorState title="Could not load profiles" message={members.error} onRetry={members.reload} />
               ) : null}
 
-              {!state.isLoading && !state.error && state.children.length === 0 ? (
+              {!members.isLoading && !members.error && members.data?.length === 0 ? (
                 <FFEmptyState
-                  title="No profiles found"
-                  message="Ask your family admin to confirm the join code and try again."
-                  actionLabel="Enter code again"
-                  onAction={() => dispatch({ type: 'SET_STEP', step: 'JOIN_CODE' })}
+                  title="No children or elders yet"
+                  message="Add a child or elder to your family first. They sign in here with their own PIN."
+                  actionLabel={user?.role === UserRole.FAMILY_ADMIN ? 'Add a member' : undefined}
+                  onAction={user?.role === UserRole.FAMILY_ADMIN ? () => navigate('/parent/add-member') : undefined}
                 />
               ) : null}
 
-              {!state.isLoading && !state.error && state.children.length > 0 ? (
+              {!members.isLoading && !members.error && members.data && members.data.length > 0 ? (
                 <div className="space-y-3">
-                  {state.children.map((child) => (
+                  {members.data.map((member) => (
                     <FFCard
-                      key={child.id}
+                      key={member.id}
                       hoverable
-                      onClick={() => handleSelectChild(child)}
-                      className="p-4"
+                      onClick={() => dispatch({ type: 'SELECT', member })}
+                      className="min-h-12 p-4"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
-                          <FFAvatar name={child.name} size="md" />
+                          <FFAvatar name={member.displayName || member.name} size="md" />
                           <div className="min-w-0">
                             <p className="truncate font-display text-sm font-semibold text-primary">
-                              {child.name}
+                              {member.displayName || member.name}
                             </p>
-                            <p className="mt-1 text-xs text-gray-500">
-                              {child.age} years old
-                            </p>
+                            <p className="mt-1 text-xs text-gray-500">{memberLabel(member)}</p>
                           </div>
                         </div>
                         <span className="text-xs font-semibold text-accent">Continue</span>
@@ -307,14 +236,14 @@ const ChildLoginScreen: React.FC = () => {
             </FFCard>
           ) : null}
 
-          {state.step === 'PIN_PAD' && state.selectedChild ? (
+          {canHandOver && state.selected ? (
             <FFCard className="space-y-5 p-4 sm:p-5 lg:p-6">
               <FFSectionHeader icon={<KeyRound />} title="Enter your PIN" />
               <div className="flex items-center gap-3 rounded-ff-sm bg-primary/5 p-4">
-                <FFAvatar name={state.selectedChild.name} size="lg" />
+                <FFAvatar name={state.selected.displayName || state.selected.name} size="lg" />
                 <div className="min-w-0">
                   <p className="truncate font-display text-base font-semibold text-primary">
-                    Hi, {state.selectedChild.name}! 👋
+                    Hi, {state.selected.displayName || state.selected.name}! 👋
                   </p>
                   <p className="mt-1 text-sm text-gray-500">
                     Enter your 4-digit PIN to open your family space.
@@ -322,35 +251,33 @@ const ChildLoginScreen: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex justify-center gap-3">
+              <div className="flex justify-center gap-3" aria-label={`${state.pin.length} of 4 digits entered`}>
                 {Array.from({ length: 4 }).map((_, index) => (
                   <div
                     key={index}
                     className={`h-4 w-4 rounded-full border ${
-                      state.pin.length > index
-                        ? 'border-accent bg-accent'
-                        : 'border-black/10 bg-white'
+                      state.pin.length > index ? 'border-accent bg-accent' : 'border-black/10 bg-white'
                     }`}
                   />
                 ))}
               </div>
 
-              {state.isLoading ? (
+              {state.isSubmitting ? (
                 <div className="space-y-3">
                   <FFShimmer height="3rem" borderRadius="0.75rem" className="shimmer" />
                   <FFShimmer height="16rem" borderRadius="1rem" className="shimmer" />
                 </div>
               ) : null}
 
-              {!state.isLoading && state.error ? (
+              {!state.isSubmitting && state.error ? (
                 <FFErrorState
                   title="PIN not accepted"
                   message={state.error}
-                  onRetry={() => dispatch({ type: 'SET_ERROR', error: null })}
+                  onRetry={() => dispatch({ type: 'CLEAR_ERROR' })}
                 />
               ) : null}
 
-              {!state.isLoading ? (
+              {!state.isSubmitting ? (
                 <div className="grid grid-cols-3 gap-3">
                   {pinNumbers.map((item, index) => {
                     if (item === '') {
@@ -363,7 +290,7 @@ const ChildLoginScreen: React.FC = () => {
                           key="delete"
                           variant="ghost"
                           className="aspect-square w-full"
-                          onClick={handleDelete}
+                          onClick={() => dispatch({ type: 'SET_PIN', pin: state.pin.slice(0, -1) })}
                           disabled={state.pin.length === 0}
                         >
                           Delete
@@ -391,11 +318,8 @@ const ChildLoginScreen: React.FC = () => {
           <FFCard variant="warm" className="space-y-4 p-4 sm:p-5 lg:p-6">
             <FFSectionHeader icon={<Heart />} title="Need help" />
             <p className="text-sm text-gray-500">
-              If you do not know your join code or PIN, ask a parent or family admin for help.
+              If you do not know your PIN, ask a parent or family admin for help.
             </p>
-            <FFButton variant="outline" className="w-full" onClick={() => navigate('/login')}>
-              Back to phone sign in
-            </FFButton>
           </FFCard>
         </motion.div>
       </main>

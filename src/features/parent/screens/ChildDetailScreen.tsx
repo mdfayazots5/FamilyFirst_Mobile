@@ -1,7 +1,7 @@
 import React, { useEffect, useReducer, useState } from 'react';
 import { BookOpen, CheckCircle2, Filter, MessageSquare, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useAuth } from '../../../core/auth/AuthContext';
+import { useAuth, UserRole } from '../../../core/auth/AuthContext';
 import FFAvatar from '../../../shared/components/FFAvatar';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
@@ -14,9 +14,9 @@ import {
   ChildDetail,
   ChildLookupOption,
   ChildRepository,
-  Feedback,
   TaskCompletion,
 } from '../repositories/ChildRepository';
+import type { Feedback } from '../../teacher/repositories/FeedbackRepository';
 import { logger } from '../../../core/services/logger';
 
 type TabKey = 'tasks' | 'feedback';
@@ -79,6 +79,7 @@ const ChildDetailScreen: React.FC = () => {
   const navigate = useNavigate();
   const { childId } = useParams<{ childId: string }>();
   const { user } = useAuth();
+  const canReviewTasks = user?.role === UserRole.PARENT || user?.role === UserRole.FAMILY_ADMIN;
   const [state, dispatch] = useReducer(reducer, initialState);
   const [activeTab, setActiveTab] = useState<TabKey>('tasks');
   const [selectedTaskType, setSelectedTaskType] = useState<string>('All');
@@ -132,7 +133,7 @@ const ChildDetailScreen: React.FC = () => {
   });
 
   const handleTaskReview = async (task: TaskCompletion, status: 'done' | 'flagged') => {
-    if (!user?.familyId) {
+    if (!user?.familyId || !canReviewTasks) {
       return;
     }
 
@@ -343,17 +344,16 @@ const ChildDetailScreen: React.FC = () => {
                               </a>
                             ) : null}
                           </div>
-                          <div className="flex flex-wrap gap-2">
-                            <FFButton
-                              variant="outline"
-                              onClick={() => void handleTaskReview(task, 'flagged')}
-                            >
-                              Flag
-                            </FFButton>
-                            <FFButton onClick={() => void handleTaskReview(task, 'done')}>
-                              Approve
-                            </FFButton>
-                          </div>
+                          {canReviewTasks ? (
+                            <div className="flex flex-wrap gap-2">
+                              <FFButton variant="outline" onClick={() => void handleTaskReview(task, 'flagged')}>
+                                Flag
+                              </FFButton>
+                              <FFButton onClick={() => void handleTaskReview(task, 'done')}>
+                                Approve
+                              </FFButton>
+                            </div>
+                          ) : null}
                         </div>
                       </FFCard>
                     ))}

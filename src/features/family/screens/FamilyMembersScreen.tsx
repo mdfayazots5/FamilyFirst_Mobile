@@ -1,5 +1,5 @@
-import React, { useEffect, useReducer } from 'react';
-import { Baby, GraduationCap, Heart, QrCode, Shield, Users } from 'lucide-react';
+import React, { useEffect, useReducer, useState } from 'react';
+import { Baby, GraduationCap, Heart, Shield, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import FFAvatar from '../../../shared/components/FFAvatar';
@@ -12,6 +12,7 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import { FamilyMember, FamilyRepository } from '../repositories/FamilyRepository';
 import { useAuth, UserRole } from '../../../core/auth/AuthContext';
+import FamilyMemberEditor from './FamilyMemberEditor';
 
 type State = {
   members: FamilyMember[];
@@ -65,6 +66,9 @@ const FamilyMembersScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+  const isFamilyAdmin = user?.role === UserRole.FAMILY_ADMIN;
 
   const loadMembers = async () => {
     if (!user?.familyId) {
@@ -95,6 +99,7 @@ const FamilyMembersScreen: React.FC = () => {
   const childCount = state.members.filter((member) => member.role === UserRole.CHILD).length;
   const parentCount = state.members.filter((member) => member.role === UserRole.PARENT || member.role === UserRole.FAMILY_ADMIN).length;
   const elderCount = state.members.filter((member) => member.role === UserRole.ELDER).length;
+  const adminCount = state.members.filter((member) => member.role === UserRole.FAMILY_ADMIN).length;
 
   return (
     <div className="min-h-screen bg-bg-cream page-enter">
@@ -104,10 +109,7 @@ const FamilyMembersScreen: React.FC = () => {
         showBack
         onBack={() => navigate(-1)}
         rightAction={
-          <div className="flex items-center gap-2">
-            <FFButton variant="ghost" onClick={() => navigate('/parent/join-code')} icon={<QrCode className="h-4 w-4" />}>
-              Invite
-            </FFButton>
+          isFamilyAdmin && <div className="flex items-center gap-2">
             <FFButton onClick={() => navigate('/parent/add-member')}>
               Add member
             </FFButton>
@@ -125,7 +127,9 @@ const FamilyMembersScreen: React.FC = () => {
           <FFCard variant="primary" className="space-y-3 p-6 text-white">
             <p className="font-display text-xl font-bold text-white">Your family circle</p>
             <p className="text-sm text-white/75">
-              Keep parents, children, elders, and teachers organized from one screen.
+              {isFamilyAdmin
+                ? 'As Family Admin, you can invite, add, edit, and remove members of your family.'
+                : 'View the people and roles in your family.'}
             </p>
           </FFCard>
 
@@ -146,6 +150,7 @@ const FamilyMembersScreen: React.FC = () => {
 
           <FFCard className="space-y-5 p-4 sm:p-5 lg:p-6">
             <FFSectionHeader icon={<Users />} title="My family" />
+            {notice && <p role="status" className="rounded-xl bg-success/10 p-3 text-sm font-semibold text-success">{notice}</p>}
 
             {state.isLoading ? (
               <div className="space-y-3">
@@ -162,9 +167,9 @@ const FamilyMembersScreen: React.FC = () => {
             {!state.isLoading && !state.error && state.members.length === 0 ? (
               <FFEmptyState
                 title="No family members yet"
-                message="Start with one invite link or add a member manually."
-                actionLabel="Add member"
-                onAction={() => navigate('/parent/add-member')}
+                message={isFamilyAdmin ? 'Invite someone or add them manually.' : 'Your Family Admin manages this list.'}
+                actionLabel={isFamilyAdmin ? 'Add member' : undefined}
+                onAction={isFamilyAdmin ? () => navigate('/parent/add-member') : undefined}
               />
             ) : null}
 
@@ -177,7 +182,7 @@ const FamilyMembersScreen: React.FC = () => {
                         <FFAvatar name={member.name} size="md" src={member.avatarUrl} />
                         <div className="min-w-0">
                           <p className="truncate font-display text-sm font-semibold text-primary">
-                            {member.name}
+                          {member.displayName || member.name}
                           </p>
                           <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
                             {roleIcon(member.role)}
@@ -187,7 +192,34 @@ const FamilyMembersScreen: React.FC = () => {
                           </div>
                         </div>
                       </div>
+                      {isFamilyAdmin && member.memberId && editingId === null && (
+                        <FFButton size="sm" variant="outline" onClick={() => {
+                          setNotice('');
+                          setEditingId(member.memberId ?? null);
+                        }}>
+                          Edit<span className="sr-only"> {member.displayName || member.name}</span>
+                        </FFButton>
+                      )}
                     </div>
+                    {isFamilyAdmin && user?.familyId && member.memberId && editingId === member.memberId && (
+                      <FamilyMemberEditor
+                        familyId={user.familyId}
+                        member={member}
+                        memberId={member.memberId}
+                        canChangeAccess={member.id !== user.id && (member.role !== UserRole.FAMILY_ADMIN || adminCount > 1)}
+                        onCancel={() => setEditingId(null)}
+                        onSave={(updated) => {
+                          dispatch({ type: 'SET_MEMBERS', members: state.members.map(item => item.memberId === updated.memberId ? updated : item) });
+                          setEditingId(null);
+                          setNotice('Member updated.');
+                        }}
+                        onRemove={() => {
+                          dispatch({ type: 'SET_MEMBERS', members: state.members.filter(item => item.memberId !== member.memberId) });
+                          setEditingId(null);
+                          setNotice('Member removed.');
+                        }}
+                      />
+                    )}
                   </FFCard>
                 ))}
               </div>

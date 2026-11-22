@@ -83,27 +83,26 @@ const AppNavShell: React.FC = () => {
   const navItems = getNavItems();
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg-cream text-primary">
-      <OfflineBanner />
+    <div className="flex min-h-dvh flex-col bg-bg-cream text-primary [--app-header-height:4rem]">
       {/* Top Header */}
-      <header className="sticky top-0 z-40 flex min-h-16 items-center justify-between border-b border-black/[0.03] bg-white/95 px-4 backdrop-blur sm:px-6">
+      <header className="sticky top-0 z-50 flex h-[var(--app-header-height)] shrink-0 items-center justify-between gap-1 border-b border-black/[0.06] bg-white px-2.5 sm:px-6">
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="flex min-h-12 items-center gap-2.5 rounded-ff-sm text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          className="flex min-h-12 min-w-0 items-center gap-2 rounded-ff-sm text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:gap-2.5"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-accent shadow-sm transition-transform duration-300">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-accent shadow-sm transition-transform duration-300 sm:size-10">
             <Home size={22} fill="currentColor" />
           </div>
-          <div className="flex flex-col leading-none">
-            <span className="font-display font-bold tracking-tight text-xl text-primary">
+          <div className="flex min-w-0 flex-col leading-none">
+            <span className="truncate font-display text-base font-bold tracking-tight text-primary sm:text-xl">
               FamilyFirst
             </span>
-            <span className="text-[9px] font-bold tracking-wider text-accent uppercase mt-0.5">PREMIUM CARE</span>
+            <span className="text-[9px] font-bold tracking-wider text-accent uppercase mt-0.5">FAMILY CARE</span>
           </div>
         </button>
         
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-3">
           <button
             type="button"
             onClick={() => navigate('/notifications')}
@@ -133,7 +132,7 @@ const AppNavShell: React.FC = () => {
 
           <div className="hidden md:flex items-center gap-3 pl-2">
             <div className="text-right">
-              <p className="text-sm font-black text-primary leading-none">{user?.name}</p>
+              <p className="max-w-48 truncate text-sm font-black leading-none text-primary lg:max-w-64" title={user?.name}>{user?.name}</p>
               <p className="text-[9px] text-accent font-black tracking-[0.1em] uppercase mt-1">Verified Account</p>
             </div>
           </div>
@@ -142,45 +141,48 @@ const AppNavShell: React.FC = () => {
             variant="alert"
             size="sm"
             onClick={handleLogout}
-            className="px-3"
+            aria-label="Logout"
+            className="px-0! sm:px-3!"
             icon={<LogOut size={18} />}
           >
-            Logout
+            <span className="hidden sm:inline">Logout</span>
           </FFButton>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 pb-28 md:pb-0 md:pl-64">
-        <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 md:px-8">
-          <Outlet />
-        </div>
-      </main>
+      <div className="flex flex-1">
+        <nav aria-label="Main navigation" className="sticky top-[var(--app-header-height)] hidden h-[calc(100dvh-var(--app-header-height))] w-64 shrink-0 self-start overflow-y-auto border-r border-black/[0.03] bg-white p-5 md:block">
+          <div className="space-y-1.5">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.path.split('/').length <= 2}
+                className={({ isActive }) => `
+                  flex min-h-12 items-center gap-3.5 rounded-ff-sm px-4 py-3.5 transition-all duration-300
+                  ${isActive
+                    ? 'bg-primary text-white shadow-xl shadow-primary/15 translate-x-1'
+                    : 'text-gray-400 hover:bg-gray-50 hover:text-primary'}
+                `}
+              >
+                <span className="shrink-0">{item.icon}</span>
+                <span className="font-bold text-sm">{item.label}</span>
+              </NavLink>
+            ))}
+          </div>
+        </nav>
 
-      {/* Sidebar Navigation (Desktop) */}
-      <nav className="fixed bottom-0 left-0 top-16 hidden w-64 flex-col border-r border-black/[0.03] bg-white p-5 md:flex">
-        <div className="space-y-1.5">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.path.split('/').length <= 2}
-              className={({ isActive }) => `
-                flex min-h-12 items-center gap-3.5 rounded-ff-sm px-4 py-3.5 transition-all duration-300
-                ${isActive 
-                  ? 'bg-primary text-white shadow-xl shadow-primary/15 translate-x-1' 
-                  : 'text-gray-400 hover:bg-gray-50 hover:text-primary'}
-              `}
-            >
-              <span className="shrink-0">{item.icon}</span>
-              <span className="font-bold text-sm">{item.label}</span>
-            </NavLink>
-          ))}
-        </div>
-      </nav>
+        <main className="min-w-0 flex-1 pb-28 md:pb-0">
+          <OfflineBanner />
+          <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 md:px-8">
+            <Outlet />
+          </div>
+        </main>
+      </div>
 
       {/* Bottom Navigation (Mobile) — labels are MANDATORY per UIStandertds §2.8 */}
       <nav
+        aria-label="Main navigation"
         className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-stretch justify-around bg-primary md:hidden border-t border-white/10"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >

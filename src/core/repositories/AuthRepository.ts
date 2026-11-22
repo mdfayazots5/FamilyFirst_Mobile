@@ -96,26 +96,8 @@ interface SendOtpResponse {
   otpToken: string;
 }
 
-interface JoinCodeChild {
-  id: string;
-  name: string;
-  age: number;
-}
-
-// [VERIFY - candidate master data]
-export interface CountryPhoneOption {
-  code: string;
-  label: string;
-}
-
-export const COUNTRY_PHONE_OPTIONS: readonly CountryPhoneOption[] = [
-  { code: '+91', label: 'India' },
-  { code: '+971', label: 'UAE' },
-  { code: '+966', label: 'Saudi Arabia' },
-  { code: '+1', label: 'United States' },
-  { code: '+44', label: 'United Kingdom' },
-];
-
+// India-only (founder decision 2026-11-22): callers always pass INDIA_COUNTRY_CODE ('+91')
+// from core/utils/indianPhone.ts. There is no country picker.
 
 export const AuthRepository = {
   loginWithPassword: async (phoneNumber: string, countryCode: string, password: string): Promise<AuthResponse> => {
@@ -139,13 +121,6 @@ export const AuthRepository = {
   verifyPin: async (userId: string, pin: string): Promise<AuthResponse> => {
     const response = await apiClient.post<ApiResponse<ApiAuthResponseRaw>>(MasterApiReference.Auth.VerifyPin, { userId, pin });
     return mapApiAuthResponse(requireApiData(response.data, 'AuthRepository.auth'));
-  },
-
-  getChildrenByJoinCode: async (joinCode: string): Promise<JoinCodeChild[]> => {
-    const response = await apiClient.get<ApiResponse<JoinCodeChild[]>>(MasterApiReference.Families.ChildrenByJoinCode, {
-      params: { joinCode },
-    });
-    return response.data.data ?? [];
   },
 
   getMe: async (): Promise<AuthResponse['user']> => {

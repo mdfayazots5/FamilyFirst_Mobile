@@ -1,11 +1,9 @@
-import React, { useMemo } from 'react';
-import { TrendingUp, Users, BarChart2, Clock } from 'lucide-react';
-import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Baby, BarChart2, ClipboardList, GraduationCap, Users } from 'lucide-react';
 import FFCard from '../../../shared/components/FFCard';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFErrorState from '../../../shared/components/FFErrorState';
 import FFShimmer from '../../../shared/components/FFShimmer';
-import { AdminAnalyticsOverview, AdminRepository } from '../repositories/AdminRepository';
+import { AdminRepository } from '../repositories/AdminRepository';
 import { useApiResource } from '../../../core/hooks/useApiResource';
 
 // Platform analytics (R6). GET /api/admin/analytics/overview returns all-time totals only, so the screen shows
@@ -13,27 +11,28 @@ import { useApiResource } from '../../../core/hooks/useApiResource';
 // a 7d/30d/90d toggle that changed nothing, and an Export button with no handler.
 // [VERIFY — L1 spec admin analytics] time-series / date-range endpoints are needed before trend charts return.
 
-const AnalyticsScreen: React.FC = () => {
-  const resource = useApiResource<AdminAnalyticsOverview>(
-    () => AdminRepository.getAnalyticsOverview(),
+const AnalyticsScreen = () => {
+  const resource = useApiResource(
+    AdminRepository.getAnalyticsOverview,
     [],
     'Could not load analytics. Please try again.',
   );
   const analytics = resource.data;
 
-  const kpis = useMemo(() => [
-    { label: 'Total Users', value: analytics?.totalUsers, icon: <Users className="w-5 h-5 text-primary" /> },
-    { label: 'Children', value: analytics?.totalChildren, icon: <TrendingUp className="w-5 h-5 text-accent" /> },
-    { label: 'Teachers', value: analytics?.totalTeachers, icon: <BarChart2 className="w-5 h-5 text-success" /> },
-    { label: 'Tasks', value: analytics?.totalTasks, icon: <Clock className="w-5 h-5 text-amber-500" /> },
-  ], [analytics]);
+  const kpis = [
+    { label: 'Total users', value: analytics?.totalUsers, icon: Users },
+    { label: 'Children', value: analytics?.totalChildren, icon: Baby },
+    { label: 'Teachers', value: analytics?.totalTeachers, icon: GraduationCap },
+    { label: 'Tasks', value: analytics?.totalTasks, icon: ClipboardList },
+  ];
 
-  const featureUsage = useMemo(() => [
-    { name: 'Tasks', usage: analytics?.totalTasks ?? 0, color: '#C8922A' },
-    { name: 'Completions', usage: analytics?.totalTaskCompletions ?? 0, color: '#2D6A4F' },
-    { name: 'Feedback', usage: analytics?.totalFeedbackEntries ?? 0, color: '#C1121F' },
-    { name: 'Notifications', usage: analytics?.totalNotifications ?? 0, color: '#1A2E4A' },
-  ], [analytics]);
+  const featureUsage = [
+    { name: 'Tasks', count: analytics?.totalTasks ?? 0 },
+    { name: 'Task completions', count: analytics?.totalTaskCompletions ?? 0 },
+    { name: 'Feedback entries', count: analytics?.totalFeedbackEntries ?? 0 },
+    { name: 'Notifications', count: analytics?.totalNotifications ?? 0 },
+  ];
+  const maxCount = Math.max(...featureUsage.map(({ count }) => count));
 
   if (resource.error) {
     return <FFErrorState message={resource.error} onRetry={resource.reload} />;
@@ -41,25 +40,25 @@ const AnalyticsScreen: React.FC = () => {
 
   return (
     <div className="px-4 py-5 space-y-6 pb-24 page-enter">
-      <div className="flex items-center justify-between">
-        <p className="font-display font-semibold text-sm text-primary">Platform Analytics</p>
-        <p className="font-body text-xs text-gray-400">All-time totals</p>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h1 className="font-display text-xl font-bold text-primary">Platform Analytics</h1>
+        <p className="font-body text-sm text-slate-600">All-time totals</p>
       </div>
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-2 gap-3">
-        {kpis.map(kpi => (
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {kpis.map(({ label, value, icon: Icon }) => (
           resource.isLoading ? (
-            <FFShimmer key={kpi.label} className="h-28 rounded-ff" />
+            <FFShimmer key={label} className="h-28 rounded-ff" />
           ) : (
-            <FFCard key={kpi.label} className="p-4">
-              <div className="w-10 h-10 rounded-ff-sm bg-primary/10 flex items-center justify-center mb-3">
-                {kpi.icon}
+            <FFCard key={label} className="p-4">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-ff-sm bg-primary/10 text-primary">
+                <Icon className="h-5 w-5" aria-hidden="true" />
               </div>
               <p className="font-numbers font-medium text-2xl text-primary tabular-nums">
-                {(kpi.value ?? 0).toLocaleString('en-IN')}
+                {(value ?? 0).toLocaleString('en-IN')}
               </p>
-              <p className="font-body text-xs text-gray-400 mt-0.5 uppercase tracking-wider">{kpi.label}</p>
+              <p className="mt-0.5 font-body text-sm text-slate-600">{label}</p>
             </FFCard>
           )
         ))}
@@ -71,33 +70,27 @@ const AnalyticsScreen: React.FC = () => {
         {resource.isLoading ? (
           <FFShimmer className="h-52 rounded-ff" />
         ) : (
-          <FFCard className="p-4 h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={featureUsage} layout="vertical">
-                <XAxis type="number" hide />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: '#1A2E4A', fontFamily: 'Nunito' }}
-                  width={84}
-                />
-                <Tooltip
-                  cursor={{ fill: '#f8f4ee', radius: 8 }}
-                  contentStyle={{
-                    borderRadius: '12px', border: 'none',
-                    boxShadow: '0 2px 12px rgba(26,46,74,0.08)',
-                    fontSize: '12px', fontFamily: 'Nunito',
-                  }}
-                />
-                <Bar dataKey="usage" radius={[0, 8, 8, 0]} barSize={20}>
-                  {featureUsage.map(entry => (
-                    <Cell key={entry.name} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <FFCard className="px-4 sm:px-6">
+            {maxCount === 0 && (
+              <p className="border-b border-black/5 py-4 text-sm text-slate-600">
+                No feature activity recorded yet.
+              </p>
+            )}
+            <dl aria-label="Feature usage totals" className="divide-y divide-black/5">
+              {featureUsage.map(({ name, count }) => (
+                <div key={name} className={`relative flex items-center justify-between gap-4 pt-3 ${maxCount > 0 ? 'pb-8' : 'pb-3'}`}>
+                  <dt className="text-sm font-semibold text-primary">{name}</dt>
+                  <dd className="text-right font-numbers text-base font-semibold tabular-nums text-primary">
+                    {count.toLocaleString('en-IN')}
+                    {maxCount > 0 && (
+                      <span aria-hidden="true" className="absolute inset-x-0 bottom-3 h-2 overflow-hidden rounded-full bg-primary/10">
+                        <span className="block h-full rounded-full bg-primary" style={{ width: `${(count / maxCount) * 100}%` }} />
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </FFCard>
         )}
       </div>

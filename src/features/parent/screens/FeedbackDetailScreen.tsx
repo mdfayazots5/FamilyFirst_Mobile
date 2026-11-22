@@ -79,14 +79,7 @@ const FeedbackDetailScreen: React.FC = () => {
     dispatch({ type: 'LOAD_START', preserve: state.data });
 
     try {
-      const inbox = await FeedbackRepository.getFeedbackInbox(user.familyId);
-      const detail = inbox.find((item) => item.id === feedbackId);
-
-      if (!detail) {
-        dispatch({ type: 'LOAD_ERROR', error: 'Feedback item not found.' });
-        return;
-      }
-
+      const detail = await FeedbackRepository.getFeedback(user.familyId, feedbackId);
       dispatch({ type: 'LOAD_SUCCESS', payload: detail });
       setResponseText(detail.parentResponse ?? '');
     } catch (error) {

@@ -1,12 +1,22 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import { UserRole } from '../../../core/auth/AuthContext';
-import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 import { requireApiData } from '../../../core/network/apiTypes';
 import { getMasters } from '../../../core/repositories/MasterDataRepository';
+import {
+  INDIAN_MOBILE_ERROR,
+  isValidIndianMobile,
+  toIndianE164,
+  toIndianMobileDigits,
+} from '../../../core/utils/indianPhone';
 
 export interface FamilyMember {
   id: string;
+  memberId?: string;
+  /** User GUID — required by POST /auth/verify-pin for the Child/Elder device handover. */
+  userId?: string;
+  displayName?: string;
   name: string;
   role: UserRole;
   linkType: string;
@@ -15,12 +25,11 @@ export interface FamilyMember {
   age?: number;
 }
 
+/** POST /api/families → ApiResponse<FamilyDto> (camelCase JSON). */
 export interface Family {
-  id: string;
-  name: string;
-  city: string;
-  joinCode: string;
-  subscription: 'FreeTrial' | 'Basic' | 'Family' | 'Premium';
+  familyId: string;
+  familyName: string;
+  city?: string | null;
 }
 
 export interface FamilyLookupOption {
@@ -28,6 +37,20 @@ export interface FamilyLookupOption {
   label: string;
   code: string;
 }
+
+type AssignableFamilyRole = 2 | 3 | 4 | 5 | 6;
+
+export type FamilyInviteRoleOption = Pick<FamilyLookupOption, 'id' | 'label'> & {
+  value: AssignableFamilyRole;
+};
+
+const assignableRoleValues = new Map<string, AssignableFamilyRole>([
+  ['FA', 2], // FamilyAdmin
+  ['PA', 3], // Parent
+  ['CH', 4], // Child
+  ['TE', 5], // Teacher
+  ['EL', 6], // Elder
+]);
 
 // [VERIFY - candidate master data]
 export const FAMILY_LINK_TYPE_OPTIONS: readonly string[] = [
@@ -41,9 +64,13 @@ export const FAMILY_LINK_TYPE_OPTIONS: readonly string[] = [
   'ArabicTeacher',
   'Driver',
   'Caregiver',
+  'Uncle',
+  'Aunt',
 ];
 
 interface FamilyMemberDto {
+  FamilyMemberId?: string;
+  familyMemberId?: string;
   MemberId?: string;
   memberId?: string;
   UserId?: string;
@@ -64,9 +91,11 @@ interface FamilyMemberDto {
   age?: number;
 }
 
-const mapRoleValue = (role: number | string | undefined): UserRole => {
+export const mapRoleValue = (role: number | string | undefined): UserRole => {
   if (typeof role === 'number') {
     switch (role) {
+      case 1:
+        return UserRole.SUPER_ADMIN;
       case 2:
         return UserRole.FAMILY_ADMIN;
       case 3:
@@ -104,6 +133,9 @@ const mapRoleValue = (role: number | string | undefined): UserRole => {
 
 const mapMemberDto = (member: FamilyMemberDto): FamilyMember => ({
   id: member.MemberId ?? member.memberId ?? member.UserId ?? member.userId ?? '',
+  userId: member.UserId ?? member.userId,
+  memberId: member.familyMemberId ?? member.FamilyMemberId ?? member.memberId ?? member.MemberId,
+  displayName: member.displayName ?? member.DisplayName ?? undefined,
   name: member.FullName ?? member.fullName ?? member.DisplayName ?? member.displayName ?? '',
   role: mapRoleValue(member.Role ?? member.role),
   linkType: member.LinkType ?? member.linkType ?? '',
@@ -112,26 +144,33 @@ const mapMemberDto = (member: FamilyMemberDto): FamilyMember => ({
   age: member.Age ?? member.age,
 });
 
-const mapLookupItems = (items: MasterDataItem[]): FamilyLookupOption[] =>
-  items.map((item) => ({
-    id: item.id,
-    label: item.name,
-    code: item.code,
-  }));
-
 export const FamilyRepository = {
   createFamily: async (name: string, city: string): Promise<Family> => {
     const response = await apiClient.post<ApiResponse<Family>>(MasterApiReference.Families.Root, { familyName: name, city });
-    return response.data.data as Family;
+    return requireApiData(response.data, 'FamilyRepository.createFamily');
   },
 
-  addMember: async (familyId: string, member: Partial<FamilyMember>): Promise<FamilyMember> => {
+  addMember: async (familyId: string, member: {
+    name: string;
+    phone: string;
+    role: AssignableFamilyRole;
+    linkType: string;
+  }): Promise<FamilyMember> => {
+    const digits = toIndianMobileDigits(member.phone);
+    if (!isValidIndianMobile(digits)) {
+      throw new Error(INDIAN_MOBILE_ERROR);
+    }
+    const phoneNumber = toIndianE164(digits);
+    if (![...assignableRoleValues.values()].includes(member.role)) {
+      throw new Error('Select a valid family role.');
+    }
+
     const response = await apiClient.post<ApiResponse<FamilyMemberDto>>(
       resolvePath(MasterApiReference.Families.Members, { familyId }),
       {
-        PhoneNumber: member.phone,
+        PhoneNumber: phoneNumber,
         FullName: member.name,
-        Role: member.role === UserRole.PARENT ? 3 : member.role === UserRole.CHILD ? 4 : member.role === UserRole.TEACHER ? 5 : 6,
+        Role: member.role,
         LinkType: member.linkType,
       },
     );
@@ -145,28 +184,40 @@ export const FamilyRepository = {
     );
     const payload = response.data.data;
     const items = Array.isArray(payload) ? payload : payload?.items ?? [];
-    return items.map(mapMemberDto);
+    return items.map(mapMemberDto).filter(member => member.role !== UserRole.SUPER_ADMIN);
   },
 
-  getJoinCode: async (familyId: string): Promise<{ joinCode: string }> => {
-    const response = await apiClient.get<ApiResponse<{ joinCode: string }>>(
-      resolvePath(MasterApiReference.Families.JoinCode, { familyId }),
+  updateMember: async (familyId: string, memberId: string, changes: {
+    role: AssignableFamilyRole;
+    linkType?: string;
+    displayName: string;
+  }): Promise<FamilyMember> => {
+    const response = await apiClient.put<ApiResponse<FamilyMemberDto>>(
+      resolvePath(MasterApiReference.Families.Member, { familyId, memberId }),
+      changes,
     );
-    return requireApiData(response.data, 'FamilyRepository.getJoinCode');
+    return mapMemberDto(requireApiData(response.data, 'FamilyRepository.updateMember'));
   },
 
-  regenerateJoinCode: async (familyId: string): Promise<{ joinCode: string }> => {
-    const response = await apiClient.post<ApiResponse<{ joinCode: string }>>(
-      resolvePath(MasterApiReference.Families.RegenerateJoinCode, { familyId }),
+  removeMember: async (familyId: string, memberId: string): Promise<void> => {
+    const response = await apiClient.delete<ApiResponse<boolean>>(
+      resolvePath(MasterApiReference.Families.Member, { familyId, memberId }),
     );
-    return requireApiData(response.data, 'FamilyRepository.regenerateJoinCode');
+    if (!requireApiData(response.data, 'FamilyRepository.removeMember')) {
+      throw new Error('The member could not be removed.');
+    }
   },
 
-  getRoleOptions: async (): Promise<FamilyLookupOption[]> => {
-    return mapLookupItems(await getMasters('Role'));
+  getRoleOptions: async (): Promise<FamilyInviteRoleOption[]> => {
+    const roles = await getMasters('Role');
+    const options = roles.flatMap(({ id, name, code }) => {
+      const value = assignableRoleValues.get(code.trim().toUpperCase());
+      return value === undefined ? [] : [{ id, label: name, value }];
+    });
+    if (options.length === 0) {
+      throw new Error('No assignable family roles are available.');
+    }
+    return options;
   },
 
-  getPlanOptions: async (): Promise<FamilyLookupOption[]> => {
-    return mapLookupItems(await getMasters('Plan'));
-  },
 };

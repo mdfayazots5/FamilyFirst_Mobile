@@ -31,7 +31,6 @@ const anonymousAuthPaths = new Set<string>([
   MasterApiReference.Auth.VerifyOtp,
   MasterApiReference.Auth.VerifyPin,
   MasterApiReference.Auth.RefreshToken,
-  MasterApiReference.Families.ChildrenByJoinCode,
 ]);
 
 const publicSharePrefixes = [

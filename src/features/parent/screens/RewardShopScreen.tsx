@@ -1,9 +1,8 @@
 import React, { useEffect, useReducer, useState } from 'react';
 import {
-  Gift,
+  Coins,
   RefreshCw,
   ShoppingBag,
-  Sparkles,
   WalletCards,
 } from 'lucide-react';
 import { useAuth } from '../../../core/auth/AuthContext';
@@ -14,10 +13,13 @@ import FFErrorState from '../../../shared/components/FFErrorState';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import RewardIcon from '../../../shared/components/RewardIcon';
 import { Redemption, Reward, RewardRepository } from '../repositories/RewardRepository';
 import { logger } from '../../../core/services/logger';
 
 type RewardTab = 'active' | 'pending';
+
+const rewardGrid = 'grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-4';
 
 interface RewardShopData {
   rewards: Reward[];
@@ -130,10 +132,9 @@ const RewardShopScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F4EE]">
+    <div className="min-h-screen bg-bg-cream">
       <FFPageHeader
         title="Reward shop"
-        subtitle="Family rewards and redemption approvals"
         showBack
         rightAction={
           <FFButton
@@ -148,28 +149,18 @@ const RewardShopScreen: React.FC = () => {
         }
       />
 
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 pb-24">
-        <FFCard className="shadow-card p-5">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="font-display text-2xl font-bold text-primary">Reward choices that feel motivating</h1>
-              <p className="mt-2 font-body text-sm text-slate-500">
-                Keep reward options meaningful, affordable, and easy for children to understand.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <FFButton variant={tab === 'active' ? 'primary' : 'outline'} onClick={() => setTab('active')}>
-                Active rewards
-              </FFButton>
-              <FFButton variant={tab === 'pending' ? 'primary' : 'outline'} onClick={() => setTab('pending')}>
-                Pending approvals
-              </FFButton>
-            </div>
-          </div>
-        </FFCard>
+      <div className="flex flex-col gap-6 py-5 sm:py-6">
+        <div role="group" aria-label="Reward shop views" className="grid grid-cols-2 gap-1 rounded-ff border border-primary/10 bg-white p-1.5 sm:w-fit">
+          <FFButton size="sm" variant={tab === 'active' ? 'primary' : 'ghost'} className="min-w-0! whitespace-normal! px-2! sm:px-4!" aria-pressed={tab === 'active'} onClick={() => setTab('active')}>
+            Reward catalogue
+          </FFButton>
+          <FFButton size="sm" variant={tab === 'pending' ? 'primary' : 'ghost'} className="min-w-0! whitespace-normal! px-2! sm:px-4!" aria-pressed={tab === 'pending'} onClick={() => setTab('pending')}>
+            Pending approvals
+          </FFButton>
+        </div>
 
         {state.status === 'loading' && !rewardData ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className={rewardGrid}>
             {Array.from({ length: 3 }).map((_, index) => (
               <FFCard key={index} className="shadow-card p-5">
                 <FFShimmer width={52} height={52} borderRadius="1rem" />
@@ -193,43 +184,44 @@ const RewardShopScreen: React.FC = () => {
             ) : null}
 
             {tab === 'active' ? (
-              <section className="space-y-4">
-                <FFSectionHeader icon={<ShoppingBag />} title="Reward catalogue" />
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {rewardData.rewards.map((reward) => (
-                    <FFCard key={reward.id} className="shadow-card p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-12 w-12 items-center justify-center rounded-ff-sm bg-accent/15 text-2xl">
-                            {reward.icon}
-                          </span>
-                          <div>
-                            <p className="font-display text-lg font-semibold text-primary">{reward.name}</p>
-                            <p className="font-body text-sm text-slate-500">{reward.category}</p>
+              <section aria-label="Reward catalogue">
+                {rewardData.rewards.length === 0 ? (
+                  <FFEmptyState title="No rewards available" message="Rewards will appear here when they are added to the catalogue." icon={<ShoppingBag size={32} />} />
+                ) : (
+                  <div className={rewardGrid}>
+                    {rewardData.rewards.map((reward) => {
+                      const category = reward.category.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
+                      return (
+                        <FFCard key={reward.id} className="shadow-card flex min-w-0 flex-col p-5">
+                          <div className="flex items-start justify-between gap-3">
+                            <span aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-primary">
+                              <RewardIcon code={reward.icon} />
+                            </span>
+                            <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-accent/10 px-2.5 py-1.5 text-xs font-bold tabular-nums text-primary">
+                              <Coins size={14} aria-hidden="true" />
+                              {reward.coinCost} coins
+                            </span>
                           </div>
-                        </div>
-                        <span className="rounded-full bg-primary/5 px-3 py-1 font-body text-xs text-primary">
-                          {reward.coinCost} coins
-                        </span>
-                      </div>
-                      <p className="mt-4 font-body text-sm text-slate-500">
-                        {reward.description ?? 'A family-approved reward option for consistent effort.'}
-                      </p>
-                      <div className="mt-4 flex items-center justify-between gap-3">
-                        <span
-                          className={`rounded-full px-3 py-1 font-body text-xs ${
-                            reward.isEnabled ? 'bg-success/10 text-success' : 'bg-slate-100 text-slate-500'
-                          }`}
-                        >
-                          {reward.isEnabled ? 'Enabled' : 'Paused'}
-                        </span>
-                        <FFButton variant="outline" onClick={() => void handleToggleReward(reward)}>
-                          {reward.isEnabled ? 'Pause reward' : 'Enable reward'}
-                        </FFButton>
-                      </div>
-                    </FFCard>
-                  ))}
-                </div>
+                          <div className="mt-3">
+                            {category ? <p className="mb-1 text-xs font-semibold text-slate-600">{category}</p> : null}
+                            <h2 className="wrap-anywhere text-base font-semibold leading-snug sm:text-lg">{reward.name}</h2>
+                            {reward.description ? <p className="mt-1.5 wrap-anywhere text-sm leading-relaxed text-slate-600">{reward.description}</p> : null}
+                          </div>
+                          <div className="mt-auto pt-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-primary/10 pt-3">
+                              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${reward.isEnabled ? 'bg-success/10 text-success' : 'bg-slate-100 text-slate-600'}`}>
+                                {reward.isEnabled ? 'Enabled' : 'Paused'}
+                              </span>
+                              <FFButton size="sm" variant="outline" onClick={() => void handleToggleReward(reward)}>
+                                {reward.isEnabled ? 'Pause reward' : 'Enable reward'}
+                              </FFButton>
+                            </div>
+                          </div>
+                        </FFCard>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             ) : (
               <section className="space-y-4">
@@ -273,30 +265,9 @@ const RewardShopScreen: React.FC = () => {
                 )}
               </section>
             )}
-
-            <section className="grid gap-4 md:grid-cols-3">
-              <FFCard className="shadow-card p-4">
-                <FFSectionHeader icon={<Gift />} title="Good reward balance" />
-                <p className="mt-4 font-body text-sm text-slate-500">
-                  Mix quick wins with larger goals so children stay motivated without over-spending coins.
-                </p>
-              </FFCard>
-              <FFCard className="shadow-card p-4">
-                <FFSectionHeader icon={<Sparkles />} title="Family tone" />
-                <p className="mt-4 font-body text-sm text-slate-500">
-                  Keep reward names simple, warm, and easy for children to connect to effort.
-                </p>
-              </FFCard>
-              <FFCard className="shadow-card p-4">
-                <FFSectionHeader icon={<WalletCards />} title="Approval reminder" />
-                <p className="mt-4 font-body text-sm text-slate-500">
-                  Review pending redemptions soon after request so children feel the system is responsive.
-                </p>
-              </FFCard>
-            </section>
           </>
         ) : null}
-      </main>
+      </div>
     </div>
   );
 };

@@ -10,17 +10,18 @@ import FFSectionHeader from '../../../shared/components/FFSectionHeader';
 import FFShimmer from '../../../shared/components/FFShimmer';
 import {
   FAMILY_LINK_TYPE_OPTIONS,
-  FamilyLookupOption,
+  type FamilyInviteRoleOption,
   FamilyRepository,
 } from '../repositories/FamilyRepository';
-import { useAuth, UserRole } from '../../../core/auth/AuthContext';
+import { useAuth } from '../../../core/auth/AuthContext';
+import { INDIA_COUNTRY_CODE, INDIAN_MOBILE_LENGTH, toIndianMobileDigits } from '../../../core/utils/indianPhone';
 
 type State = {
   name: string;
   phone: string;
-  role: UserRole;
+  roleId: string;
   linkType: string;
-  roleOptions: FamilyLookupOption[];
+  roleOptions: FamilyInviteRoleOption[];
   isOptionsLoading: boolean;
   isSubmitting: boolean;
   error: string | null;
@@ -28,8 +29,8 @@ type State = {
 };
 
 type Action =
-  | { type: 'SET_FIELD'; field: 'name' | 'phone' | 'role' | 'linkType'; value: string }
-  | { type: 'SET_ROLE_OPTIONS'; roleOptions: FamilyLookupOption[] }
+  | { type: 'SET_FIELD'; field: 'name' | 'phone' | 'roleId' | 'linkType'; value: string }
+  | { type: 'SET_ROLE_OPTIONS'; roleOptions: FamilyInviteRoleOption[] }
   | { type: 'SET_OPTIONS_LOADING'; isOptionsLoading: boolean }
   | { type: 'SET_SUBMITTING'; isSubmitting: boolean }
   | { type: 'SET_ERROR'; error: string | null }
@@ -38,7 +39,7 @@ type Action =
 const initialState: State = {
   name: '',
   phone: '',
-  role: UserRole.PARENT,
+  roleId: '',
   linkType: 'Mother',
   roleOptions: [],
   isOptionsLoading: true,
@@ -51,8 +52,10 @@ const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_FIELD':
       return { ...state, [action.field]: action.value, error: null };
-    case 'SET_ROLE_OPTIONS':
-      return { ...state, roleOptions: action.roleOptions, error: null };
+    case 'SET_ROLE_OPTIONS': {
+      const roleId = action.roleOptions.find((option) => option.value === 3)?.id ?? action.roleOptions[0]?.id ?? '';
+      return { ...state, roleId, roleOptions: action.roleOptions, error: null };
+    }
     case 'SET_OPTIONS_LOADING':
       return { ...state, isOptionsLoading: action.isOptionsLoading };
     case 'SET_SUBMITTING':
@@ -63,21 +66,6 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, isSuccess: action.isSuccess };
     default:
       return state;
-  }
-};
-
-const toUserRole = (code: string): UserRole => {
-  switch (code.toLowerCase()) {
-    case 'teacher':
-      return UserRole.TEACHER;
-    case 'elder':
-      return UserRole.ELDER;
-    case 'child':
-      return UserRole.CHILD;
-    case 'familyadmin':
-      return UserRole.FAMILY_ADMIN;
-    default:
-      return UserRole.PARENT;
   }
 };
 
@@ -113,14 +101,20 @@ const AddMemberScreen: React.FC = () => {
       return;
     }
 
+    const role = state.roleOptions.find((option) => option.id === state.roleId);
+    if (!role) {
+      dispatch({ type: 'SET_ERROR', error: 'Select a family role.' });
+      return;
+    }
+
     dispatch({ type: 'SET_SUBMITTING', isSubmitting: true });
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
       await FamilyRepository.addMember(user.familyId, {
         name: state.name.trim(),
-        phone: state.phone.trim(),
-        role: state.role,
+        phone: state.phone,
+        role: role.value,
         linkType: state.linkType,
       });
       dispatch({ type: 'SET_SUCCESS', isSuccess: true });
@@ -128,7 +122,7 @@ const AddMemberScreen: React.FC = () => {
       const message =
         caughtError instanceof Error
           ? caughtError.message
-          : 'We could not add this member. Check the phone number and family limits.';
+          : 'We could not add this member. Check the phone number and try again.';
       dispatch({ type: 'SET_ERROR', error: message });
     } finally {
       dispatch({ type: 'SET_SUBMITTING', isSubmitting: false });
@@ -217,14 +211,25 @@ const AddMemberScreen: React.FC = () => {
                     <label htmlFor="memberPhone" className="block text-xs font-semibold text-gray-500">
                       Phone number
                     </label>
-                    <input
-                      id="memberPhone"
-                      type="tel"
-                      value={state.phone}
-                      onChange={(event) => dispatch({ type: 'SET_FIELD', field: 'phone', value: event.target.value })}
-                      placeholder="+91 98765 43210"
-                      className="min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-primary outline-none transition focus:border-accent"
-                    />
+                    <div className="flex min-h-12 w-full items-center rounded-xl border border-black/10 bg-white transition focus-within:border-accent">
+                      <span className="border-r border-black/10 px-4 py-3 text-sm font-semibold text-primary">{INDIA_COUNTRY_CODE}</span>
+                      <input
+                        id="memberPhone"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        required
+                        maxLength={INDIAN_MOBILE_LENGTH}
+                        aria-describedby="memberPhoneHint"
+                        value={state.phone}
+                        onChange={(event) => dispatch({ type: 'SET_FIELD', field: 'phone', value: toIndianMobileDigits(event.target.value) })}
+                        placeholder="98765 43210"
+                        className="min-h-12 w-full rounded-r-xl bg-transparent px-4 py-3 text-sm text-primary outline-none"
+                      />
+                    </div>
+                    <p id="memberPhoneHint" className="text-xs text-gray-500">
+                      10-digit Indian mobile number.
+                    </p>
                   </div>
                 </div>
 
@@ -235,12 +240,12 @@ const AddMemberScreen: React.FC = () => {
                     </label>
                     <select
                       id="memberRole"
-                      value={state.role}
-                      onChange={(event) => dispatch({ type: 'SET_FIELD', field: 'role', value: event.target.value })}
+                      value={state.roleId}
+                      onChange={(event) => dispatch({ type: 'SET_FIELD', field: 'roleId', value: event.target.value })}
                       className="min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-primary outline-none transition focus:border-accent"
                     >
                       {state.roleOptions.map((option) => (
-                        <option key={option.id} value={toUserRole(option.code)}>
+                        <option key={option.id} value={option.id}>
                           {option.label}
                         </option>
                       ))}

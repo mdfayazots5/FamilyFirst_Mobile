@@ -169,7 +169,7 @@ const ElderHomeScreen: React.FC = () => {
                   className="mt-4 w-full"
                   icon={<Phone size={16} />}
                   onClick={() => {
-                    window.location.href = 'tel:911';
+                    window.location.href = 'tel:112';
                   }}
                 >
                   Emergency call

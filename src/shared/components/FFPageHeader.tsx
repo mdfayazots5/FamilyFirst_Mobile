@@ -29,10 +29,7 @@ const FFPageHeader: React.FC<FFPageHeaderProps> = ({
   };
 
   return (
-    <header
-      className="sticky top-0 z-40 h-16 bg-primary flex items-center justify-between px-4 shadow-header"
-      style={{ boxShadow: '0 1px 8px rgba(26, 46, 74, 0.10)' }}
-    >
+    <header className="flex min-h-16 items-center justify-between bg-primary px-4 shadow-header">
       {/* Left slot */}
       {variant === 'home' ? (
         <div className="flex items-center gap-2.5">

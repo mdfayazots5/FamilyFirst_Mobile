@@ -1,7 +1,7 @@
 import React, { useEffect, useReducer } from 'react';
 import { CalendarDays, ChevronRight, ClipboardCheck, Flame, RefreshCw, ShieldAlert, Star, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../../core/auth/AuthContext';
+import { useAuth, UserRole } from '../../../core/auth/AuthContext';
 import FFButton from '../../../shared/components/FFButton';
 import FFCard from '../../../shared/components/FFCard';
 import FFErrorState from '../../../shared/components/FFErrorState';
@@ -44,6 +44,7 @@ const ParentHomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [state, dispatch] = useReducer(reducer, initialState);
+  const canReviewTasks = user?.role === UserRole.PARENT || user?.role === UserRole.FAMILY_ADMIN;
 
   const loadDashboard = async () => {
     if (!user?.familyId) {
@@ -54,7 +55,7 @@ const ParentHomeScreen: React.FC = () => {
     dispatch({ type: 'LOAD_START', preserve: state.data });
 
     try {
-      const data = await DashboardRepository.getDashboard(user.familyId);
+      const data = await DashboardRepository.getDashboard(user.familyId, user.role);
       dispatch({ type: 'LOAD_SUCCESS', payload: data });
     } catch (error) {
       logger.error('Failed to load parent dashboard', error);
@@ -64,7 +65,7 @@ const ParentHomeScreen: React.FC = () => {
 
   useEffect(() => {
     void loadDashboard();
-  }, [user?.familyId]);
+  }, [user?.familyId, user?.role]);
 
   const dashboard = state.data;
 
@@ -72,7 +73,7 @@ const ParentHomeScreen: React.FC = () => {
     <div className="min-h-screen bg-[#F8F4EE]">
       <FFPageHeader
         variant="home"
-        roleLabel="Parent"
+        roleLabel={canReviewTasks ? 'Parent' : 'Family Admin'}
         rightAction={
           <FFButton
             variant="ghost"
@@ -93,7 +94,9 @@ const ParentHomeScreen: React.FC = () => {
           </p>
           <h1 className="mt-1 font-display text-3xl font-bold">Family progress at a glance</h1>
           <p className="mt-3 max-w-2xl font-body text-sm leading-6 text-white/80">
-            Review today&apos;s child progress, pending approvals, and upcoming family events from one place.
+            {canReviewTasks
+              ? 'Review today’s child progress, pending approvals, and upcoming family events.'
+              : 'Review today’s child progress and upcoming family events.'}
           </p>
         </FFCard>
 
@@ -121,7 +124,7 @@ const ParentHomeScreen: React.FC = () => {
               </FFCard>
             ) : null}
 
-            <section className="grid gap-4 md:grid-cols-3">
+            <section className={`grid gap-4 ${canReviewTasks ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
               <FFCard className="shadow-card p-5">
                 <div className="flex items-center justify-between">
                   <span className="rounded-ff-sm bg-primary/5 p-3 text-primary">
@@ -139,24 +142,22 @@ const ParentHomeScreen: React.FC = () => {
                 </p>
               </FFCard>
 
-              <FFCard
-                hoverable
-                onClick={() => navigate('/parent/verification')}
-                className="shadow-card p-5"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="rounded-ff-sm bg-accent/15 p-3 text-accent">
-                    <ClipboardCheck size={20} />
-                  </span>
-                  <ChevronRight size={18} className="text-slate-400" />
-                </div>
-                <p className="mt-4 font-display text-3xl font-bold text-primary">
-                  {dashboard.pendingCount}
-                </p>
-                <p className="mt-2 font-body text-sm text-slate-500">
-                  approvals are waiting for your review.
-                </p>
-              </FFCard>
+              {canReviewTasks ? (
+                <FFCard hoverable onClick={() => navigate('/parent/verification')} className="shadow-card p-5">
+                  <div className="flex items-center justify-between">
+                    <span className="rounded-ff-sm bg-accent/15 p-3 text-accent">
+                      <ClipboardCheck size={20} />
+                    </span>
+                    <ChevronRight size={18} className="text-slate-400" />
+                  </div>
+                  <p className="mt-4 font-display text-3xl font-bold text-primary">
+                    {dashboard.pendingCount}
+                  </p>
+                  <p className="mt-2 font-body text-sm text-slate-500">
+                    approvals are waiting for your review.
+                  </p>
+                </FFCard>
+              ) : null}
 
               <FFCard className="shadow-card p-5">
                 <div className="flex items-center justify-between">
@@ -179,6 +180,11 @@ const ParentHomeScreen: React.FC = () => {
             <section className="space-y-4">
               <FFSectionHeader icon={<Users />} title="Children" />
               <div className="grid gap-4 md:grid-cols-2">
+                {dashboard.children.length === 0 ? (
+                  <FFCard className="shadow-card p-5">
+                    <p className="font-body text-sm text-slate-500">No children added to this family yet.</p>
+                  </FFCard>
+                ) : null}
                 {dashboard.children.map((child) => {
                   const progress = child.totalTasks > 0
                     ? Math.round((child.tasksCompleted / child.totalTasks) * 100)
@@ -223,6 +229,11 @@ const ParentHomeScreen: React.FC = () => {
               <div className="space-y-4">
                 <FFSectionHeader icon={<ShieldAlert />} title="Important alerts" />
                 <div className="space-y-3">
+                  {dashboard.alerts.length === 0 ? (
+                    <FFCard className="shadow-card p-4">
+                      <p className="font-body text-sm text-slate-500">All caught up — no alerts right now.</p>
+                    </FFCard>
+                  ) : null}
                   {dashboard.alerts.map((alert) => (
                     <FFCard key={alert.id} className="shadow-card p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -244,6 +255,11 @@ const ParentHomeScreen: React.FC = () => {
               <div className="space-y-4">
                 <FFSectionHeader icon={<CalendarDays />} title="Upcoming events" />
                 <div className="space-y-3">
+                  {dashboard.upcomingEvents.length === 0 ? (
+                    <FFCard className="shadow-card p-4">
+                      <p className="font-body text-sm text-slate-500">No events in the next 7 days.</p>
+                    </FFCard>
+                  ) : null}
                   {dashboard.upcomingEvents.map((event) => (
                     <FFCard key={event.id} className="shadow-card p-4">
                       <div className="flex items-start justify-between gap-3">

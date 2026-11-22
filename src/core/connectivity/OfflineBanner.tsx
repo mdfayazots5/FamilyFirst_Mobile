@@ -16,7 +16,7 @@ const OfflineBanner: React.FC = () => {
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
-          className="sticky top-0 z-[100] overflow-hidden border-b border-amber-700/20 bg-amber-500 text-white shadow-md"
+          className="sticky top-[var(--app-header-height)] z-40 overflow-hidden border-b border-amber-700/20 bg-amber-500 text-white shadow-md"
         >
           <div className="flex min-h-12 items-center justify-center gap-3 px-4 py-2 text-center sm:px-6">
             <WifiOff size={18} className="shrink-0 animate-pulse" />

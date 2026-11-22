@@ -180,6 +180,10 @@ const FeedbackInboxScreen: React.FC = () => {
           <FFErrorState message={state.error} onRetry={() => void loadInbox()} />
         ) : null}
 
+        {state.status === 'ready' && inbox.length === 0 ? (
+          <FFEmptyState title="No feedback yet" message="Teacher feedback will appear here when it is submitted." />
+        ) : null}
+
         {inbox.length > 0 ? (
           <section className="space-y-4">
             <FFSectionHeader icon={<Bell />} title="Messages" />

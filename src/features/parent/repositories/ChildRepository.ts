@@ -1,8 +1,10 @@
 import apiClient from '../../../core/network/apiClient';
 import { MasterApiReference, resolvePath } from '../../../core/api/MasterApiReference';
 import type { ApiResponse, MasterDataItem } from '../../../core/network/apiTypes';
+import { requireApiData } from '../../../core/network/apiTypes';
 import { getMasters } from '../../../core/repositories/MasterDataRepository';
 import { TaskRepository } from '../../tasks/repositories/TaskRepository';
+import { FeedbackRepository } from '../../teacher/repositories/FeedbackRepository';
 
 export interface TaskCompletion {
   id: string;
@@ -13,19 +15,9 @@ export interface TaskCompletion {
   category: string;
 }
 
-export interface Feedback {
-  id: string;
-  teacherName: string;
-  type: 'Appreciation' | 'Complaint' | 'Observation';
-  message: string;
-  date: string;
-  isRead: boolean;
-}
-
 export interface ChildDetail {
   id: string;
   name: string;
-  avatarUrl: string;
   todayScore: number;
   streak: number;
   radarData: {
@@ -33,6 +25,17 @@ export interface ChildDetail {
     score: number;
     fullMark: number;
   }[];
+}
+
+interface ChildDetailDto {
+  childProfileId: string;
+  fullName: string;
+  currentStreakDays: number;
+  studyScore: number;
+  cleanlinessScore: number;
+  disciplineScore: number;
+  screenControlScore: number;
+  responsibilityScore: number;
 }
 
 export interface ChildLookupOption {
@@ -89,14 +92,30 @@ const mapTaskStatus = (value: number | string | undefined): TaskCompletion['stat
 
 export const ChildRepository = {
   getChildDetail: async (familyId: string, childId: string): Promise<ChildDetail> => {
-    const response = await apiClient.get<ApiResponse<ChildDetail>>(
+    const response = await apiClient.get<ApiResponse<ChildDetailDto>>(
       resolvePath(MasterApiReference.Children.Detail, { familyId, childId }),
     );
-    return response.data.data as ChildDetail;
+    const child = requireApiData(response.data, 'Child detail');
+    const radarData = [
+      { subject: 'Study', score: child.studyScore, fullMark: 20 },
+      { subject: 'Cleanliness', score: child.cleanlinessScore, fullMark: 20 },
+      { subject: 'Discipline', score: child.disciplineScore, fullMark: 20 },
+      { subject: 'Screen Control', score: child.screenControlScore, fullMark: 20 },
+      { subject: 'Responsibility', score: child.responsibilityScore, fullMark: 20 },
+    ];
+    return {
+      id: child.childProfileId,
+      name: child.fullName,
+      streak: child.currentStreakDays,
+      todayScore: radarData.reduce((total, item) => total + item.score, 0),
+      radarData,
+    };
   },
 
   getTaskCompletions: async (familyId: string, childId: string): Promise<TaskCompletion[]> => {
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+      .map(part => String(part).padStart(2, '0')).join('-');
     const [response, tasks] = await Promise.all([
       apiClient.get<ApiResponse<TaskCompletionDto[]>>(
         resolvePath(MasterApiReference.Tasks.FamilyTaskCompletions, { familyId }),
@@ -121,13 +140,7 @@ export const ChildRepository = {
     });
   },
 
-  getFeedback: async (familyId: string, childId: string): Promise<Feedback[]> => {
-    const response = await apiClient.get<ApiResponse<Feedback[]>>(
-      resolvePath(MasterApiReference.Feedback.FamilyFeedback, { familyId }),
-      { params: { childId, page: 1, pageSize: 20 } },
-    );
-    return response.data.data ?? [];
-  },
+  getFeedback: (familyId: string, childId: string) => FeedbackRepository.getFeedbackInbox(familyId, childId),
 
   reviewTask: async (familyId: string, taskId: string, status: 'done' | 'flagged', note?: string): Promise<void> => {
     await apiClient.put<ApiResponse<null>>(

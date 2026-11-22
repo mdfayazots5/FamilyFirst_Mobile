@@ -15,6 +15,7 @@ import FFCard from '../../../shared/components/FFCard';
 import FFPageHeader from '../../../shared/components/FFPageHeader';
 import FFErrorState from '../../../shared/components/FFErrorState';
 import FFShimmer from '../../../shared/components/FFShimmer';
+import { INDIA_COUNTRY_CODE, INDIAN_MOBILE_ERROR, INDIAN_MOBILE_LENGTH, isValidIndianMobile, toIndianE164, toIndianMobileDigits } from '../../../core/utils/indianPhone';
 
 const inputClass = "w-full h-12 px-3 bg-bg-cream rounded-xl border border-black/5 font-body text-sm text-primary focus:outline-none focus:ring-1 focus:ring-primary/20";
 
@@ -49,6 +50,7 @@ const EditHealthProfileScreen: React.FC<{ createMode?: boolean }> = ({ createMod
   const [contactName, setContactName] = useState('');
   const [contactRelationship, setContactRelationship] = useState('');
   const [contactPhone, setContactPhone] = useState('');
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [organDonor, setOrganDonor] = useState(false);
 
   useEffect(() => {
@@ -75,10 +77,10 @@ const EditHealthProfileScreen: React.FC<{ createMode?: boolean }> = ({ createMod
       setAllergies(p.knownAllergies);
       setChronicConditions(p.chronicConditions);
       setDoctorName(p.primaryDoctor?.name ?? '');
-      setDoctorPhone(p.primaryDoctor?.phone ?? '');
+      setDoctorPhone(toIndianMobileDigits(p.primaryDoctor?.phone ?? ''));
       setContactName(p.emergencyContact?.name ?? '');
       setContactRelationship(p.emergencyContact?.relationship ?? '');
-      setContactPhone(p.emergencyContact?.phone ?? '');
+      setContactPhone(toIndianMobileDigits(p.emergencyContact?.phone ?? ''));
       setOrganDonor(p.organDonor);
       setLoadState({ status: 'ready', members: [] });
     };
@@ -102,6 +104,11 @@ const EditHealthProfileScreen: React.FC<{ createMode?: boolean }> = ({ createMod
 
   const handleSave = async () => {
     if (!familyId || !memberId || loadState.status !== 'ready' || isSaving) return;
+    if ((doctorPhone && !isValidIndianMobile(doctorPhone)) || (contactPhone && !isValidIndianMobile(contactPhone))) {
+      setPhoneError(INDIAN_MOBILE_ERROR);
+      return;
+    }
+    setPhoneError(null);
     setIsSaving(true);
     setSaveFailed(false);
     try {
@@ -110,10 +117,10 @@ const EditHealthProfileScreen: React.FC<{ createMode?: boolean }> = ({ createMod
         knownAllergies: allergies,
         chronicConditions,
         primaryDoctorName: doctorName || undefined,
-        primaryDoctorPhone: doctorPhone || undefined,
+        primaryDoctorPhone: doctorPhone ? toIndianE164(doctorPhone) : undefined,
         emergencyContactName: contactName || undefined,
         emergencyContactRelationship: contactRelationship || undefined,
-        emergencyContactPhone: contactPhone || undefined,
+        emergencyContactPhone: contactPhone ? toIndianE164(contactPhone) : undefined,
         organDonor,
       });
       setIsSaved(true);
@@ -254,7 +261,10 @@ const EditHealthProfileScreen: React.FC<{ createMode?: boolean }> = ({ createMod
         <FFCard className="p-4 space-y-3">
           <p className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider">Primary Doctor</p>
           <input value={doctorName} onChange={e => setDoctorName(e.target.value)} placeholder="Doctor name" className={inputClass} />
-          <input value={doctorPhone} onChange={e => setDoctorPhone(e.target.value)} placeholder="Phone number" type="tel" className={inputClass} />
+          <div className="flex items-center gap-2">
+            <span className="font-body text-sm font-semibold text-primary">{INDIA_COUNTRY_CODE}</span>
+            <input value={doctorPhone} onChange={e => { setDoctorPhone(toIndianMobileDigits(e.target.value)); setPhoneError(null); }} placeholder="10-digit mobile number" type="tel" inputMode="numeric" maxLength={INDIAN_MOBILE_LENGTH} aria-label="Doctor mobile number" className={inputClass} />
+          </div>
         </FFCard>
 
         {/* Emergency Contact */}
@@ -262,7 +272,11 @@ const EditHealthProfileScreen: React.FC<{ createMode?: boolean }> = ({ createMod
           <p className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider">Emergency Contact</p>
           <input value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Contact name" className={inputClass} />
           <input value={contactRelationship} onChange={e => setContactRelationship(e.target.value)} placeholder="Relationship (e.g. Mother)" className={inputClass} />
-          <input value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="Phone number" type="tel" className={inputClass} />
+          <div className="flex items-center gap-2">
+            <span className="font-body text-sm font-semibold text-primary">{INDIA_COUNTRY_CODE}</span>
+            <input value={contactPhone} onChange={e => { setContactPhone(toIndianMobileDigits(e.target.value)); setPhoneError(null); }} placeholder="10-digit mobile number" type="tel" inputMode="numeric" maxLength={INDIAN_MOBILE_LENGTH} aria-label="Emergency contact mobile number" className={inputClass} />
+          </div>
+          {phoneError ? <p role="alert" className="font-body text-xs text-alert">{phoneError}</p> : null}
         </FFCard>
 
         {/* Organ Donor */}

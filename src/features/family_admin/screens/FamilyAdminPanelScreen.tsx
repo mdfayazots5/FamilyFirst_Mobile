@@ -79,14 +79,12 @@ const FamilyAdminPanelScreen: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-bg-cream pb-24">
-      <FFPageHeader
-        title="Family Admin"
-        subtitle="Your Family" // [VERIFY] no auth/me field carries the family name; load it from the family repository if a subtitle name is wanted
-        showBack
-      />
+    <div className="pb-6">
+      <div className="overflow-hidden rounded-ff">
+        <FFPageHeader title="Family Admin" showBack />
+      </div>
 
-      <main className="px-4 py-5 space-y-6 page-enter">
+      <div className="space-y-6 pt-5 page-enter">
 
         {/* Quick Actions */}
         <div className="space-y-3">
@@ -136,7 +134,7 @@ const FamilyAdminPanelScreen: React.FC = () => {
           </div>
         </div>
 
-      </main>
+      </div>
     </div>
   );
 };

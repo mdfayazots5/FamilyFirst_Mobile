@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Bell,
-  Languages,
   LogOut,
   Phone,
   Type,
@@ -23,7 +22,7 @@ const fontSizes = [
 const ElderSettingsScreen: React.FC = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const { fontSize, setFontSize, language, setLanguage } = useElderSettings();
+  const { fontSize, setFontSize } = useElderSettings();
 
   return (
     <div className="min-h-screen bg-[#F8F4EE]">
@@ -64,25 +63,6 @@ const ElderSettingsScreen: React.FC = () => {
         </section>
 
         <section className="space-y-4">
-          <FFSectionHeader icon={<Languages />} title="Language" />
-          <FFCard className="p-5 shadow-card">
-            <label className="block">
-              <span className="font-body text-sm text-slate-500">Preferred language</span>
-              <select
-                value={language}
-                onChange={(event) => setLanguage(event.target.value)}
-                className="mt-3 min-h-12 w-full rounded-xl border border-black/10 bg-white px-4 font-body text-sm text-primary"
-              >
-                <option>English</option>
-                <option>Hindi</option>
-                <option>Tamil</option>
-                <option>Marathi</option>
-              </select>
-            </label>
-          </FFCard>
-        </section>
-
-        <section className="space-y-4">
           <FFSectionHeader icon={<Bell />} title="Helpful links" />
           <div className="grid gap-3 md:grid-cols-2">
             <FFCard
@@ -98,7 +78,7 @@ const ElderSettingsScreen: React.FC = () => {
             <FFCard
               hoverable
               onClick={() => {
-                window.location.href = 'tel:911';
+                window.location.href = 'tel:112';
               }}
               className="p-5 shadow-card"
             >

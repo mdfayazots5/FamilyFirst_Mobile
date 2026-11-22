@@ -1,17 +1,15 @@
 import React from 'react';
 import {
   Bell,
-  CreditCard,
   LogOut,
   Settings,
   Shield,
   User,
   Users,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { UserRole } from '../../../core/auth/UserRole';
-import { AppConfig } from '../../../core/config/appConfig';
 import FFAvatar from '../../../shared/components/FFAvatar';
 import FFBadge from '../../../shared/components/FFBadge';
 import FFButton from '../../../shared/components/FFButton';
@@ -33,6 +31,7 @@ const formatRole = (role?: UserRole) => {
 const ProfileScreen: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
 
   const handleLogout = async () => {
     await logout();
@@ -41,6 +40,8 @@ const ProfileScreen: React.FC = () => {
 
   const getSettingsPath = () => {
     switch (user?.role) {
+      case UserRole.SUPER_ADMIN:
+        return '/admin/config';
       case UserRole.CHILD:
         return '/child/settings';
       case UserRole.PARENT:
@@ -68,7 +69,7 @@ const ProfileScreen: React.FC = () => {
     {
       id: 'settings',
       label: 'Settings',
-      description: 'Update language, PIN, and account preferences.',
+      description: isSuperAdmin ? 'Manage platform configuration and feature flags.' : 'Manage your account settings.',
       icon: <Settings className="h-4 w-4" />,
       path: getSettingsPath(),
     },
@@ -79,22 +80,11 @@ const ProfileScreen: React.FC = () => {
       icon: <Bell className="h-4 w-4" />,
       path: '/notifications/preferences',
     },
-    ...(AppConfig.features.subscriptionEnabled
-      ? [
-          {
-            id: 'subscription',
-            label: 'Subscription',
-            description: 'Review the family plan options available in this app.',
-            icon: <CreditCard className="h-4 w-4" />,
-            path: '/profile/subscription',
-          },
-        ]
-      : []),
   ];
 
   return (
     <div className="min-h-screen bg-bg-cream pb-24">
-      <FFPageHeader title="Profile" subtitle="Account and family preferences" showBack />
+      <FFPageHeader title="Profile" subtitle={isSuperAdmin ? 'Platform account and preferences' : 'Account and family preferences'} showBack />
 
       <main className="page-enter mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
         <FFCard variant="primary" className="p-5 sm:p-6">
@@ -110,7 +100,9 @@ const ProfileScreen: React.FC = () => {
                 </FFBadge>
               </div>
               <p className="mt-2 text-sm text-white/80">
-                Keep your account details, notification choices, and family settings in one place.
+                {isSuperAdmin
+                  ? 'Manage platform settings and open your notification preferences.'
+                  : 'Keep your account details, notification choices, and family settings in one place.'}
               </p>
             </div>
           </div>
@@ -129,7 +121,7 @@ const ProfileScreen: React.FC = () => {
               </div>
             </div>
 
-            {user?.familyId ? (
+            {!isSuperAdmin && user?.familyId ? (
               <div className="flex items-center justify-between gap-3 rounded-ff-sm bg-primary/5 p-4">
                 <div>
                   <p className="text-sm font-body font-semibold text-primary">Family access</p>
@@ -147,20 +139,17 @@ const ProfileScreen: React.FC = () => {
           <FFSectionHeader icon={<Settings />} title="Shortcuts" />
           <div className="space-y-3">
             {menuItems.map((item) => (
-              <FFCard
-                key={item.id}
-                hoverable
-                onClick={() => navigate(item.path)}
-                className="flex items-center gap-4 p-4 shadow-card"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-ff-sm bg-primary/5 text-primary">
-                  {item.icon}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-display font-semibold text-primary">{item.label}</p>
-                  <p className="mt-1 text-sm text-gray-500">{item.description}</p>
-                </div>
-              </FFCard>
+              <Link key={item.id} to={item.path} className="block rounded-ff focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                <FFCard hoverable className="flex items-center gap-4 p-4 shadow-card">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-ff-sm bg-primary/5 text-primary">
+                    {item.icon}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-display font-semibold text-primary">{item.label}</p>
+                    <p className="mt-1 text-sm text-gray-500">{item.description}</p>
+                  </div>
+                </FFCard>
+              </Link>
             ))}
           </div>
         </section>

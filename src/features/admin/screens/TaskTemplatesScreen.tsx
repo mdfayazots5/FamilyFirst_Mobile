@@ -1,125 +1,226 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Search, ClipboardList, Star, Users } from 'lucide-react';
-import { AdminRepository, TaskTemplate } from '../repositories/AdminRepository';
-import FFCard from '../../../shared/components/FFCard';
+import { useRef, useState, type FormEvent } from 'react';
+import { isAxiosError } from 'axios';
+import { ClipboardList, Plus, Search } from 'lucide-react';
+import { useApiResource } from '../../../core/hooks/useApiResource';
+import type { ApiResponse } from '../../../core/network/apiTypes';
 import FFButton from '../../../shared/components/FFButton';
-import FFPageHeader from '../../../shared/components/FFPageHeader';
-import FFShimmer from '../../../shared/components/FFShimmer';
+import FFCard from '../../../shared/components/FFCard';
 import FFEmptyState from '../../../shared/components/FFEmptyState';
 import FFErrorState from '../../../shared/components/FFErrorState';
+import FFPageHeader from '../../../shared/components/FFPageHeader';
+import FFShimmer from '../../../shared/components/FFShimmer';
+import { PILLAR_TAG_OPTIONS } from '../../tasks/repositories/TaskRepository';
+import { AdminRepository, type TaskTemplate } from '../repositories/AdminRepository';
 
-const TaskTemplatesScreen: React.FC = () => {
-  const [templates, setTemplates]   = useState<TaskTemplate[]>([]);
-  const [isLoading, setIsLoading]   = useState(true);
-  const [error, setError]           = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+const timeBlocks = [
+  { value: 1, label: 'Morning' },
+  { value: 3, label: 'Evening' },
+  { value: 4, label: 'Night' },
+] as const;
+const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const inputClass = 'mt-1 min-h-12 w-full rounded-xl border border-primary/20 bg-white px-3 text-sm text-primary';
 
-  const fetchTemplates = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      setTemplates(await AdminRepository.getTaskTemplates());
-    } catch {
-      setError('Could not load task templates.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+export default function TaskTemplatesScreen() {
+  const templates = useApiResource(AdminRepository.getTaskTemplates, [], 'Could not load task templates.');
+  const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [notice, setNotice] = useState('');
+  const query = search.trim().toLowerCase();
+  const matchingTemplates = templates.data?.filter(template =>
+    [template.taskName, template.category, template.ageGroup].some(value => value?.toLowerCase().includes(query)),
+  ) ?? [];
 
-  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
+  const openForm = () => {
+    setNotice('');
+    setShowForm(true);
+  };
 
-  const filteredTemplates = templates.filter(t =>
-    t.taskName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleCreated = (template: TaskTemplate) => {
+    setShowForm(false);
+    setSearch('');
+    setNotice(`${template.taskName} was added to the catalog.`);
+    templates.reload();
+  };
 
   return (
-    <div className="min-h-screen bg-bg-cream pb-24">
-      <FFPageHeader
-        title="Task Templates"
-        subtitle="Routine templates for families"
-        showBack
+    <div className="pb-24">
+      <FFPageHeader title="Task Templates" subtitle="Routine templates for families" showBack
         rightAction={
-          <FFButton size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => {}}>New</FFButton>
+          <FFButton size="sm" variant="ghost" className="border border-white/25 text-white" disabled={showForm}
+            icon={<Plus className="h-4 w-4" />} onClick={openForm}>New</FFButton>
         }
       />
-
-      <main className="px-4 py-5 space-y-4 page-enter">
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Search by name or category..."
-            className="w-full h-12 pl-11 pr-4 bg-white border border-black/5 rounded-xl font-body text-sm text-primary focus:outline-none focus:ring-1 focus:ring-primary/20 placeholder:text-gray-300"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        {/* Content */}
-        {isLoading ? (
-          <div className="grid grid-cols-2 gap-3">
-            {[...Array(6)].map((_, i) => <FFShimmer key={i} className="h-36 rounded-ff" />)}
-          </div>
-        ) : error ? (
-          <FFErrorState message={error} onRetry={fetchTemplates} />
-        ) : filteredTemplates.length === 0 ? (
-          <FFEmptyState
-            icon={<ClipboardList className="w-8 h-8 text-gray-300" />}
-            title={searchQuery ? 'No Matches' : 'No Templates'}
-            message={searchQuery ? 'Try a different search.' : 'Add task templates for families to use.'}
-            actionLabel={!searchQuery ? 'Add Template' : undefined}
-            onAction={!searchQuery ? () => {} : undefined}
-          />
+      <main className="page-enter space-y-4 px-4 py-5">
+        {showForm ? (
+          <TemplateForm onCancel={() => setShowForm(false)} onCreated={handleCreated} />
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {filteredTemplates.map(template => (
-              <FFCard key={template.id} className="p-4 flex flex-col">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="w-10 h-10 rounded-ff-sm bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <ClipboardList className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="flex gap-0.5">
-                    <button
-                      className="p-1.5 text-gray-300 hover:text-primary transition-colors"
-                      aria-label="Edit template"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      className="p-1.5 text-gray-300 hover:text-alert transition-colors"
-                      aria-label="Delete template"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input type="search" aria-label="Search templates" placeholder="Search by name, category, or age group"
+              className="min-h-12 w-full rounded-xl border border-primary/10 bg-white pl-11 pr-4 text-sm text-primary"
+              value={search} onChange={event => setSearch(event.target.value)} />
+          </div>
+        )}
+        {notice && <p role="status" className="rounded-xl bg-success/10 p-3 text-sm text-success">{notice}</p>}
+
+        {templates.isLoading ? (
+          <FFShimmer className="h-36 rounded-ff" />
+        ) : templates.error ? (
+          <FFErrorState message={templates.error} onRetry={templates.reload} />
+        ) : matchingTemplates.length ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {matchingTemplates.map(template => (
+              <FFCard key={template.templateId} className="space-y-3 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-primary/10 p-2 text-primary"><ClipboardList className="h-5 w-5" aria-hidden="true" /></div>
+                  <div className="min-w-0">
+                    <h2 className="break-words font-display text-sm font-semibold text-primary">{template.taskName}</h2>
+                    <p className="break-words text-xs text-slate-600">{template.category} · {template.ageGroup ? `Age ${template.ageGroup}` : 'All ages'}</p>
                   </div>
                 </div>
-
-                <p className="font-display font-semibold text-sm text-primary truncate">
-                  {template.taskName}
+                {template.instructions && <p className="break-words text-sm text-slate-600">{template.instructions}</p>}
+                <p className="border-t border-primary/10 pt-3 text-xs text-slate-600">
+                  {timeBlocks.find(block => block.value === template.timeBlock)?.label} · {template.durationMinutes} min · {template.coinValue} coins
+                  {template.isPhotoRequired && ' · Photo required'}
                 </p>
-                <p className="font-body text-xs text-gray-400 mt-0.5 truncate">{template.category}</p>
-
-                <div className="mt-auto pt-3 border-t border-black/5 grid grid-cols-2 gap-2">
-                  <div className="flex items-center gap-1">
-                    <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                    <span className="font-numbers font-medium text-xs text-primary">{template.coinValue}</span>
-                    <span className="font-body text-xs text-gray-400">pts</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5 text-primary/40 flex-shrink-0" />
-                    <span className="font-body text-xs text-gray-400 truncate">Age {template.ageGroup}</span>
-                  </div>
-                </div>
               </FFCard>
             ))}
           </div>
+        ) : !showForm && (
+          <FFEmptyState icon={<ClipboardList className="h-8 w-8 text-gray-400" />}
+            title={query ? 'No matching templates' : 'No templates'}
+            message={query ? 'Try a different search.' : 'Add a task template to start the catalog.'}
+            actionLabel={!query ? 'Add Template' : undefined}
+            onAction={!query ? openForm : undefined} />
         )}
       </main>
     </div>
   );
-};
+}
 
-export default TaskTemplatesScreen;
+function TemplateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (template: TaskTemplate) => void }) {
+  const [isRecurring, setIsRecurring] = useState(true);
+  const [recurringDays, setRecurringDays] = useState(() => weekdays.map((_, index) => index + 1));
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+  const pending = useRef(false);
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (pending.current) return;
+    const fields = new FormData(event.currentTarget);
+    const value = (name: string) => String(fields.get(name) ?? '').trim();
+    const taskName = value('taskName');
+    const category = value('category');
+    if (taskName.length < 2 || !category || (isRecurring && recurringDays.length === 0)) {
+      setError('Enter a name of at least two characters, a category, and at least one day for a repeating template.');
+      return;
+    }
+
+    pending.current = true;
+    setIsSaving(true);
+    setError('');
+    try {
+      const created = await AdminRepository.createTaskTemplate({
+        taskName,
+        category,
+        ageGroup: value('ageGroup') || undefined,
+        instructions: value('instructions') || undefined,
+        timeBlock: timeBlocks.find(block => String(block.value) === value('timeBlock'))?.value ?? 1,
+        durationMinutes: Number(value('duration')),
+        coinValue: Number(value('coins')),
+        pillarTag: PILLAR_TAG_OPTIONS.find(tag => tag === value('pillar')),
+        isPhotoRequired: fields.has('photo'),
+        isRecurring,
+        recurringDays: isRecurring ? [...recurringDays].sort((a, b) => a - b) : [],
+        activeFromDate: value('activeFrom'),
+      });
+      onCreated(created);
+    } catch (caught) {
+      const response = isAxiosError<ApiResponse<unknown>>(caught) ? caught.response?.data : undefined;
+      setError(response?.errors?.map(item => item.message).join(' ') || response?.message || 'Could not save the template. Please try again.');
+    } finally {
+      pending.current = false;
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <FFCard className="p-4 sm:p-5">
+      <form aria-label="New task template" onSubmit={save} className="space-y-4">
+        <h2 className="font-display text-base font-semibold text-primary">New task template</h2>
+        <fieldset disabled={isSaving} className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-semibold text-primary">
+            Task name
+            <input name="taskName" className={inputClass} required minLength={2} maxLength={200} autoFocus />
+          </label>
+          <label className="text-sm font-semibold text-primary">
+            Category
+            <input name="category" className={inputClass} required maxLength={50} />
+          </label>
+          <label className="text-sm font-semibold text-primary">
+            Age group
+            <input name="ageGroup" className={inputClass} placeholder="Optional, e.g. 10 or 8–12" maxLength={50} />
+          </label>
+          <label className="text-sm font-semibold text-primary">
+            Time block
+            <select name="timeBlock" className={inputClass}>
+              {timeBlocks.map(block => <option key={block.value} value={block.value}>{block.label}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-primary">
+            Duration (minutes)
+            <input name="duration" type="number" className={inputClass} required min={5} max={120} defaultValue={15} />
+          </label>
+          <label className="text-sm font-semibold text-primary">
+            Coins
+            <input name="coins" type="number" className={inputClass} required min={5} max={200} defaultValue={10} />
+          </label>
+          <label className="text-sm font-semibold text-primary">
+            Pillar
+            <select name="pillar" className={inputClass}>
+              <option value="">None</option>
+              {PILLAR_TAG_OPTIONS.map(tag => <option key={tag} value={tag}>{tag === 'ScreenControl' ? 'Screen control' : tag}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-primary">
+            Active from
+            <input name="activeFrom" type="date" className={inputClass} required defaultValue={new Date().toISOString().slice(0, 10)} />
+          </label>
+          <label className="text-sm font-semibold text-primary sm:col-span-2">
+            Instructions
+            <textarea name="instructions" rows={3} maxLength={1000} className={`${inputClass} py-2`} placeholder="Optional" />
+          </label>
+          <label className="flex items-center gap-2 text-sm font-semibold text-primary">
+            <input name="photo" type="checkbox" className="accent-primary" /> Require photo evidence
+          </label>
+          <label className="flex items-center gap-2 text-sm font-semibold text-primary">
+            <input type="checkbox" className="accent-primary" checked={isRecurring} onChange={event => setIsRecurring(event.target.checked)} /> Repeat weekly
+          </label>
+          {isRecurring && (
+            <fieldset className="sm:col-span-2">
+              <legend className="mb-2 text-sm font-semibold text-primary">Repeat on</legend>
+              <div className="flex flex-wrap gap-2">
+                {weekdays.map((day, index) => {
+                  const id = index + 1;
+                  return (
+                    <label key={day} className="flex items-center gap-2 rounded-xl border border-primary/15 px-3 py-2 text-sm text-primary">
+                      <input type="checkbox" className="accent-primary" checked={recurringDays.includes(id)}
+                        onChange={event => setRecurringDays(event.target.checked ? [...recurringDays, id] : recurringDays.filter(item => item !== id))} />
+                      {day}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
+        </fieldset>
+        {error && <p role="alert" className="text-sm text-alert">{error}</p>}
+        <div className="flex flex-wrap gap-2">
+          <FFButton type="submit" isLoading={isSaving} aria-label="Save template">Save template</FFButton>
+          <FFButton type="button" variant="outline" disabled={isSaving} onClick={onCancel}>Cancel</FFButton>
+        </div>
+      </form>
+    </FFCard>
+  );
+}
